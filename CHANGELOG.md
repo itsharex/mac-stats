@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(No changes yet.)
+
+## [0.1.24] - 2026-03-02
+
 ### Added
 - **DONE tool (browser-use style)** — Model can end a reply with **DONE: success** or **DONE: no**; we exit the tool loop (no further tool runs), strip the DONE line from the final reply, then run completion verification as usual. Described in agent base tools and planning prompt. See `docs/025_expectation_check_design.md`.
 - **Completion verification** — At the start of each agent run we extract 1–3 success criteria from the user request; at the end we ask Ollama “Did we fully satisfy the request?” and, if not, retry once then append a short disclaimer if still not satisfied. Heuristic: if a screenshot was requested but none was attached, we add a note. See `docs/025_expectation_check_design.md`.
