@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(No changes yet.)
+
+## [0.1.25] - 2026-03-02
+
 ### Changed
 - **Completion verification uses browser-rendered content** — When the model ran BROWSER_EXTRACT, the last extracted page text (JS-rendered) is now passed into completion verification so the verifier can check requested text (e.g. "rhythem") against real page content instead of FETCH_URL HTML (SPA shell). Fixes false "text not found" on SPAs like amvara.de.
 - **CDP navigation wait non-fatal for SPAs** — If `wait_until_navigated` fails (e.g. hash-only or in-app navigation), we log a warning, sleep 2s, and continue instead of failing. Avoids "Wait navigated: The event waited for never came" on hash-routed sites; BROWSER_NAVIGATE no longer falls back to HTTP unnecessarily.
