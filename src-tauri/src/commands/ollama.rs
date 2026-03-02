@@ -1893,11 +1893,22 @@ pub async fn answer_with_ollama_and_fetch(
                     "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
                 } else {
                     info!("BROWSER_NAVIGATE: URL sent to CDP: {}", url_arg);
-                    match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_and_get_state(&url_arg)).await {
+                    match tokio::task::spawn_blocking({
+                        let u = url_arg.clone();
+                        move || crate::browser_agent::navigate_and_get_state(&u)
+                    }).await {
                         Ok(Ok(state_str)) => state_str,
-                        Ok(Err(e)) => {
-                            info!("BROWSER_NAVIGATE failed: {}", crate::logging::ellipse(&e, 200));
-                            format!("BROWSER_NAVIGATE failed: {}. (Chrome may need to be available on port 9222.)", e)
+                        Ok(Err(cdp_err)) => {
+                            info!("BROWSER_NAVIGATE CDP failed, trying HTTP fallback: {}", crate::logging::ellipse(&cdp_err, 120));
+                            match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_http(&url_arg)).await {
+                                Ok(Ok(state_str)) => state_str,
+                                Ok(Err(http_err)) => format!(
+                                    "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
+                                    crate::logging::ellipse(&cdp_err, 80),
+                                    http_err
+                                ),
+                                Err(e) => format!("BROWSER_NAVIGATE HTTP fallback task error: {}", e),
+                            }
                         }
                         Err(e) => format!("BROWSER_NAVIGATE task error: {}", e),
                     }
@@ -1912,9 +1923,12 @@ pub async fn answer_with_ollama_and_fetch(
                         info!("BROWSER_CLICK: index {}", idx);
                         match tokio::task::spawn_blocking(move || crate::browser_agent::click_by_index(idx)).await {
                             Ok(Ok(state_str)) => state_str,
-                            Ok(Err(e)) => {
-                                info!("BROWSER_CLICK failed: {}", crate::logging::ellipse(&e, 200));
-                                format!("BROWSER_CLICK failed: {}", e)
+                            Ok(Err(_cdp_err)) => {
+                                match tokio::task::spawn_blocking(move || crate::browser_agent::click_http(idx)).await {
+                                    Ok(Ok(state_str)) => state_str,
+                                    Ok(Err(e)) => format!("BROWSER_CLICK failed: {}", e),
+                                    Err(e) => format!("BROWSER_CLICK task error: {}", e),
+                                }
                             }
                             Err(e) => format!("BROWSER_CLICK task error: {}", e),
                         }
@@ -1934,9 +1948,12 @@ pub async fn answer_with_ollama_and_fetch(
                         let text_clone = text.clone();
                         match tokio::task::spawn_blocking(move || crate::browser_agent::input_by_index(idx, &text_clone)).await {
                             Ok(Ok(state_str)) => state_str,
-                            Ok(Err(e)) => {
-                                info!("BROWSER_INPUT failed: {}", crate::logging::ellipse(&e, 200));
-                                format!("BROWSER_INPUT failed: {}", e)
+                            Ok(Err(_cdp_err)) => {
+                                match tokio::task::spawn_blocking(move || crate::browser_agent::input_http(idx, &text)).await {
+                                    Ok(Ok(state_str)) => state_str,
+                                    Ok(Err(e)) => format!("BROWSER_INPUT failed: {}", e),
+                                    Err(e) => format!("BROWSER_INPUT task error: {}", e),
+                                }
                             }
                             Err(e) => format!("BROWSER_INPUT task error: {}", e),
                         }
@@ -1960,9 +1977,12 @@ pub async fn answer_with_ollama_and_fetch(
                 send_status("Extracting page text…");
                 match tokio::task::spawn_blocking(|| crate::browser_agent::extract_page_text()).await {
                     Ok(Ok(text)) => text,
-                    Ok(Err(e)) => {
-                        info!("BROWSER_EXTRACT failed: {}", crate::logging::ellipse(&e, 200));
-                        format!("BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)", e)
+                    Ok(Err(_cdp_err)) => {
+                        match tokio::task::spawn_blocking(|| crate::browser_agent::extract_http()).await {
+                            Ok(Ok(text)) => text,
+                            Ok(Err(e)) => format!("BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)", e),
+                            Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
+                        }
                     }
                     Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
                 }

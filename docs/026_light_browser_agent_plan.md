@@ -3,7 +3,13 @@
 ## Current state (Feb 2026)
 
 - **BROWSER_SCREENSHOT** is implemented via CDP (`browser_agent/mod.rs`, `headless_chrome`): connect to Chrome on port 9222 (or launch it), navigate to URL, capture PNG, save under `~/.mac-stats/screenshots/`. The agent tool returns the path; when running from Discord, Werner attaches the screenshot to the channel. URL parsing strips trailing punctuation (e.g. `https://example.com.` → `https://example.com`) to avoid 404s from model output. See `docs/027_discord_log_review.md` for CDP log lines and `docs/028_discord_attachments.md` for attachment behaviour.
-- The full BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_FILL / BROWSER_EXTRACT flow (Phase 1 HTTP-only or Phase 2 CDP) is not yet implemented; the plan below still applies for that.
+- **BROWSER_NAVIGATE**, **BROWSER_CLICK**, **BROWSER_INPUT**, **BROWSER_SCROLL**, **BROWSER_EXTRACT** are implemented via CDP (Phase 2): index-based state and actions, browser-use style. After NAVIGATE the agent gets "Current page: URL" and a numbered Elements list; CLICK and INPUT use 1-based indices. SCROLL supports down/up/bottom/top or pixels; EXTRACT returns visible page text. Interactables are discovered via a JS snippet in the page (links, buttons, inputs, `[role=button]`, etc.). Cookie consent and search flows are supported.
+- **HTTP-only fallback (Phase 4)**: When Chrome is not available, BROWSER_NAVIGATE/CLICK/INPUT/EXTRACT use fetch + `scraper` (links, forms, body text); CLICK follows links or submits forms, INPUT fills form fields. No JS execution.
+
+### Browser automation (CDP) — user guide
+
+- **What mac-stats needs:** Chrome on port 9222. Either start Chrome yourself with `--remote-debugging-port=9222`, or let mac-stats **launch** Chrome on 9222 when nothing is listening. See **`docs/029_browser_automation.md`** for details.
+- In chat (CPU window or Discord) you can say e.g. "Go to google.com and search for XYZ"; the agent will use BROWSER_NAVIGATE, then BROWSER_CLICK (e.g. cookie consent by index), then BROWSER_INPUT (search box index and text), then BROWSER_CLICK (submit). The same session and tab are reused for the whole conversation. Cookie consent and search flows are supported by clicking by index.
 
 ---
 
@@ -97,9 +103,9 @@ No JavaScript execution in Phase 1: we only interpret static HTML. That covers m
 - **Cookies/session**: Minimal cookie jar for same-domain requests so login flows work across NAVIGATE/SUBMIT.
 - **Rate limiting / politeness**: Max requests per minute, respect robots.txt for optional future crawls.
 
-### Phase 4 (optional): HTTP-only "browser" fallback (no Chromium)
+### Phase 4 (optional): HTTP-only "browser" fallback (no Chromium) — **Implemented**
 
-- For environments where Chrome is not available: fetch HTML via HTTP, parse with `scraper` (links, forms), present numbered list to LLM; BROWSER_CLICK = follow link, BROWSER_FILL/SUBMIT = form. No JS execution. See original "Phase 1" description above for details.
+- When CDP/Chrome is not available: BROWSER_NAVIGATE/CLICK/INPUT/EXTRACT fall back to HTTP fetch + `scraper` (links, forms, body text). BROWSER_CLICK follows links or submits forms; BROWSER_INPUT fills form fields. No JS execution. State in `browser_agent::http_fallback`.
 
 ---
 

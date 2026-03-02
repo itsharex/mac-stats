@@ -6,6 +6,11 @@
 //!
 //! Supports BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_INPUT / BROWSER_SCROLL / BROWSER_EXTRACT (index-based state). Session is kept
 //! until idle longer than Config::browser_idle_timeout_secs() (default 1 hour).
+//! When CDP is unavailable, HTTP fallback (fetch + scraper) provides NAVIGATE/CLICK/INPUT/EXTRACT without Chrome.
+
+mod http_fallback;
+
+pub use http_fallback::{click_http, extract_http, input_http, navigate_http};
 
 use std::process::{Command, Stdio};
 use std::sync::Arc;

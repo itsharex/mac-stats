@@ -72,4 +72,5 @@ notify = "6"
 tokio-util = "0.7.18"
 headless_chrome = "1.0"
 regex = "1"
+scraper = "0.19"
 
