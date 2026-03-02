@@ -295,6 +295,7 @@ fn run_internal(open_cpu_window: bool) {
             // Welcome message when menu bar is ready (always printed, regardless of verbosity)
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("✨ Welcome to mac-stats v{}! ✨", config::Config::version());
+            println!("   Logs: tail -f ~/.mac-stats/debug.log");
             println!("");
             println!("We hope this app brings you joy and helps you monitor");
             println!("your Mac's performance effortlessly.");

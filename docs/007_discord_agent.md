@@ -29,6 +29,10 @@ mac-stats can run a Discord bot that connects via the **Gateway** and responds t
 - Replies using the **“answer with Ollama + tools”** pipeline: planning step (RECOMMEND) then execution with FETCH_URL, BRAVE_SEARCH, RUN_CMD, MCP, **DISCORD_API**, etc. (see `docs/100_all_agents.md`).
 - When you message the bot, it records your **display name** and tells Ollama “You are talking to **&lt;name&gt;** (user id: …)” so replies can be personalized. Names are cached for reuse in the session.
 
+### Faster model for Discord (optional)
+
+When no channel or message overrides the model, the app uses a default. To get **faster replies** (e.g. for browser/screenshot flows), set **OLLAMA_FAST_MODEL** in env or `~/.mac-stats/.config.env` (e.g. `OLLAMA_FAST_MODEL=qwen2.5:1.5b` or `qwen2.5:latest`). The agent router will use that model for planning and tool runs. **OLLAMA_MODEL** still overrides the UI/default elsewhere when set.
+
 ## Discord API (HTTP)
 
 When a request comes **from Discord**, the agent router adds a **DISCORD_API** tool so Ollama can call Discord’s REST API. This is only available in the Discord context (not in the scheduler or CPU-window chat).

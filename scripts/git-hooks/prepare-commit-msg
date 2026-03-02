@@ -5,8 +5,8 @@
 set -e
 msg_file="$1"
 [ -f "$msg_file" ] || exit 0
-# Strip Co-authored-by lines for Cursor/agent (and any generic Co-authored-by we don't want)
+# Strip Co-authored-by and Made-with Cursor/agent attribution
 tmp=$(mktemp)
-grep -v -E '^Co-authored-by:.*cursoragent@cursor\.com|^Co-authored-by: Cursor ' "$msg_file" > "$tmp" || true
+grep -v -E '^Co-authored-by:.*cursoragent@cursor\.com|^Co-authored-by: Cursor |^Made-with:.*[Cc]ursor' "$msg_file" > "$tmp" || true
 [ -s "$tmp" ] && mv "$tmp" "$msg_file" || rm -f "$tmp"
 exit 0

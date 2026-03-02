@@ -9,8 +9,8 @@ use std::path::PathBuf;
 #[command(about = "macOS system statistics menu bar app")]
 #[command(long_about = "A lightweight system monitor for macOS that displays real-time CPU, GPU, RAM, and disk usage in the menu bar with minimal CPU overhead.")]
 struct Args {
-    /// Verbose output level (use -v, -vv, or -vvv for increasing verbosity)
-    #[arg(short = 'v', action = clap::ArgAction::Count, help = "Verbosity level: -v (minimal), -vv (moderate), -vvv (maximum)")]
+    /// Verbose output level (default: 2 = -vv). Use -v for minimal, -vvv for maximum.
+    #[arg(short = 'v', action = clap::ArgAction::Count, help = "Verbosity: default -vv (moderate). -v = minimal, -vvv = maximum")]
     verbose: u8,
     
     /// Open CPU window directly at startup (for testing)
@@ -76,17 +76,25 @@ enum AgentCmd {
 fn main() {
     let args = Args::parse();
     
-    // Set verbosity level (0-3)
-    let verbosity = if args.verbose > 3 { 3 } else { args.verbose };
+    // Set verbosity level (0-3). Default 2 (-vv) so logs are visible when no -v flags given.
+    let verbosity = if args.verbose > 3 {
+        3
+    } else if args.verbose > 0 {
+        args.verbose
+    } else {
+        2
+    };
     
     // Initialize tracing (structured logging) using config module
     use mac_stats::config::Config;
     Config::ensure_log_directory().ok(); // Create log directory if needed
     let log_path = Config::log_file_path();
-    mac_stats::init_tracing(verbosity, Some(log_path));
+    mac_stats::init_tracing(verbosity, Some(log_path.clone()));
     
     // Also set legacy verbosity for compatibility during migration
     mac_stats::set_verbosity(verbosity);
+    
+    tracing::info!("mac-stats: verbosity {} (logs: {:?})", verbosity, log_path);
     
     // Set frequency logging flag
     mac_stats::set_frequency_logging(args.frequency);

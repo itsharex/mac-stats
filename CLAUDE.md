@@ -44,8 +44,9 @@ cd src-tauri && cargo build --release
 # Run with CPU window open (for testing)
 ./target/release/mac_stats --cpu
 
-# Enable verbose logging (-v, -vv, -vvv for verbosity levels)
-./target/release/mac_stats -vvv
+# Default verbosity is -vv (logs visible). Use -vvv for maximum, -v for minimal.
+./target/release/mac_stats
+./target/release/mac_stats -vvv  # Maximum verbosity
 
 # Enable detailed frequency logging
 ./target/release/mac_stats --frequency
@@ -201,9 +202,10 @@ The app achieves low CPU usage through several key strategies:
 
 Enable detailed logging:
 ```bash
-# Set verbosity (0-3)
-./target/release/mac_stats -vvv  # Maximum verbosity
-./target/release/mac_stats -v    # Minimal verbosity
+# Verbosity: default -vv (2). -v = 1, -vvv = 3.
+./target/release/mac_stats        # Default -vv
+./target/release/mac_stats -vvv   # Maximum
+./target/release/mac_stats -v     # Minimal
 
 # Enable frequency logging for debugging IOReport
 ./target/release/mac_stats --frequency

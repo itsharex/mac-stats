@@ -27,6 +27,15 @@ pub fn get_global_catalog() -> Option<ModelCatalog> {
     global_catalog().lock().ok().and_then(|g| g.clone())
 }
 
+/// First local (non-cloud) model name from the global catalog, if any.
+/// Used to prefer local over cloud when the configured default is a cloud model.
+pub fn get_first_local_model_name() -> Option<String> {
+    let local: Vec<_> = get_global_catalog()
+        .map(|catalog| catalog.eligible_local().map(|m| m.name.clone()).collect())
+        .unwrap_or_default();
+    local.into_iter().next()
+}
+
 /// Maximum parameter count (in billions) for auto-selected models.
 /// Models above this are never chosen automatically.
 const MAX_AUTO_PARAMS_B: f64 = 15.0;
@@ -195,7 +204,9 @@ impl ModelCatalog {
     }
 }
 
-fn is_cloud_model(name: &str) -> bool {
+/// True if the model name indicates a cloud/remote model (e.g. qwen3.5:cloud).
+/// Used to prefer local models in default selection and catalog resolution.
+pub fn is_cloud_model(name: &str) -> bool {
     name.to_lowercase().contains("cloud")
 }
 

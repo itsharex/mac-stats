@@ -13,6 +13,7 @@ mod http_fallback;
 pub use http_fallback::{click_http, extract_http, input_http, navigate_http};
 
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -91,6 +92,17 @@ pub fn connect_cdp(port: u16) -> Result<Browser, String> {
     info!("Browser agent: connecting to CDP at port {}", port);
     Browser::connect_with_timeout(ws_url, Duration::from_secs(60))
         .map_err(|e| format!("CDP connect: {}", e))
+}
+
+/// Ensure Chrome is listening on port (launch if not). Call before retrying CDP when it failed.
+pub fn ensure_chrome_on_port(port: u16) {
+    if get_ws_url(port).is_ok() {
+        return;
+    }
+    if launch_chrome_on_port(port).is_ok() {
+        info!("Browser agent [CDP]: launched Chrome on port {} (caller may retry CDP)", port);
+        std::thread::sleep(Duration::from_secs(4));
+    }
 }
 
 /// Launch Chrome with --remote-debugging-port so mac-stats can connect. Chrome keeps running (process is detached).
@@ -365,20 +377,32 @@ fn fetch_page_and_extract_phones_with_browser(browser: &Browser, url: &str) -> R
     Ok(phones)
 }
 
-/// Cached browser session: (Browser, last_used). Dropped when idle longer than browser_idle_timeout_secs.
-static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant)>>> = OnceLock::new();
+/// Cached browser session: (Browser, last_used, was_headless). Dropped when idle longer than browser_idle_timeout_secs.
+static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant, bool)>>> = OnceLock::new();
 
-fn browser_session() -> &'static Mutex<Option<(Browser, Instant)>> {
+/// User said "headless" → true (no visible window). User said "browser" or default → false (visible desktop app).
+static PREFER_HEADLESS: AtomicBool = AtomicBool::new(false);
+
+/// Set headless preference for this request. Call at start of tool loop from question.
+/// "headless" in question → true. Otherwise → false (visible Chrome).
+pub fn set_prefer_headless_for_run(prefer: bool) {
+    PREFER_HEADLESS.store(prefer, Ordering::Relaxed);
+}
+
+fn browser_session() -> &'static Mutex<Option<(Browser, Instant, bool)>> {
     BROWSER_SESSION.get_or_init(|| Mutex::new(None))
+}
+
+fn is_connection_error(err_msg: &str) -> bool {
+    err_msg.contains("connection is closed")
+        || err_msg.contains("underlying connection")
+        || err_msg.contains("timeout while listening")
+        || err_msg.contains("Unable to make method calls")
 }
 
 /// Clear the cached browser session so the next use will reconnect or relaunch. Call when a connection error is detected.
 fn clear_browser_session_on_error(err_msg: &str) {
-    if err_msg.contains("connection is closed")
-        || err_msg.contains("underlying connection")
-        || err_msg.contains("timeout while listening")
-        || err_msg.contains("Unable to make method calls")
-    {
+    if is_connection_error(err_msg) {
         if let Ok(mut guard) = browser_session().lock() {
             if guard.is_some() {
                 *guard = None;
@@ -388,37 +412,64 @@ fn clear_browser_session_on_error(err_msg: &str) {
     }
 }
 
-/// Get or create a browser; reuse if last use was within idle timeout, else close and create new. Updates last_used.
+/// Run f(). On connection error, clear session and retry once for seamless recovery from stale sessions.
+fn with_connection_retry<F, T>(f: F) -> Result<T, String>
+where
+    F: Fn() -> Result<T, String>,
+{
+    match f() {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            if is_connection_error(&e) {
+                clear_browser_session_on_error(&e);
+                info!("Browser agent [CDP]: retrying after connection error (session cleared)");
+                f()
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
+/// Get or create a browser; reuse if last use was within idle timeout and preference matches, else close and create new.
 fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     let timeout_secs = crate::config::Config::browser_idle_timeout_secs();
+    let prefer_headless = PREFER_HEADLESS.load(Ordering::Relaxed);
     let mut guard = browser_session().lock().map_err(|e| e.to_string())?;
     let now = Instant::now();
-    if let Some((ref browser, last_used)) = guard.as_ref() {
-        if now.duration_since(*last_used).as_secs() < timeout_secs {
+    if let Some((ref browser, last_used, was_headless)) = guard.as_ref() {
+        if now.duration_since(*last_used).as_secs() < timeout_secs && *was_headless == prefer_headless {
             let b = browser.clone();
-            *guard = Some((b.clone(), now));
+            *guard = Some((b.clone(), now, prefer_headless));
             info!(
-                "Browser agent [CDP]: reusing existing session (idle timeout {}s)",
-                timeout_secs
+                "Browser agent [CDP]: reusing existing session (idle timeout {}s, headless={})",
+                timeout_secs, prefer_headless
             );
             return Ok(b);
         }
-        info!(
-            "Browser agent [CDP]: session idle > {}s, closing browser",
-            timeout_secs
-        );
+        if *was_headless != prefer_headless {
+            info!("Browser agent [CDP]: preference changed (headless {} → {}), creating new session", was_headless, prefer_headless);
+        } else {
+            info!(
+                "Browser agent [CDP]: session idle > {}s, closing browser",
+                timeout_secs
+            );
+        }
     }
     *guard = None;
     drop(guard);
-    let browser = if get_ws_url(port).is_ok() {
-        info!("Browser agent [CDP]: connecting to Chrome on port {}", port);
+    let browser = if prefer_headless {
+        info!("Browser agent [CDP]: user requested headless — launching headless Chrome (no visible window)");
+        launch_via_headless_chrome()?
+    } else if get_ws_url(port).is_ok() {
+        info!("Browser agent [CDP]: connecting to Chrome on port {} (visible)", port);
         connect_cdp(port)?
     } else {
-        info!("Browser agent [CDP]: no Chrome on port {}, trying to launch Chrome on {}", port, port);
+        info!("Browser agent [CDP]: no Chrome on port {}, launching visible Chrome on {}", port, port);
         if launch_chrome_on_port(port).is_ok() {
             std::thread::sleep(Duration::from_secs(3));
             if get_ws_url(port).is_ok() {
-                info!("Browser agent [CDP]: connecting to Chrome on port {} (after launch)", port);
+                info!("Browser agent [CDP]: connecting to Chrome on port {} (after launch, visible)", port);
                 connect_cdp(port)?
             } else {
                 warn!("Browser agent [CDP]: Chrome launch may have failed or not ready; falling back to headless_chrome launcher");
@@ -429,7 +480,7 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
             launch_via_headless_chrome()?
         }
     };
-    *browser_session().lock().map_err(|e| e.to_string())? = Some((browser.clone(), Instant::now()));
+    *browser_session().lock().map_err(|e| e.to_string())? = Some((browser.clone(), Instant::now(), prefer_headless));
     Ok(browser)
 }
 
@@ -462,6 +513,10 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
 
 /// Navigate to URL and return formatted browser state for the LLM. Used by BROWSER_NAVIGATE.
 pub fn navigate_and_get_state(url: &str) -> Result<String, String> {
+    with_connection_retry(|| navigate_and_get_state_inner(url))
+}
+
+fn navigate_and_get_state_inner(url: &str) -> Result<String, String> {
     let url_normalized = normalize_url_for_screenshot(url);
     info!("Browser agent [CDP]: BROWSER_NAVIGATE: {}", url_normalized);
     let (_, tab) = get_current_tab().map_err(|e| {
@@ -490,6 +545,10 @@ pub fn navigate_and_get_state(url: &str) -> Result<String, String> {
 
 /// Click the Nth interactive element (1-based index). Returns updated browser state string.
 pub fn click_by_index(index: u32) -> Result<String, String> {
+    with_connection_retry(|| click_by_index_inner(index))
+}
+
+fn click_by_index_inner(index: u32) -> Result<String, String> {
     if index == 0 {
         return Err("BROWSER_CLICK index must be >= 1".to_string());
     }
@@ -545,6 +604,10 @@ pub fn click_by_index(index: u32) -> Result<String, String> {
 
 /// Type text into the Nth interactive element (1-based index). Returns updated browser state string.
 pub fn input_by_index(index: u32, text: &str) -> Result<String, String> {
+    with_connection_retry(|| input_by_index_inner(index, text))
+}
+
+fn input_by_index_inner(index: u32, text: &str) -> Result<String, String> {
     if index == 0 {
         return Err("BROWSER_INPUT index must be >= 1".to_string());
     }
@@ -611,6 +674,10 @@ pub fn input_by_index(index: u32, text: &str) -> Result<String, String> {
 
 /// Scroll the current page. Arg: "down", "up", "bottom", "top", or pixels (e.g. "500"). Returns updated browser state.
 pub fn scroll_page(arg: &str) -> Result<String, String> {
+    with_connection_retry(|| scroll_page_inner(arg))
+}
+
+fn scroll_page_inner(arg: &str) -> Result<String, String> {
     let (_, tab) = get_current_tab().map_err(|e| {
         clear_browser_session_on_error(&e);
         e
@@ -649,6 +716,10 @@ pub fn scroll_page(arg: &str) -> Result<String, String> {
 
 /// Extract visible text from the current page (body innerText). Use after BROWSER_NAVIGATE/CLICK to get page content for the LLM.
 pub fn extract_page_text() -> Result<String, String> {
+    with_connection_retry(extract_page_text_inner)
+}
+
+fn extract_page_text_inner() -> Result<String, String> {
     let (_, tab) = get_current_tab().map_err(|e| {
         clear_browser_session_on_error(&e);
         e
@@ -671,12 +742,53 @@ pub fn extract_page_text() -> Result<String, String> {
     Ok(out)
 }
 
+/// Take a screenshot of the current CDP tab (no navigation). Use after BROWSER_NAVIGATE + BROWSER_CLICK.
+/// Saves PNG to ~/.mac-stats/screenshots/<timestamp>_current.png.
+pub fn take_screenshot_current_page() -> Result<PathBuf, String> {
+    with_connection_retry(take_screenshot_current_page_inner)
+}
+
+fn take_screenshot_current_page_inner() -> Result<PathBuf, String> {
+    info!("Browser agent [CDP]: take_screenshot_current_page (no navigation)");
+    let (_, tab) = get_current_tab().map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
+    let final_url = tab.get_url();
+    info!("Browser agent [CDP]: screenshotting current page: {}", final_url);
+    std::thread::sleep(Duration::from_secs(1));
+    let png_data = tab
+        .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, true)
+        .map_err(|e| {
+            let s = format!("Capture screenshot: {}", e);
+            clear_browser_session_on_error(&s);
+            s
+        })?;
+    let dir = crate::config::Config::screenshots_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Create screenshots dir: {}", e))?;
+    let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("{}_current.png", ts);
+    let path = dir.join(&filename);
+    std::fs::write(&path, &png_data).map_err(|e| format!("Write screenshot: {}", e))?;
+    info!("Browser agent [CDP]: screenshot saved to {:?}", path);
+    Ok(path)
+}
+
 /// Take a screenshot of the given URL using CDP (reuses session if within idle timeout, else connects or launches).
+/// When url is empty or "current", screenshots the current tab (use after BROWSER_NAVIGATE + BROWSER_CLICK).
 /// Saves PNG to ~/.mac-stats/screenshots/<timestamp>_<domain>.png and returns the path.
 /// Browser session is kept until unused for Config::browser_idle_timeout_secs() (default 1 hour).
 pub fn take_screenshot(url: &str) -> Result<PathBuf, String> {
+    with_connection_retry(|| take_screenshot_inner(url))
+}
+
+fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
+    let url_trimmed = url.trim();
+    if url_trimmed.is_empty() || url_trimmed.eq_ignore_ascii_case("current") {
+        return take_screenshot_current_page_inner();
+    }
     info!("Browser agent [CDP]: take_screenshot called with url (raw): {:?}", url);
-    let url_normalized = normalize_url_for_screenshot(url);
+    let url_normalized = normalize_url_for_screenshot(url_trimmed);
     info!("Browser agent [CDP]: normalized URL: {}", url_normalized);
     let port = 9222u16;
     let browser = get_or_create_browser(port).map_err(|e| {

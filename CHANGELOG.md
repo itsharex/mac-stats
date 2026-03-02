@@ -11,11 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BROWSER_SCROLL** — Agent tool: scroll the current CDP page. Reply with `BROWSER_SCROLL: down|up|bottom|top` or `BROWSER_SCROLL: <pixels>`. Returns updated browser state (URL, elements list).
 - **BROWSER_EXTRACT** — Agent tool: return visible text of the current CDP page (body innerText, truncated to 30k chars). Use after BROWSER_NAVIGATE/CLICK to get page content for the LLM.
 
+### Changed
+- **Browser agent retry on connection error** — When CDP connection is stale (connection closed, timeout, "Unable to make method calls"), the app clears the cached session and retries once. All CDP entry points (navigate, click, input, scroll, extract, screenshot) use this retry wrapper for seamless recovery without user restart.
+- **Multi-step browser guard** — Block `BROWSER_SCREENSHOT: <url>` when the user asked for multi-step navigation (e.g. "navigate all pages", "find X", "when you found"). The model receives a hint to use BROWSER_NAVIGATE first, then BROWSER_CLICK through links, BROWSER_EXTRACT to search page text, and BROWSER_SCREENSHOT: current when found.
+
 ### Added
 - **HTTP-only browser fallback** — When Chrome/CDP is not available (e.g. port 9222), BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_INPUT / BROWSER_EXTRACT use HTTP fetch + HTML parsing (`scraper`): fetch page, parse links and forms, present numbered list to LLM; CLICK follows links or submits forms, INPUT fills form fields. No JavaScript execution.
 
 ### Changed
+- **README** — Fresh layout inspired by OpenClaw/Hermes: Quick install at top, "At a glance" feature bullets, `~/.mac-stats/` config tree, commands table, GitHub release badge. Hero screenshot switched to `data-poster.png` so Mac users see the interface. Link bar: Changelog · Screenshots.
 - **Task runner prompt** — Explicit hint to use CURSOR_AGENT for implement/refactor/add-feature/code tasks, then TASK_APPEND and TASK_STATUS.
+- **Tool-first routing** — Pre-route "screenshot + URL" requests to BROWSER_SCREENSHOT (skip planner). Default planning prompt includes a tool-first rule: when one base tool fits the request, recommend that tool instead of AGENT. See `docs/031_orchestrator_tool_first_proposal.md`.
 
 ## [0.1.22] - 2026-02-28
 

@@ -600,9 +600,9 @@ const AGENT_DESCRIPTIONS_BASE: &str = r#"We have 10 base tools available:
 
 2. **FETCH_URL**: Fetch the full text of a web page. Use for: reading a specific URL's content. To invoke: reply with exactly one line: FETCH_URL: <full URL> (e.g. FETCH_URL: https://www.example.com). The app will return the page text.
 
-3. **BROWSER_SCREENSHOT**: Open a URL in a headless browser and take a screenshot. Use when the user asks to "go to" a URL and take a screenshot, or to capture a page as an image. To invoke: reply with exactly one line: BROWSER_SCREENSHOT: <URL> (e.g. BROWSER_SCREENSHOT: https://www.amvara.de). The app will return the path to the saved PNG (e.g. ~/.mac-stats/screenshots/...). Tell the user where the screenshot was saved; in Discord you cannot attach the image in-chat, so report the path.
+3. **BROWSER_SCREENSHOT**: Take a screenshot. Two modes: (a) BROWSER_SCREENSHOT: <URL> — open URL and screenshot (e.g. BROWSER_SCREENSHOT: https://www.amvara.de). (b) BROWSER_SCREENSHOT: current — screenshot the **current page** (use after BROWSER_NAVIGATE and BROWSER_CLICK; same browser). For multi-step tasks (navigate → click contact → screenshot), use BROWSER_NAVIGATE, BROWSER_CLICK, then BROWSER_SCREENSHOT: current so the screenshot uses the same browser.
 
-4. **BROWSER_NAVIGATE**, **BROWSER_CLICK**, **BROWSER_INPUT**, **BROWSER_SCROLL**, **BROWSER_EXTRACT** (lightweight browser): Use for multi-step browser tasks (e.g. accept cookie consent then search). BROWSER_NAVIGATE: <url> — open URL and return current page state with numbered elements. BROWSER_CLICK: <index> — click the element at that index (1-based). BROWSER_INPUT: <index> <text> — type text into the element at that index. BROWSER_SCROLL: <direction> — scroll the current page: use "down", "up", "bottom", "top", or a number of pixels (e.g. BROWSER_SCROLL: 500 or BROWSER_SCROLL: bottom). BROWSER_EXTRACT — return the visible text of the current page (use after navigating/clicking to get content for answering). After each action you get "Current page: ..." and an Elements list; use the index for the next CLICK or INPUT. **If the Elements list shows cookie consent** (e.g. \"Rechazar todo\", \"Aceptar todo\", \"Accept all\", \"Reject all\"), **click the accept button first** (use the index of \"Aceptar todo\" or \"Accept all\") before typing in search boxes or submitting. Reply with exactly one line per tool (e.g. BROWSER_NAVIGATE: https://google.com then BROWSER_CLICK: 27 for Aceptar todo, then BROWSER_INPUT: 10 <query> then BROWSER_CLICK: 9 for the search button).
+4. **BROWSER_NAVIGATE**, **BROWSER_CLICK**, **BROWSER_INPUT**, **BROWSER_SCROLL**, **BROWSER_EXTRACT** (lightweight browser): Use for multi-step browser tasks (e.g. accept cookie consent then search). **Browser mode**: user says \"headless\" → no visible window. User says \"browser\" or default → visible Chrome (desktop app, you can watch navigation). BROWSER_NAVIGATE: <url> — open URL and return current page state with numbered elements. BROWSER_CLICK: <index> — click the element at that index (1-based). BROWSER_INPUT: <index> <text> — type text into the element at that index. BROWSER_SCROLL: <direction> — scroll the current page: use "down", "up", "bottom", "top", or a number of pixels (e.g. BROWSER_SCROLL: 500 or BROWSER_SCROLL: bottom). BROWSER_EXTRACT — return the visible text of the current page (use after navigating/clicking to get content for answering). After each action you get "Current page: ..." and an Elements list; use the index for the next CLICK or INPUT. **If the Elements list shows cookie consent** (e.g. \"Rechazar todo\", \"Aceptar todo\", \"Accept all\", \"Reject all\"), **click the accept button first** (use the index of \"Aceptar todo\" or \"Accept all\") before typing in search boxes or submitting. Reply with exactly one line per tool (e.g. BROWSER_NAVIGATE: https://google.com then BROWSER_CLICK: 27 for Aceptar todo, then BROWSER_INPUT: 10 <query> then BROWSER_CLICK: 9 for the search button).
 
 5. **BRAVE_SEARCH**: Web search via Brave Search API. Use for: finding current info, facts, multiple sources. To invoke: reply with exactly one line: BRAVE_SEARCH: <search query>. The app will return search results.
 
@@ -1298,6 +1298,80 @@ fn looks_like_discord_401_confusion(content: &str) -> bool {
 /// If `discord_reply_channel_id` is set (when the request came from Discord), SCHEDULE will store it so the scheduler can post results to that channel (DM or mention channel).
 /// When `discord_user_id` and `discord_user_name` are set (from Discord message author), the prompt is prefixed with "You are talking to Discord user **{name}** (user id: {id})."
 /// When set, `model_override` and `options_override` apply only to this request (e.g. from Discord "model: llama3" line).
+/// Extract a URL from the question for pre-routing (e.g. screenshot). Prefers https?:// then www.
+/// Strips trailing punctuation from the URL.
+fn extract_url_from_question(text: &str) -> Option<String> {
+    let lower = text.to_lowercase();
+    for prefix in ["https://", "http://"] {
+        if let Some(pos) = lower.find(prefix) {
+            let start = text[pos..].char_indices().next().map(|(o, _)| pos + o).unwrap_or(pos);
+            let after = &text[start + prefix.len()..];
+            let end = after
+                .char_indices()
+                .find(|(_, c)| *c == ' ' || *c == '\n' || *c == '\t' || *c == ')' || *c == ']' || *c == '"' || *c == '>')
+                .map(|(i, _)| i)
+                .unwrap_or(after.len());
+            let url = format!("{}{}", &text[start..start + prefix.len()], &after[..end]);
+            let url = url.trim_end_matches(|c| c == '.' || c == ',' || c == ';' || c == '!' || c == '?');
+            if !url.is_empty() && url.len() > prefix.len() {
+                return Some(url.to_string());
+            }
+        }
+    }
+    // www. something
+    if let Some(pos) = lower.find("www.") {
+        let after = &text[pos..];
+        let end = after
+            .char_indices()
+            .find(|(_, c)| *c == ' ' || *c == '\n' || *c == '\t' || *c == ')' || *c == ']' || *c == '"' || *c == '>')
+            .map(|(i, _)| i)
+            .unwrap_or(after.len());
+        let url = after[..end].trim_end_matches(|c| c == '.' || c == ',' || c == ';' || c == '!' || c == '?');
+        if url.len() > 4 {
+            let full = if url.starts_with("http") { url.to_string() } else { format!("https://{}", url) };
+            return Some(full);
+        }
+    }
+    None
+}
+
+/// True when the user wants multi-step browser flow (navigate → click/find → screenshot), not a simple screenshot of a URL.
+fn has_multi_step_browser_intent(question: &str) -> bool {
+    let q_lower = question.trim().to_lowercase();
+    q_lower.contains("click on") || q_lower.contains("click the")
+        || q_lower.contains("and click") || q_lower.contains("then click")
+        || q_lower.contains("first ") || q_lower.contains("accept cookie")
+        || q_lower.contains("accept all") || q_lower.contains("reject all")
+        || q_lower.contains("navigate all") || q_lower.contains("find ")
+        || q_lower.contains("when you found") || q_lower.contains("when found")
+        || (q_lower.contains("find") && (q_lower.contains('"') || q_lower.contains(" and ")))
+}
+
+/// If the question clearly asks for a screenshot of a URL, return RECOMMEND string for pre-routing.
+/// Do NOT pre-route when the request includes multi-step browser actions (click, navigate then, etc.)
+/// — those need NAVIGATE → CLICK → BROWSER_SCREENSHOT: current.
+fn extract_screenshot_recommendation(question: &str) -> Option<String> {
+    let q = question.trim();
+    let q_lower = q.to_lowercase();
+    if has_multi_step_browser_intent(question) {
+        return None;
+    }
+    let has_screenshot_intent = q_lower.contains("screenshot") || q_lower.contains("take a screenshot")
+        || q_lower.contains("create a screenshot") || q_lower.contains("capture the page")
+        || (q_lower.contains("capture") && (q_lower.contains("page") || q_lower.contains("browser")));
+    let has_browser_or_url_context = q_lower.contains("browser") || q_lower.contains("chrome") || q_lower.contains("goto")
+        || q_lower.contains("go to") || q_lower.contains("visit") || q_lower.contains("navigate")
+        || q_lower.contains("http") || q_lower.contains("www.");
+    if has_screenshot_intent && has_browser_or_url_context {
+        if let Some(url) = extract_url_from_question(q) {
+            let rec = format!("BROWSER_SCREENSHOT: {}", url);
+            tracing::info!("Agent router: pre-routed to BROWSER_SCREENSHOT (screenshot + URL): {}", crate::logging::ellipse(&url, 60));
+            return Some(rec);
+        }
+    }
+    None
+}
+
 /// Extract a numeric ticket/issue ID from text like "ticket #1234", "#1234", "issue 1234".
 fn extract_ticket_id(text: &str) -> Option<u64> {
     // Match #NNNN
@@ -1554,8 +1628,8 @@ pub async fn answer_with_ollama_and_fetch(
     };
 
     // --- Pre-routing: deterministic tool dispatch for unambiguous patterns ---
-    // "run <command>" or "run command: <command>" → RUN_CMD, skip LLM planning (so we execute, not explain).
-    let pre_routed_recommendation = if crate::commands::run_cmd::is_local_cmd_allowed() {
+    // Screenshot + URL → BROWSER_SCREENSHOT; "run <command>" → RUN_CMD; ticket → REDMINE_API.
+    let pre_routed_recommendation = extract_screenshot_recommendation(question).or_else(|| if crate::commands::run_cmd::is_local_cmd_allowed() {
         let q = question.trim();
         let q_lower = q.to_lowercase();
         let cmd_rest = if q_lower.starts_with("run command:") {
@@ -1601,7 +1675,7 @@ pub async fn answer_with_ollama_and_fetch(
         }
     } else {
         None
-    };
+    });
 
     // --- Planning step: ask Ollama how it would solve the question (skip if pre-routed) ---
     let recommendation = if let Some(pre_routed) = pre_routed_recommendation {
@@ -1756,6 +1830,8 @@ pub async fn answer_with_ollama_and_fetch(
     };
 
     let mut tool_count: u32 = 0;
+    // Browser mode: "headless" in question → no visible window. "browser" or default → visible Chrome.
+    crate::browser_agent::set_prefer_headless_for_run(question.to_lowercase().contains("headless"));
     // Paths to attach when replying on Discord (e.g. BROWSER_SCREENSHOT); only under ~/.mac-stats/screenshots/.
     let mut attachment_paths: Vec<PathBuf> = Vec::new();
     // Collect (agent_name, reply) for each AGENT call so we can append a conversation transcript when multiple agents participated.
@@ -1860,10 +1936,33 @@ pub async fn answer_with_ollama_and_fetch(
                 }
             }
             "BROWSER_SCREENSHOT" => {
-                send_status("Opening page and taking screenshot…");
                 let url_arg = arg.trim().to_string();
-                if url_arg.is_empty() {
-                    "BROWSER_SCREENSHOT requires a URL (e.g. BROWSER_SCREENSHOT: https://www.example.com). Please try again with a URL.".to_string()
+                let is_current = url_arg.is_empty() || url_arg.eq_ignore_ascii_case("current");
+                // Block shortcut: "navigate all pages and find X" requires multi-step flow, not screenshot-of-URL
+                if !is_current && has_multi_step_browser_intent(question) {
+                    info!("Agent router: blocking BROWSER_SCREENSHOT: {} — user asked for multi-step navigation", crate::logging::ellipse(&url_arg, 60));
+                    format!(
+                        "This task requires multi-step navigation. Do NOT use BROWSER_SCREENSHOT: <url> for \"navigate all pages\" or \"find X\". \
+Use BROWSER_NAVIGATE: {} first, then BROWSER_CLICK through links (Team, Contact, etc.), BROWSER_EXTRACT to search page text for the name, repeat until found, then BROWSER_SCREENSHOT: current.",
+                        url_arg
+                    )
+                } else {
+                send_status(if is_current { "Taking screenshot of current page…" } else { "Opening page and taking screenshot…" });
+                if is_current {
+                    match tokio::task::spawn_blocking(|| crate::browser_agent::take_screenshot_current_page()).await {
+                        Ok(Ok(path)) => {
+                            attachment_paths.push(path.clone());
+                            format!(
+                                "Screenshot of current page saved to: {}.\n\nTell the user the screenshot was taken; the app will attach it in Discord.",
+                                path.display()
+                            )
+                        }
+                        Ok(Err(e)) => {
+                            info!("Discord/Ollama: BROWSER_SCREENSHOT (current) failed: {}", crate::logging::ellipse(&e, 200));
+                            format!("Screenshot of current page failed: {}. (Use BROWSER_NAVIGATE and BROWSER_CLICK first with CDP; then BROWSER_SCREENSHOT: current. Chrome may need to be on port 9222.)", e)
+                        }
+                        Err(e) => format!("Screenshot task error: {}", e),
+                    }
                 } else {
                     info!(
                         "BROWSER_SCREENSHOT: arg from parser (raw): {}",
@@ -1885,6 +1984,7 @@ pub async fn answer_with_ollama_and_fetch(
                         Err(e) => format!("Screenshot task error: {}", e),
                     }
                 }
+                }
             }
             "BROWSER_NAVIGATE" => {
                 send_status("Navigating…");
@@ -1899,15 +1999,26 @@ pub async fn answer_with_ollama_and_fetch(
                     }).await {
                         Ok(Ok(state_str)) => state_str,
                         Ok(Err(cdp_err)) => {
-                            info!("BROWSER_NAVIGATE CDP failed, trying HTTP fallback: {}", crate::logging::ellipse(&cdp_err, 120));
-                            match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_http(&url_arg)).await {
+                            info!("BROWSER_NAVIGATE CDP failed, ensuring Chrome on 9222 and retrying: {}", crate::logging::ellipse(&cdp_err, 120));
+                            tokio::task::spawn_blocking(|| crate::browser_agent::ensure_chrome_on_port(9222)).await.ok();
+                            match tokio::task::spawn_blocking({
+                                let u = url_arg.clone();
+                                move || crate::browser_agent::navigate_and_get_state(&u)
+                            }).await {
                                 Ok(Ok(state_str)) => state_str,
-                                Ok(Err(http_err)) => format!(
-                                    "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
-                                    crate::logging::ellipse(&cdp_err, 80),
-                                    http_err
-                                ),
-                                Err(e) => format!("BROWSER_NAVIGATE HTTP fallback task error: {}", e),
+                                Ok(Err(cdp_err2)) => {
+                                    info!("BROWSER_NAVIGATE CDP retry failed, trying HTTP fallback: {}", crate::logging::ellipse(&cdp_err2, 120));
+                                    match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_http(&url_arg)).await {
+                                        Ok(Ok(state_str)) => state_str,
+                                        Ok(Err(http_err)) => format!(
+                                            "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
+                                            crate::logging::ellipse(&cdp_err2, 80),
+                                            http_err
+                                        ),
+                                        Err(e) => format!("BROWSER_NAVIGATE HTTP fallback task error: {}", e),
+                                    }
+                                }
+                                Err(e) => format!("BROWSER_NAVIGATE CDP retry task error: {}", e),
                             }
                         }
                         Err(e) => format!("BROWSER_NAVIGATE task error: {}", e),
