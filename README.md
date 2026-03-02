@@ -12,17 +12,17 @@ A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, an
 
 ---
 
-## Quick install
+## Install
 
 **DMG (recommended):** [Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
 
 **Build from source:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
 ```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
 
-> **💡 TIP — "DMG is damaged"**  
-> macOS Gatekeeper is blocking the unsigned app; the file is fine. Right-click the DMG → **Open**, then confirm. Or run: `xattr -d com.apple.quarantine ~/Downloads/mac-stats_*.dmg`
+**If macOS blocks the app:** Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
 
 ---
 
@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/ru
 - **AI** — Ollama on your Mac; models and inference stay on-device.
 - **Your data** — Config, memory, sessions, and tasks in `~/.mac-stats`. Nothing sent to a vendor. Secrets in `~/.mac-stats/.config.env` or Keychain.
 - **Optional network** — Discord, Mastodon, FETCH_URL, Brave Search, website checks only when you use them.
-- **Metrics** — CPU, GPU, RAM, disk, temperature, processes read from your machine when you open the window.
+- **Metrics** — Read from your machine when you open the window (temperature, frequency, process list).
 
 No subscription. No lock-in. Works offline for chat and monitoring. All you need is a nice pet from [Ollama](https://ollama.com)—the kind that runs on your Mac and never asks for a subscription.
 
@@ -74,13 +74,15 @@ All settings live under `~/.mac-stats/`:
 
 ## Commands
 
+Binary name `mac_stats`; app shows as **mac-stats**. From repo root unless noted.
+
 | Command | Description |
 |---------|-------------|
 | `mac_stats` | Start app (menu bar + optional CPU window) |
 | `mac_stats --cpu` | Start with CPU window open |
-| `mac_stats -v` / `-vv` / `-vvv` | Verbosity levels of debug.log so you see what is happening |
-| `mac_stats discord send <channel_id> <message>` | Post message to Discord from CLI |
-| `./run dev` | Development mode (hot reload) |
+| `mac_stats -v` / `-vv` / `-vvv` | Verbosity for debug.log |
+| `mac_stats discord send <channel_id> <message>` | Post to Discord from CLI |
+| `./run dev` | Development mode, hot reload (repo root) |
 
 ---
 
@@ -88,14 +90,14 @@ All settings live under `~/.mac-stats/`:
 
 ### AI & agents (Ollama, local)
 - **Chat** — In the app window or via Discord. Code execution (JS), **FETCH_URL**, **BRAVE_SEARCH**, **RUN_CMD** (allowlisted), **MASTODON_POST** (toot from the agent), retry and correction.
-- **Completion verification** — We extract 1–3 success criteria at the start and ask “Did we satisfy the request?” at the end; if not, we append a disclaimer. Heuristic: “screenshot requested but none attached” → note. See [docs/025_expectation_check_design.md](docs/025_expectation_check_design.md).
-- **Escalation / “try harder”** — Edit **~/.mac-stats/escalation_patterns.md** (one phrase per line). When your message contains one (e.g. “think harder”, “you are stupid”), we run a stronger completion pass (+10 tool steps). New phrases you use get auto-added.
+- **Completion verification** — We extract 1–3 success criteria at the start and ask “Did we satisfy the request?” at the end; if not, we append a disclaimer. Heuristic: “screenshot requested but none attached” → note. See [docs/025_expectation_check_design_DONE.md](docs/025_expectation_check_design_DONE.md).
+- **Escalation / “try harder”** — Edit `escalation_patterns.md` (see config tree); one phrase per line. When your message matches one, we run a stronger pass (+10 tool steps). New phrases you use get auto-added.
 - **Memory** — Global and per-agent `memory.md`; **MEMORY_APPEND**; session compaction writes lessons to memory.
 - **Discord bot** — Optional. @mentions, DMs, or having_fun mode (your Mac chats with other bots when bored); per-channel model/agent. Full Ollama + tools.
 - **Tasks** — `~/.mac-stats/task/` with **TASK_LIST**, **TASK_CREATE**, **TASK_STATUS**, assignees, scheduler loop.
 - **Scheduler** — Cron or one-shot (`~/.mac-stats/schedules.json`); tasks through Ollama; optional Discord reply channel.
 - **MCP** — Tools from any MCP server (HTTP/SSE or stdio).
-- **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Local models by role; cloud only when you configure it ([design](docs/030_agent_model_assignment_plan.md)). Editable prompts in `~/.mac-stats/prompts/` and `soul.md`.
+- **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Local models by role; cloud only when you configure it ([design](docs/030_agent_model_assignment_plan_DONE.md)). Editable prompts in `~/.mac-stats/prompts/` and `soul.md`.
 - **cursor-agent** — When the [Cursor Agent CLI](https://cursor.com) is on PATH, agents can delegate via **CURSOR_AGENT:** or **RUN_CMD: cursor-agent**; see [docs/012_cursor_agent_tasks.md](docs/012_cursor_agent_tasks.md).
 - **PYTHON_SCRIPT** — Ollama can run Python under `~/.mac-stats/scripts/` (disable with `ALLOW_PYTHON_SCRIPT=0`).
 
@@ -103,7 +105,7 @@ All settings live under `~/.mac-stats/`:
 - Menu bar + expandable window; status dashboard (monitors, Ollama, etc.); 9 themes. Scrollable, collapsible sections.
 
 ### System monitoring (background)
-- Real-time CPU, RAM, disk, GPU in the menu bar; temperature, frequency, battery. Process list with top consumers; click for details. Low CPU: &lt;0.1% with window closed, ~3% with window open.
+- Real-time CPU, GPU, RAM, disk in the menu bar; temperature, frequency, battery; process list with top consumers. Click for details.
 - **Monitoring & alerts** — Website and social monitoring (Mastodon mentions); alert rules and channels (Telegram, Slack, Mastodon, etc.).
 
 ---
@@ -113,43 +115,13 @@ All settings live under `~/.mac-stats/`:
 - **Chat** — Open the window (click the menu bar icon or run with `--cpu`) and use the AI panel. Verbosity: `-v` / `-vv` / `-vvv`.
 - **Discord** — Configure `~/.mac-stats/discord_channels.json` and ensure your bot token is set; the agent responds to @mentions, DMs, or in having_fun channels (where your Mac can chill and talk to other bots). See [Discord setup and channel modes](docs/007_discord_agent.md) for details.
 - **Mastodon** — Set `MASTODON_INSTANCE_URL` and `MASTODON_ACCESS_TOKEN` in env or `~/.mac-stats/.config.env`; the agent can **MASTODON_POST** toots, and you can add Mastodon monitors (mentions) and alert channels. No X.com yet ;-) — let's see who implements it first.
-- **Monitoring** — Click any percentage in the menu bar (CPU, GPU, RAM, Disk) to open the details window. ⌘W to hide; click again to toggle; ⌘Q to quit. CPU use: &lt;0.1% with window closed, ~3% with window open.
-
----
-
-## Installation (detailed)
-
-### DMG
-Download the latest [mac-stats release](https://github.com/raro42/mac-stats/releases/latest) and drag the app to Applications.
-
-**If the app is blocked after install:**
-```bash
-xattr -rd com.apple.quarantine /Applications/mac-stats.app
-```
-
-### Build from source
-```bash
-git clone https://github.com/raro42/mac-stats.git
-cd mac-stats
-./run
-```
-
-Manual: `cd src-tauri && cargo build --release` then run `./target/release/mac_stats`.
+- **Monitoring** — Click any percentage in the menu bar to open the details window. ⌘W to hide; click again to toggle; ⌘Q to quit.
 
 ---
 
 ## Development
 
-**Prerequisites:** Rust
-
-```bash
-./run dev
-```
-
-Run `cargo audit` (if available) in `src-tauri/` before release to check for known vulnerabilities.
-
-### Agent workflow
-This repo is edited by the mac-stats-reviewer Coder agent in place (yolo mode). For direct edits, open Cursor with **`mac-stats-agent-workspace.code-workspace`** (in the mac-stats-reviewer repo) so both repos are in the workspace; then the Coder can edit files here directly. See [docs/agent_workflow.md](docs/agent_workflow.md).
+**Prerequisites:** Rust. From repo root: `./run dev`. Run `cargo audit` in `src-tauri/` before release. Coder-agent workflow: [docs/agent_workflow.md](docs/agent_workflow.md).
 
 ---
 

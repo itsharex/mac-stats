@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(No changes yet.)
+### Changed
+- **README** — Single Install section (DMG + build + Gatekeeper note). Deduplicated CPU/GPU/RAM and low-CPU stats (one place: At a glance). Commands: binary vs app name note, repo-root hint for `./run dev`. Escalation and Development shortened; link to agent_workflow for Coder workflow.
 
 ## [0.1.25] - 2026-03-02
 
@@ -19,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.24] - 2026-03-02
 
 ### Added
-- **DONE tool (browser-use style)** — Model can end a reply with **DONE: success** or **DONE: no**; we exit the tool loop (no further tool runs), strip the DONE line from the final reply, then run completion verification as usual. Described in agent base tools and planning prompt. See `docs/025_expectation_check_design.md`.
-- **Completion verification** — At the start of each agent run we extract 1–3 success criteria from the user request; at the end we ask Ollama “Did we fully satisfy the request?” and, if not, retry once then append a short disclaimer if still not satisfied. Heuristic: if a screenshot was requested but none was attached, we add a note. See `docs/025_expectation_check_design.md`.
+- **DONE tool (browser-use style)** — Model can end a reply with **DONE: success** or **DONE: no**; we exit the tool loop (no further tool runs), strip the DONE line from the final reply, then run completion verification as usual. Described in agent base tools and planning prompt. See `docs/025_expectation_check_design_DONE.md`.
+- **Completion verification** — At the start of each agent run we extract 1–3 success criteria from the user request; at the end we ask Ollama “Did we fully satisfy the request?” and, if not, retry once then append a short disclaimer if still not satisfied. Heuristic: if a screenshot was requested but none was attached, we add a note. See `docs/025_expectation_check_design_DONE.md`.
 - **Escalation patterns (user-editable)** — Phrases that trigger “user is not satisfied” (stronger completion run, +10 tool steps) are now read from **~/.mac-stats/escalation_patterns.md**. One phrase per line; lines starting with `#` are comments. Edit the file to add your own triggers (e.g. “I don’t like your answer”, “You are stupid”) so the bot actually tries harder instead of just apologising. Default list includes “think harder”, “get it done”, “try again”, “no”, “nope”, etc. No restart needed — the file is read on each message. When we detect escalation, we append the user's phrase to the file if it's not already there (auto-add).
 - **BROWSER_SCROLL** — Agent tool: scroll the current CDP page. Reply with `BROWSER_SCROLL: down|up|bottom|top` or `BROWSER_SCROLL: <pixels>`.
 - **BROWSER_EXTRACT** — Agent tool: return visible text of the current CDP page (body innerText, truncated to 30k chars). Use after BROWSER_NAVIGATE/CLICK to get page content for the LLM.
@@ -33,12 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Browser-use style browser tools** — (1) **BROWSER_SCREENSHOT** only on current page — BROWSER_NAVIGATE first, then BROWSER_SCREENSHOT: current. (2) **BROWSER_SEARCH_PAGE: \<pattern\>** to search page text. (3) Pre-route "screenshot + URL" runs BROWSER_NAVIGATE + BROWSER_SCREENSHOT: current in sequence.
 - **Logging for expectation check flow** — Added info/debug logs so `tail -f ~/.mac-stats/debug.log` shows: criteria extraction (count or “no criteria”), completion verification run (criteria + attachment count), verification result (passed / not satisfied with reason), retry-on-NO, disclaimer with reason, heuristic guard, escalation mode. Use `-vvv` for debug (extraction failure, raw verifier response, duplicate escalation pattern skip).
 - **Task runner prompt** — Explicit hint to use CURSOR_AGENT for implement/refactor/add-feature/code tasks, then TASK_APPEND and TASK_STATUS.
-- **Tool-first routing** — Pre-route "screenshot + URL" to BROWSER_SCREENSHOT (skip planner). Planning prompt: when one base tool fits, recommend that tool instead of AGENT. See `docs/031_orchestrator_tool_first_proposal.md`.
+- **Tool-first routing** — Pre-route "screenshot + URL" to BROWSER_SCREENSHOT (skip planner). Planning prompt: when one base tool fits, recommend that tool instead of AGENT. See `docs/031_orchestrator_tool_first_proposal_DONE.md`.
 
 ## [0.1.23] - 2026-03-02
 
 ### Added
-- **Vision verification (screenshots)** — When a run has image attachment(s) (e.g. BROWSER_SCREENSHOT) and a local vision model is available, completion verification sends the first image (base64) to the vision model and asks "Does this image satisfy the request?"; fallback to text-only verification if no vision model or on vision call failure. See `docs/025_expectation_check_design.md`.
+- **Vision verification (screenshots)** — When a run has image attachment(s) (e.g. BROWSER_SCREENSHOT) and a local vision model is available, completion verification sends the first image (base64) to the vision model and asks "Does this image satisfy the request?"; fallback to text-only verification if no vision model or on vision call failure. See `docs/025_expectation_check_design_DONE.md`.
 
 ### Changed
 - **Browser status messages** — "Navigating…" now shows the URL (e.g. "Navigating to https://…"); "Clicking…" now shows the element index (e.g. "Clicking element 3…").
@@ -111,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TASK_CREATE**: Rejects when topic looks like an existing task filename; sanitizes id (strips quotes/slashes). Deduplication checks `## Topic:` and `## Id:` in existing files.
 - **TASK_APPEND / TASK_CREATE parsing**: Multi-line content is preserved (all lines until the next tool line), so research and long text are stored completely in the task file.
 - **Having_fun flow**: Before replying, the app fetches the latest messages from Discord (after the bot's last response) and uses those as context for better flow. Falls back to the in-memory buffer if the API fetch fails.
-- **Docs and memory**: All MD files and `~/.mac-stats/agents/memory.md` updated to document the new task naming (`task-<date>-<status>.md`, topic/id in-file). See `docs/013_task_agent.md`, `docs/021_task_system_fix_feb2026.md`, `docs/022_feature_review_plan.md`.
+- **Docs and memory**: All MD files and `~/.mac-stats/agents/memory.md` updated to document the new task naming (`task-<date>-<status>.md`, topic/id in-file). See `docs/013_task_agent.md`, `docs/021_task_system_fix_feb2026_DONE.md`, `docs/022_feature_review_plan.md`.
 
 ## [0.1.17] - 2026-02-22
 
@@ -126,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Session compaction**: On-request compaction unchanged (≥ 8 messages); periodic compaction uses a lower threshold (4 messages) so more conversations are flushed to long-term memory.
-- **docs/session_compaction_and_memory_plan.md**: Updated to document implemented behavior (30-min loop, last_activity, time-of-day).
+- **docs/session_compaction_and_memory_plan_DONE.md**: Updated to document implemented behavior (30-min loop, last_activity, time-of-day).
 
 ## [0.1.16] - 2026-02-21
 
