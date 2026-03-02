@@ -909,11 +909,12 @@ async fn having_fun_respond(
     ollama_msgs.push(crate::ollama::ChatMessage {
         role: "system".to_string(),
         content: system_content_with_model,
+        images: None,
     });
 
     const HISTORY_CAP: usize = 20;
     for (role, content) in prior.into_iter().rev().take(HISTORY_CAP).rev() {
-        ollama_msgs.push(crate::ollama::ChatMessage { role, content });
+        ollama_msgs.push(crate::ollama::ChatMessage { role, content, images: None });
     }
 
     // Retrieve latest messages from Discord (after our last response) for better flow.
@@ -937,6 +938,7 @@ async fn having_fun_respond(
     ollama_msgs.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
         content: new_context,
+        images: None,
     });
 
     let channel = serenity::model::id::ChannelId::new(channel_id);
@@ -1040,16 +1042,18 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
     ollama_msgs.push(crate::ollama::ChatMessage {
         role: "system".to_string(),
         content: system_content_with_model,
+        images: None,
     });
 
     const HISTORY_CAP: usize = 10;
     for (role, content) in prior.into_iter().rev().take(HISTORY_CAP).rev() {
-        ollama_msgs.push(crate::ollama::ChatMessage { role, content });
+        ollama_msgs.push(crate::ollama::ChatMessage { role, content, images: None });
     }
 
     ollama_msgs.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
         content: "The chat has been quiet for a while. Share a random thought, observation, or bring up something interesting. Be casual and brief — one or two sentences.".to_string(),
+        images: None,
     });
 
     let channel = serenity::model::id::ChannelId::new(channel_id);
@@ -1514,7 +1518,7 @@ impl EventHandler for Handler {
             Some(
                 prior
                     .into_iter()
-                    .map(|(role, content)| crate::ollama::ChatMessage { role, content })
+                    .map(|(role, content)| crate::ollama::ChatMessage { role, content, images: None })
                     .collect(),
             )
         };

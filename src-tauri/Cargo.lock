@@ -2144,6 +2144,7 @@ name = "mac_stats"
 version = "0.1.22"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "battery",
  "chrono",
  "clap",

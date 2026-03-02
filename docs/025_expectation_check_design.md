@@ -53,7 +53,8 @@ When the bot gives you a shrug or a half-baked answer, you don’t have to stick
 | Always-on end verification (one Ollama call, disclaimer on NO) | **Done** | `verify_completion()` in `ollama.rs`; called before `Ok(OllamaReply)` |
 | Heuristic: screenshot requested but no attachment | **Done** | `ollama.rs` before `verify_completion`: append note if (screenshot in question/plan && `attachment_paths.is_empty()`) |
 | Escalation detection and framing | **Done** | `discord/mod.rs`: `is_escalation_message()`, `default_verbose_for_dm`; `ollama.rs`: `escalation` param, prepend text, `max_tool_iterations += 10` |
-| Retry once on verification NO (A2) | **Done** | When verification says NO we re-run once with “complete the remaining steps”; retry run uses `retry_on_verification_no: false`. Discord, scheduler, task runner pass `true`. |
+| Retry once on verification NO (A2) | **Done** | When verification says NO we re-run once with "complete the remaining steps"; retry run uses `retry_on_verification_no: false`. Discord, scheduler, task runner pass `true`. |
+| Vision verification (screenshot tasks) | **Done** | When we have image attachment(s) and a local vision model is available, we send the first image (base64) and ask "Does this image satisfy the request?" Fallback: text-only. |
 | Optional: “done” tool (browser-use style) | Deferred | Would require planner/execution to emit and honour `done(success=…)`; not required for best-of-breed. |
 
 ---
@@ -64,6 +65,20 @@ We promised **“retries or warns”** in the stand-out line. To satisfy that an
 
 - **A2 (retry once on verification NO)** is now **implemented**: when the verifier says we didn’t complete, we run one more pass with a “complete the remaining steps” prompt and return that result (or append the disclaimer if the retry still doesn’t satisfy). So we truly **retry or warn**, not only warn.
 - **“Done” tool** remains deferred: it would add a clear commit step (model calls `done(success=…)`) but would need planner/execution changes. We already have criteria at start, always-on verification, heuristic guard, escalation, and one retry — which is enough to be best-of-breed. The done tool would be a UX/structural improvement, not a requirement for “did we satisfy the user?”
+
+---
+
+## Vision model (optional, future)
+
+If a **local vision model** is available (e.g. Ollama with a vision-capable model), it could make sense to use it in two places—**only when we have an image to show**.
+
+1. **Verification (screenshot tasks)**  
+   Right now the verifier is text-only: “Original request: … What we did: … Attachments: yes/no. Did we fully satisfy the request?” For screenshot requests we only check “attachment present,” not “attachment content matches the request.” A vision call could take the **screenshot image** plus the user’s request (e.g. “find Ralf Röber and create a screenshot”) and answer: “Does this image show a page that contains that name / meets the request?” That would make verification **content-aware** for screenshots and reduce false YES when we attached the wrong page.
+
+2. **Optional: vision-in-the-loop for browser tasks**  
+   After each `BROWSER_SCREENSHOT`, we could send the image to a vision model: “User asked for X. Does this page show X? If not, what should we do next (e.g. click ‘Team’, go to /contact)?” The answer could drive another NAVIGATE/CLICK/SCREENSHOT step. That would help “navigate all pages to find X” without relying on the text-only model to infer page content from BROWSER_EXTRACT/BROWSER_SEARCH_PAGE alone. Bigger design change (agent loop with image input and possibly a separate vision-only model for this step).
+
+**When it’s worth it:** Screenshot-heavy flows (e.g. “screenshot of page containing Y”) benefit most; pure text/FETCH_URL tasks don’t need vision. **Fallback:** If no vision model is configured or the call fails, keep current behaviour: text-only verification and no vision-in-the-loop. **Cost:** Vision inference is heavier; use only when we actually have an attachment (or explicitly opt in for browser-in-the-loop). **(1) Verification with vision is implemented:** when the reply has image attachments and a local vision model is available, we send the first screenshot as base64 and ask "Does this image satisfy the user's request?" (2) Vision-in-the-loop for browser tasks remains optional/future.
 
 ---
 

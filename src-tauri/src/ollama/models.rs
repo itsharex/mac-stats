@@ -1,8 +1,11 @@
 //! Model classification and role-based resolution.
 //!
 //! At startup, build a `ModelCatalog` from `/api/tags` data. Agents declare a
-//! `model_role` ("general", "code", "small") in their agent.json; the catalog
-//! resolves that to an actual model name from whatever is currently installed.
+//! `model_role` in their agent.json (e.g. "general", "code", "small", "vision",
+//! "thinking", "cheap", "expensive"); the catalog resolves that to an actual
+//! model name. **Only local (non-cloud) models are chosen** for role resolution;
+//! cloud models are used only when the user explicitly configures them (e.g. `model`
+//! in agent.json or default Ollama config).
 
 use crate::ollama::ModelSummary;
 use std::sync::{Mutex, OnceLock};
@@ -36,13 +39,37 @@ pub fn get_first_local_model_name() -> Option<String> {
     local.into_iter().next()
 }
 
+/// True if the given model name is vision-capable (per catalog). Used for verification with screenshot.
+pub fn is_vision_capable(model_name: &str) -> bool {
+    get_global_catalog()
+        .and_then(|c| c.model_by_name(model_name).map(|m| m.capability == ModelCapability::Vision))
+        .unwrap_or(false)
+}
+
+/// First available local vision model name for verification (screenshot tasks). None if no vision model.
+pub fn get_vision_model_for_verification() -> Option<String> {
+    let catalog = get_global_catalog()?;
+    let local: Vec<_> = catalog.eligible_local().collect();
+    let vision: Vec<_> = local
+        .iter()
+        .filter(|m| m.capability == ModelCapability::Vision)
+        .collect();
+    vision.last().map(|m| m.name.clone())
+}
+
 /// Maximum parameter count (in billions) for auto-selected models.
 /// Models above this are never chosen automatically.
 const MAX_AUTO_PARAMS_B: f64 = 15.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelCapability {
+    /// Vision/multimodal (llava, pixtral, etc.)
+    Vision,
+    /// Reasoning/thinking (deepseek-r1, qwq, etc.)
+    Reasoning,
+    /// Code-oriented (coder, code in name/family)
     Code,
+    /// General-purpose (default)
     General,
 }
 
@@ -98,11 +125,15 @@ impl ModelCatalog {
 
     /// Resolve a `model_role` string to the best available model name.
     /// Returns None if no suitable model is found.
+    /// Roles: code, general, small, vision, thinking, reasoning, cheap (= small), expensive.
     pub fn resolve_role(&self, role: &str) -> Option<&ClassifiedModel> {
         match role.to_lowercase().as_str() {
             "code" => self.pick_code(),
             "general" => self.pick_general(),
-            "small" => self.pick_small(),
+            "small" | "cheap" => self.pick_small(),
+            "vision" => self.pick_vision(),
+            "thinking" | "reasoning" => self.pick_reasoning(),
+            "expensive" => self.pick_expensive(),
             other => {
                 warn!("ModelCatalog: unknown model_role '{}', treating as 'general'", other);
                 self.pick_general()
@@ -119,65 +150,118 @@ impl ModelCatalog {
         })
     }
 
+    /// Look up a classified model by name (exact or base:tag). Used for capability checks.
+    pub fn model_by_name(&self, name: &str) -> Option<&ClassifiedModel> {
+        let lower = name.to_lowercase();
+        self.models.iter().find(|m| {
+            let mn = m.name.to_lowercase();
+            mn == lower || mn.starts_with(&format!("{}:", lower))
+        })
+    }
+
+    /// Eligible models (param_billions <= cap). Used only for above-cap fallback; role resolution uses local only.
     fn eligible(&self) -> impl Iterator<Item = &ClassifiedModel> {
         self.models
             .iter()
             .filter(|m| m.param_billions <= MAX_AUTO_PARAMS_B)
     }
 
-    /// Eligible models excluding cloud; use first, then fall back to eligible() to save tokens.
+    /// Eligible local models only (no cloud). Role resolution uses this only; cloud is used only when the user explicitly configures it (e.g. model in agent.json or default).
     fn eligible_local(&self) -> impl Iterator<Item = &ClassifiedModel> {
         self.models
             .iter()
             .filter(|m| m.param_billions <= MAX_AUTO_PARAMS_B && !m.is_cloud)
     }
 
+    fn pick_vision(&self) -> Option<&ClassifiedModel> {
+        let local: Vec<_> = self.eligible_local().collect();
+        let vision: Vec<_> = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::Vision)
+            .collect();
+        if let Some(best) = vision.last() {
+            debug!("ModelCatalog: role=vision -> {} ({:.1}B)", best.name, best.param_billions);
+            return Some(*best);
+        }
+        debug!("ModelCatalog: role=vision -> no local vision models, falling back to general");
+        self.pick_general()
+    }
+
+    fn pick_reasoning(&self) -> Option<&ClassifiedModel> {
+        let local: Vec<_> = self.eligible_local().collect();
+        let reasoning_medium: Vec<_> = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::Reasoning && m.size_tier == ModelSizeTier::Medium)
+            .collect();
+        if let Some(best) = reasoning_medium.last() {
+            debug!("ModelCatalog: role=thinking -> {} (reasoning/medium, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
+        }
+        let reasoning: Vec<_> = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::Reasoning)
+            .collect();
+        if let Some(best) = reasoning.last() {
+            debug!("ModelCatalog: role=thinking -> {} (reasoning/any, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
+        }
+        debug!("ModelCatalog: role=thinking -> no local reasoning models, falling back to general");
+        self.pick_general()
+    }
+
+    fn pick_expensive(&self) -> Option<&ClassifiedModel> {
+        let local: Vec<_> = self.eligible_local().collect();
+        if let Some(best) = local.last() {
+            debug!("ModelCatalog: role=expensive -> {} ({:.1}B, largest local)", best.name, best.param_billions);
+            return Some(best);
+        }
+        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).last() {
+            warn!("ModelCatalog: role=expensive -> {} (above cap, local only)", best.name);
+            return Some(best);
+        }
+        None
+    }
+
     fn pick_code(&self) -> Option<&ClassifiedModel> {
         let local: Vec<_> = self.eligible_local().collect();
-        let all_eligible: Vec<_> = self.eligible().collect();
-        for pool in [&local, &all_eligible] {
-            let code_medium: Vec<_> = pool
-                .iter()
-                .filter(|m| m.capability == ModelCapability::Code && m.size_tier == ModelSizeTier::Medium)
-                .collect();
-            if let Some(best) = code_medium.last() {
-                debug!("ModelCatalog: role=code -> {} (code/medium, {:.1}B)", best.name, best.param_billions);
-                return Some(*best);
-            }
-            if let Some(best) = pool.iter().filter(|m| m.capability == ModelCapability::Code).last() {
-                debug!("ModelCatalog: role=code -> {} (code/any, {:.1}B)", best.name, best.param_billions);
-                return Some(*best);
-            }
+        let code_medium: Vec<_> = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::Code && m.size_tier == ModelSizeTier::Medium)
+            .collect();
+        if let Some(best) = code_medium.last() {
+            debug!("ModelCatalog: role=code -> {} (code/medium, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
         }
-        debug!("ModelCatalog: role=code -> no code models, falling back to general");
+        if let Some(best) = local.iter().filter(|m| m.capability == ModelCapability::Code).last() {
+            debug!("ModelCatalog: role=code -> {} (code/any, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
+        }
+        debug!("ModelCatalog: role=code -> no local code models, falling back to general");
         self.pick_general()
     }
 
     fn pick_general(&self) -> Option<&ClassifiedModel> {
         let local: Vec<_> = self.eligible_local().collect();
-        let all_eligible: Vec<_> = self.eligible().collect();
-        for pool in [&local, &all_eligible] {
-            let general_medium: Vec<_> = pool
-                .iter()
-                .filter(|m| m.capability == ModelCapability::General && m.size_tier == ModelSizeTier::Medium)
-                .collect();
-            if let Some(best) = general_medium.last() {
-                debug!("ModelCatalog: role=general -> {} (general/medium, {:.1}B)", best.name, best.param_billions);
-                return Some(*best);
-            }
-            if let Some(best) = pool.iter().filter(|m| m.capability == ModelCapability::General).last() {
-                debug!("ModelCatalog: role=general -> {} (general/any, {:.1}B)", best.name, best.param_billions);
-                return Some(*best);
-            }
-            if let Some(best) = pool.last() {
-                debug!("ModelCatalog: role=general -> {} (any/fallback, {:.1}B)", best.name, best.param_billions);
-                return Some(*best);
-            }
+        let general_medium: Vec<_> = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::General && m.size_tier == ModelSizeTier::Medium)
+            .collect();
+        if let Some(best) = general_medium.last() {
+            debug!("ModelCatalog: role=general -> {} (general/medium, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
         }
-        if let Some(best) = self.models.first() {
+        if let Some(best) = local.iter().filter(|m| m.capability == ModelCapability::General).last() {
+            debug!("ModelCatalog: role=general -> {} (general/any, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
+        }
+        if let Some(best) = local.last() {
+            debug!("ModelCatalog: role=general -> {} (any local fallback, {:.1}B)", best.name, best.param_billions);
+            return Some(*best);
+        }
+        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).min_by(|a, b| a.param_billions.partial_cmp(&b.param_billions).unwrap_or(std::cmp::Ordering::Equal)) {
             warn!(
-                "ModelCatalog: all models above {:.0}B cap, using smallest: {} ({:.1}B)",
-                MAX_AUTO_PARAMS_B, best.name, best.param_billions
+                "ModelCatalog: no local within cap, using smallest local: {} ({:.1}B)",
+                best.name, best.param_billions
             );
             return Some(best);
         }
@@ -185,19 +269,13 @@ impl ModelCatalog {
     }
 
     fn pick_small(&self) -> Option<&ClassifiedModel> {
-        // Prefer local smallest first (saves tokens vs cloud)
         let local: Vec<_> = self.eligible_local().collect();
         if let Some(best) = local.first() {
-            debug!("ModelCatalog: role=small -> {} ({:.1}B, local)", best.name, best.param_billions);
+            debug!("ModelCatalog: role=small -> {} ({:.1}B)", best.name, best.param_billions);
             return Some(best);
         }
-        let eligible: Vec<_> = self.eligible().collect();
-        if let Some(best) = eligible.first() {
-            debug!("ModelCatalog: role=small -> {} ({:.1}B, cloud fallback)", best.name, best.param_billions);
-            return Some(best);
-        }
-        if let Some(best) = self.models.first() {
-            warn!("ModelCatalog: role=small -> {} ({:.1}B, above cap)", best.name, best.param_billions);
+        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).min_by(|a, b| a.param_billions.partial_cmp(&b.param_billions).unwrap_or(std::cmp::Ordering::Equal)) {
+            warn!("ModelCatalog: role=small -> {} ({:.1}B, above cap, local only)", best.name, best.param_billions);
             return Some(best);
         }
         None
@@ -256,9 +334,44 @@ fn parse_param_size(summary: &ModelSummary) -> Option<f64> {
     None
 }
 
-/// Detect whether a model is code-oriented based on name and family.
+/// Detect capability from name and family. Order: Vision → Reasoning → Code → General.
 fn detect_capability(summary: &ModelSummary) -> ModelCapability {
     let name_lower = summary.name.to_lowercase();
+    let check_family = |s: &str| {
+        let sl = s.to_lowercase();
+        name_lower.contains(&sl)
+            || summary
+                .details
+                .as_ref()
+                .and_then(|d| d.family.as_ref())
+                .map(|f| f.to_lowercase().contains(&sl))
+                .unwrap_or(false)
+            || summary
+                .details
+                .as_ref()
+                .and_then(|d| d.families.as_ref())
+                .map(|fs| fs.iter().any(|f| f.to_lowercase().contains(&sl)))
+                .unwrap_or(false)
+    };
+    // Vision: llava, bakllava, vision, pixtral, minicpm-v
+    if check_family("llava")
+        || check_family("bakllava")
+        || check_family("vision")
+        || check_family("pixtral")
+        || check_family("minicpm-v")
+    {
+        return ModelCapability::Vision;
+    }
+    // Reasoning/thinking: deepseek-r1, thinking, reason, qwq, openreason
+    if check_family("deepseek-r1")
+        || check_family("thinking")
+        || check_family("reason")
+        || check_family("qwq")
+        || check_family("openreason")
+    {
+        return ModelCapability::Reasoning;
+    }
+    // Code
     if name_lower.contains("coder") || name_lower.contains("code") {
         return ModelCapability::Code;
     }
@@ -381,5 +494,55 @@ mod tests {
         let resolved = catalog.resolve_role("code").unwrap();
         // Should fall back to general since no code models
         assert_eq!(resolved.capability, ModelCapability::General);
+    }
+
+    #[test]
+    fn resolve_vision_picks_vision_model() {
+        let models = vec![
+            make_model("llama3.2:latest", "3.2B", "llama"),
+            make_model("llava:latest", "7.5B", "llava"),
+            make_model("qwen3:latest", "8.2B", "qwen3"),
+        ];
+        let catalog = ModelCatalog::from_model_list(&models);
+        let resolved = catalog.resolve_role("vision").unwrap();
+        assert_eq!(resolved.capability, ModelCapability::Vision);
+        assert_eq!(resolved.name, "llava:latest");
+    }
+
+    #[test]
+    fn resolve_thinking_picks_reasoning_model() {
+        let models = vec![
+            make_model("llama3.2:latest", "3.2B", "llama"),
+            make_model("deepseek-r1:latest", "8.2B", "deepseek-r1"),
+            make_model("qwen3:latest", "8.2B", "qwen3"),
+        ];
+        let catalog = ModelCatalog::from_model_list(&models);
+        let resolved = catalog.resolve_role("thinking").unwrap();
+        assert_eq!(resolved.capability, ModelCapability::Reasoning);
+        assert_eq!(resolved.name, "deepseek-r1:latest");
+    }
+
+    #[test]
+    fn resolve_cheap_equals_small() {
+        let models = vec![
+            make_model("qwen2.5:1.5b", "1.5B", "qwen2"),
+            make_model("qwen3:latest", "8.2B", "qwen3"),
+        ];
+        let catalog = ModelCatalog::from_model_list(&models);
+        let small = catalog.resolve_role("small").unwrap();
+        let cheap = catalog.resolve_role("cheap").unwrap();
+        assert_eq!(small.name, cheap.name);
+    }
+
+    #[test]
+    fn resolve_expensive_picks_largest_eligible() {
+        let models = vec![
+            make_model("llama3.2:latest", "3.2B", "llama"),
+            make_model("qwen3:latest", "8.2B", "qwen3"),
+            make_model("gemma3:12b", "12.2B", "gemma3"),
+        ];
+        let catalog = ModelCatalog::from_model_list(&models);
+        let resolved = catalog.resolve_role("expensive").unwrap();
+        assert_eq!(resolved.name, "gemma3:12b");
     }
 }

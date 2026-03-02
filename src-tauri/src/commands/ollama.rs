@@ -7,9 +7,11 @@ use crate::ollama::{
     ChatMessage, EmbedInput, EmbedResponse, ListResponse, OllamaClient, OllamaConfig,
     PsResponse, VersionResponse,
 };
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::Command;
@@ -820,10 +822,12 @@ async fn reduce_fetched_content_to_fit(
                 "Summarize the following web page content in under {} tokens, keeping the most relevant information for answering questions. Output only the summary, no preamble.",
                 summary_tokens
             ),
+            images: None,
         },
         crate::ollama::ChatMessage {
             role: "user".to_string(),
             content: body_truncated_for_request,
+            images: None,
         },
     ];
 
@@ -870,10 +874,12 @@ async fn run_skill_ollama_session(
         crate::ollama::ChatMessage {
             role: "system".to_string(),
             content: skill_content.to_string(),
+            images: None,
         },
         crate::ollama::ChatMessage {
             role: "user".to_string(),
             content: user_message.to_string(),
+            images: None,
         },
     ];
     info!(
@@ -906,10 +912,12 @@ pub(crate) async fn run_agent_ollama_session(
         crate::ollama::ChatMessage {
             role: "system".to_string(),
             content: agent.combined_prompt.clone(),
+            images: None,
         },
         crate::ollama::ChatMessage {
             role: "user".to_string(),
             content: user_message.to_string(),
+            images: None,
         },
     ];
     let max_iters = agent.max_tool_iterations;
@@ -931,10 +939,12 @@ pub(crate) async fn run_agent_ollama_session(
             messages.push(crate::ollama::ChatMessage {
                 role: "assistant".to_string(),
                 content: out,
+                images: None,
             });
             messages.push(crate::ollama::ChatMessage {
                 role: "user".to_string(),
                 content: tool_result,
+                images: None,
             });
             continue;
         }
@@ -1090,10 +1100,12 @@ Output ONLY these two sections, nothing else."#;
         crate::ollama::ChatMessage {
             role: "system".to_string(),
             content: system_prompt.to_string(),
+            images: None,
         },
         crate::ollama::ChatMessage {
             role: "user".to_string(),
             content: user_msg,
+            images: None,
         },
     ];
 
@@ -1158,7 +1170,7 @@ pub async fn run_periodic_session_compaction() {
         }
         let messages: Vec<crate::ollama::ChatMessage> = crate::session_memory::get_messages(&entry.source, entry.session_id)
             .into_iter()
-            .map(|(role, content)| crate::ollama::ChatMessage { role, content })
+            .map(|(role, content)| crate::ollama::ChatMessage { role, content, images: None })
             .collect();
         if messages.len() < PERIODIC_COMPACTION_MIN_MESSAGES {
             continue;
@@ -1409,8 +1421,8 @@ async fn extract_success_criteria(
         q
     );
     let messages = vec![
-        crate::ollama::ChatMessage { role: "system".to_string(), content: system.to_string() },
-        crate::ollama::ChatMessage { role: "user".to_string(), content: user },
+        crate::ollama::ChatMessage { role: "system".to_string(), content: system.to_string(), images: None },
+        crate::ollama::ChatMessage { role: "user".to_string(), content: user, images: None },
     ];
     let response = match send_ollama_chat_messages(messages, model_override, options_override).await {
         Ok(r) => r,
@@ -1435,40 +1447,136 @@ async fn extract_success_criteria(
     }
 }
 
+/// Read the first image file (png, jpg, jpeg, webp) from paths and return its base64 encoding.
+fn first_image_as_base64(paths: &[PathBuf]) -> Option<String> {
+    let ext_ok = |p: &Path| {
+        p.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| matches!(e.to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp"))
+            .unwrap_or(false)
+    };
+    for path in paths {
+        if ext_ok(path) {
+            if let Ok(bytes) = std::fs::read(path) {
+                return Some(base64::engine::general_purpose::STANDARD.encode(&bytes));
+            }
+        }
+    }
+    None
+}
+
 /// One short Ollama call to check if we fully satisfied the user's request.
 /// Returns (satisfied, optional reason when not satisfied).
-/// When success_criteria is provided, the verifier is asked to check against those criteria.
+/// When we have image attachment(s) and a local vision model, sends the first image and asks "Does this image satisfy the request?"; otherwise text-only verification.
 async fn verify_completion(
     question: &str,
     response_content: &str,
-    attachment_count: usize,
+    attachment_paths: &[PathBuf],
     success_criteria: Option<&[String]>,
     model_override: Option<String>,
     options_override: Option<crate::ollama::ChatOptions>,
 ) -> Result<(bool, Option<String>), String> {
+    use crate::ollama::models::{get_vision_model_for_verification, is_vision_capable};
+
     let response_summary: String = response_content.chars().take(1500).collect();
-    let has_attachments = attachment_count > 0;
+    let has_attachments = !attachment_paths.is_empty();
     let system = "You are a completion checker. Answer only with YES or NO, and if NO add one short sentence after a newline explaining what's missing.";
     let criteria_block = success_criteria
         .filter(|c| !c.is_empty())
         .map(|c| format!("Success criteria (from user request):\n{}\n\n", c.join("\n")))
         .unwrap_or_default();
-    let user = format!(
+    let user_text = format!(
         "Original request: {}\n\n{}What we did (summary): {}\n\nAttachments sent: {}.\n\nDid we fully satisfy the request (e.g. screenshot taken and attached if asked)? Reply YES or NO. If NO, on the next line add one sentence: what's missing.",
         question.chars().take(500).collect::<String>(),
         criteria_block,
         response_summary,
         if has_attachments { "yes" } else { "no" }
     );
-    let messages = vec![
-        crate::ollama::ChatMessage { role: "system".to_string(), content: system.to_string() },
-        crate::ollama::ChatMessage { role: "user".to_string(), content: user },
-    ];
-    let response = match send_ollama_chat_messages(messages, model_override, options_override).await {
+
+    // Vision path: when we have an image and a vision model, send image + prompt for better verification.
+    let image_b64 = first_image_as_base64(attachment_paths);
+    let vision_model = model_override
+        .as_ref()
+        .filter(|m| is_vision_capable(m))
+        .cloned()
+        .or_else(get_vision_model_for_verification);
+    let tried_vision = image_b64.is_some() && vision_model.is_some();
+
+    let (messages, verification_model) = if let (Some(b64), Some(vm)) = (image_b64, vision_model) {
+        tracing::debug!("Agent router: verification using vision model {}", vm);
+        (
+            vec![
+                crate::ollama::ChatMessage {
+                    role: "system".to_string(),
+                    content: system.to_string(),
+                    images: None,
+                },
+                crate::ollama::ChatMessage {
+                    role: "user".to_string(),
+                    content: user_text.clone(),
+                    images: Some(vec![b64]),
+                },
+            ],
+            Some(vm),
+        )
+    } else {
+        (
+            vec![
+                crate::ollama::ChatMessage {
+                    role: "system".to_string(),
+                    content: system.to_string(),
+                    images: None,
+                },
+                crate::ollama::ChatMessage {
+                    role: "user".to_string(),
+                    content: user_text,
+                    images: None,
+                },
+            ],
+            model_override.clone(),
+        )
+    };
+
+    let response = match send_ollama_chat_messages(
+        messages,
+        verification_model.clone(),
+        options_override.clone(),
+    )
+    .await
+    {
         Ok(r) => r.message.content,
         Err(e) => {
-            tracing::warn!("Completion verification call failed: {}", e);
-            return Ok((true, None)); // on error assume satisfied to avoid blocking
+            // If we tried vision and it failed, fall back to text-only once.
+            if tried_vision {
+                tracing::debug!("Agent router: vision verification failed ({}), falling back to text-only", e);
+                let messages_text = vec![
+                    crate::ollama::ChatMessage {
+                        role: "system".to_string(),
+                        content: system.to_string(),
+                        images: None,
+                    },
+                    crate::ollama::ChatMessage {
+                        role: "user".to_string(),
+                        content: format!(
+                            "Original request: {}\n\n{}What we did (summary): {}\n\nAttachments sent: yes.\n\nDid we fully satisfy the request? Reply YES or NO. If NO, on the next line add one sentence: what's missing.",
+                            question.chars().take(500).collect::<String>(),
+                            criteria_block,
+                            response_summary
+                        ),
+                        images: None,
+                    },
+                ];
+                match send_ollama_chat_messages(messages_text, model_override, options_override.clone()).await {
+                    Ok(r) => r.message.content,
+                    Err(e2) => {
+                        tracing::warn!("Completion verification (text fallback) failed: {}", e2);
+                        return Ok((true, None));
+                    }
+                }
+            } else {
+                tracing::warn!("Completion verification call failed: {}", e);
+                return Ok((true, None));
+            }
         }
     };
     let response_upper = response.trim().to_uppercase();
@@ -1670,6 +1778,7 @@ pub fn answer_with_ollama_and_fetch(
                 vec![crate::ollama::ChatMessage {
                     role: "system".to_string(),
                     content: format!("Previous session context (compacted from {} messages):\n\n{}", raw_history.len(), context),
+                    images: None,
                 }]
             }
             Err(e) => {
@@ -1828,6 +1937,7 @@ pub fn answer_with_ollama_and_fetch(
             crate::ollama::ChatMessage {
                 role: "system".to_string(),
                 content: planning_system_content,
+                images: None,
             },
         ];
         for msg in &conversation_history {
@@ -1840,6 +1950,7 @@ pub fn answer_with_ollama_and_fetch(
                 "Current user question: {}{}\n\nReply with RECOMMEND: your plan.",
                 question_for_plan_and_exec, model_hint
             ),
+            images: None,
         });
         let plan_response = send_ollama_chat_messages(planning_messages, model_override.clone(), options_override.clone()).await?;
         let mut rec = plan_response.message.content.trim().to_string();
@@ -1911,12 +2022,12 @@ pub fn answer_with_ollama_and_fetch(
             ),
         };
         let mut msgs: Vec<crate::ollama::ChatMessage> = vec![
-            crate::ollama::ChatMessage { role: "system".to_string(), content: execution_system_content },
+            crate::ollama::ChatMessage { role: "system".to_string(), content: execution_system_content, images: None },
         ];
         for msg in &conversation_history {
             msgs.push(msg.clone());
         }
-        msgs.push(crate::ollama::ChatMessage { role: "user".to_string(), content: question_for_plan_and_exec.clone() });
+        msgs.push(crate::ollama::ChatMessage { role: "user".to_string(), content: question_for_plan_and_exec.clone(), images: None });
         // Use full recommendation when it contains multiple tools (e.g. BROWSER_NAVIGATE + BROWSER_SCREENSHOT)
         let synthetic = if recommendation.contains('\n') {
             recommendation.clone()
@@ -1937,12 +2048,12 @@ pub fn answer_with_ollama_and_fetch(
             ),
         };
         let mut msgs: Vec<crate::ollama::ChatMessage> = vec![
-            crate::ollama::ChatMessage { role: "system".to_string(), content: execution_system_content },
+            crate::ollama::ChatMessage { role: "system".to_string(), content: execution_system_content, images: None },
         ];
         for msg in &conversation_history {
             msgs.push(msg.clone());
         }
-        msgs.push(crate::ollama::ChatMessage { role: "user".to_string(), content: question_for_plan_and_exec.clone() });
+        msgs.push(crate::ollama::ChatMessage { role: "user".to_string(), content: question_for_plan_and_exec.clone(), images: None });
         let response = send_ollama_chat_messages(msgs.clone(), model_override.clone(), options_override.clone()).await?;
         let content = response.message.content.clone();
         let n = content.chars().count();
@@ -2097,8 +2208,8 @@ pub fn answer_with_ollama_and_fetch(
                 }
             }
             "BROWSER_NAVIGATE" => {
-                send_status("Navigating…");
                 let url_arg = arg.trim().to_string();
+                send_status(&format!("Navigating to {}…", crate::logging::ellipse(&url_arg, 50)));
                 if url_arg.is_empty() {
                     "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
                 } else {
@@ -2136,8 +2247,8 @@ pub fn answer_with_ollama_and_fetch(
                 }
             }
             "BROWSER_CLICK" => {
-                send_status("Clicking…");
                 let index_arg = arg.trim().split_whitespace().next().unwrap_or("").trim();
+                send_status(&format!("Clicking element {}…", if index_arg.is_empty() { "?" } else { index_arg }));
                 let index = index_arg.parse::<u32>().ok();
                 match index {
                     Some(idx) => {
@@ -2554,7 +2665,7 @@ pub fn answer_with_ollama_and_fetch(
                                     current_cmd, e, allowed
                                 );
                                 let fix_messages = vec![
-                                    crate::ollama::ChatMessage { role: "user".to_string(), content: fix_prompt },
+                                    crate::ollama::ChatMessage { role: "user".to_string(), content: fix_prompt, images: None },
                                 ];
                                 match send_ollama_chat_messages(fix_messages, model_override.clone(), options_override.clone()).await {
                                     Ok(resp) => {
@@ -3178,6 +3289,7 @@ pub fn answer_with_ollama_and_fetch(
         messages.push(crate::ollama::ChatMessage {
             role: "assistant".to_string(),
             content: response_content.clone(),
+            images: None,
         });
         let tool_result_role = if user_message.starts_with("Here is the command output") {
             "system"
@@ -3187,6 +3299,7 @@ pub fn answer_with_ollama_and_fetch(
         messages.push(crate::ollama::ChatMessage {
             role: tool_result_role.to_string(),
             content: user_message,
+            images: None,
         });
 
         let follow_up = send_ollama_chat_messages(messages.clone(), model_override.clone(), options_override.clone()).await?;
@@ -3275,7 +3388,7 @@ pub fn answer_with_ollama_and_fetch(
     match verify_completion(
         question,
         &response_content,
-        attachment_paths.len(),
+        &attachment_paths,
         success_criteria.as_deref(),
         model_override.clone(),
         options_override.clone(),
@@ -3293,10 +3406,12 @@ pub fn answer_with_ollama_and_fetch(
                 updated_history.push(crate::ollama::ChatMessage {
                     role: "user".to_string(),
                     content: question.to_string(),
+                    images: None,
                 });
                 updated_history.push(crate::ollama::ChatMessage {
                     role: "assistant".to_string(),
                     content: response_content.clone(),
+                    images: None,
                 });
                 return answer_with_ollama_and_fetch(
                     &retry_question,
@@ -3545,6 +3660,13 @@ fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String,
     }
     if line.eq_ignore_ascii_case("LIST_SCHEDULES") {
         return Some((("LIST_SCHEDULES".to_string(), String::new()), line_index + 1));
+    }
+    // Lenient: model sometimes replies with bare tool name (no colon), e.g. "BROWSER_EXTRACT" or "BROWSER_SCREENSHOT"
+    if line.eq_ignore_ascii_case("BROWSER_EXTRACT") {
+        return Some((("BROWSER_EXTRACT".to_string(), String::new()), line_index + 1));
+    }
+    if line.eq_ignore_ascii_case("BROWSER_SCREENSHOT") {
+        return Some((("BROWSER_SCREENSHOT".to_string(), "current".to_string()), line_index + 1));
     }
     let mut search = line;
     loop {
@@ -4140,6 +4262,7 @@ pub async fn ollama_chat_with_execution(
         crate::ollama::ChatMessage {
             role: "system".to_string(),
             content: system_prompt.clone(),
+            images: None,
         },
     ];
     
@@ -4159,6 +4282,7 @@ pub async fn ollama_chat_with_execution(
     messages.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
         content: context_message.clone(),
+        images: None,
     });
     
     let chat_request = ChatRequest {
@@ -4191,6 +4315,7 @@ pub async fn ollama_chat_with_execution(
         follow_up_messages.push(crate::ollama::ChatMessage {
             role: "assistant".to_string(),
             content: response_content.clone(),
+            images: None,
         });
         follow_up_messages.push(crate::ollama::ChatMessage {
             role: "user".to_string(),
@@ -4198,6 +4323,7 @@ pub async fn ollama_chat_with_execution(
                 "Here is the page content:\n\n{}\n\nPlease answer the user's question based on this content.",
                 page_content
             ),
+            images: None,
         });
 
         let follow_up_request = ChatRequest {
@@ -4380,6 +4506,7 @@ pub async fn ollama_chat_continue_with_result(
         crate::ollama::ChatMessage {
             role: "system".to_string(),
             content: system_prompt.clone(),
+            images: None,
         },
     ];
     
@@ -4399,14 +4526,17 @@ pub async fn ollama_chat_continue_with_result(
     messages.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
         content: context_message.clone(),
+        images: None,
     });
     messages.push(crate::ollama::ChatMessage {
         role: "assistant".to_string(),
         content: intermediate_response.clone(),
+        images: None,
     });
     messages.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
         content: follow_up_message,
+        images: None,
     });
     
     let chat_request = ChatRequest {

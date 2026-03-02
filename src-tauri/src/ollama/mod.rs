@@ -61,6 +61,9 @@ impl OllamaConfig {
 pub struct ChatMessage {
     pub role: String, // "user", "assistant", "system"
     pub content: String,
+    /// Optional base64-encoded images (for vision models). Ollama API: "images": ["<base64>"].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>,
 }
 
 /// Per-request chat options (temperature, num_ctx). Serializes to Ollama API `options` object.

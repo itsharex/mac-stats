@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Task runner prompt** — Explicit hint to use CURSOR_AGENT for implement/refactor/add-feature/code tasks, then TASK_APPEND and TASK_STATUS.
 - **Tool-first routing** — Pre-route "screenshot + URL" to BROWSER_SCREENSHOT (skip planner). Planning prompt: when one base tool fits, recommend that tool instead of AGENT. See `docs/031_orchestrator_tool_first_proposal.md`.
 
+## [0.1.23] - 2026-03-02
+
+### Added
+- **Vision verification (screenshots)** — When a run has image attachment(s) (e.g. BROWSER_SCREENSHOT) and a local vision model is available, completion verification sends the first image (base64) to the vision model and asks "Does this image satisfy the request?"; fallback to text-only verification if no vision model or on vision call failure. See `docs/025_expectation_check_design.md`.
+
+### Changed
+- **Browser status messages** — "Navigating…" now shows the URL (e.g. "Navigating to https://…"); "Clicking…" now shows the element index (e.g. "Clicking element 3…").
+
 ## [0.1.22] - 2026-02-28
 
 ### Added
