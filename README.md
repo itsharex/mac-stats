@@ -55,7 +55,7 @@ All settings live under `~/.mac-stats/`:
 ```
 ~/.mac-stats/
 ├── config.json            # Window decorations, scheduler interval, ollamaChatTimeoutSecs
-├── .config.env            # Secrets (Discord token, API keys) — never commit
+├── .config.env            # Secrets (Discord token, API keys) — never commit ;-)
 ├── discord_channels.json  # Per-channel modes (mention_only, all_messages, having_fun)
 ├── escalation_patterns.md # Phrases that trigger “try harder” (e.g. “think harder”, “you are stupid”); user-editable, auto-adds when you complain
 ├── schedules.json         # Cron and one-shot tasks
@@ -95,7 +95,7 @@ All settings live under `~/.mac-stats/`:
 - **Tasks** — `~/.mac-stats/task/` with **TASK_LIST**, **TASK_CREATE**, **TASK_STATUS**, assignees, scheduler loop.
 - **Scheduler** — Cron or one-shot (`~/.mac-stats/schedules.json`); tasks through Ollama; optional Discord reply channel.
 - **MCP** — Tools from any MCP server (HTTP/SSE or stdio).
-- **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Editable prompts in `~/.mac-stats/prompts/` and `soul.md`.
+- **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Local models by role; cloud only when you configure it ([design](docs/030_agent_model_assignment_plan.md)). Editable prompts in `~/.mac-stats/prompts/` and `soul.md`.
 - **cursor-agent** — When the [Cursor Agent CLI](https://cursor.com) is on PATH, agents can delegate via **CURSOR_AGENT:** or **RUN_CMD: cursor-agent**; see [docs/012_cursor_agent_tasks.md](docs/012_cursor_agent_tasks.md).
 - **PYTHON_SCRIPT** — Ollama can run Python under `~/.mac-stats/scripts/` (disable with `ALLOW_PYTHON_SCRIPT=0`).
 
