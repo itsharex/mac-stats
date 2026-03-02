@@ -40,6 +40,7 @@ pub struct MetricPoint {
 
 impl MetricPoint {
     /// Create a new metric point from current metrics
+    #[allow(clippy::too_many_arguments)]
     pub fn from_metrics(
         cpu: f32,
         gpu: f32,
@@ -347,7 +348,7 @@ impl HistoryBuffer {
             return points.to_vec();
         }
 
-        let step = (points.len() + target_count - 1) / target_count;
+        let step = points.len().div_ceil(target_count);
         points.iter().step_by(step).cloned().collect()
     }
 }

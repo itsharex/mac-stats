@@ -14,7 +14,7 @@ fn main() {
             eprintln!("Failed to read {}: {}", path, e);
             if let Ok(t) = std::env::var("DISCORD_BOT_TOKEN") {
                 if !t.trim().is_empty() {
-                    run_store_and_read(&t.trim());
+                    run_store_and_read(t.trim());
                     return;
                 }
             }
@@ -34,7 +34,7 @@ fn main() {
             eprintln!("No DISCORD-USER1-TOKEN or DISCORD-USER2-TOKEN in {}", path);
             if let Ok(t) = std::env::var("DISCORD_BOT_TOKEN") {
                 if !t.trim().is_empty() {
-                    run_store_and_read(&t.trim());
+                    run_store_and_read(t.trim());
                     return;
                 }
             }

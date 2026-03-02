@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Headless when from_remote** — For Discord, scheduler, and `discord run-ollama`, browser runs use headless unless the question explicitly asks to see the browser (`wants_visible_browser`). When `from_remote` is true, `prefer_headless = !wants_visible_browser(question)` so retries (e.g. after verification no) stay headless and no visible Chrome windows appear.
+
 ### Added
 - **Ollama timeout/503 retry and user message (task-001)** — `send_ollama_chat_messages` retries once after 2s on timeout or HTTP 503; after retry still failing returns "Ollama is busy or unavailable; try again in a moment." instead of raw error. Periodic session compaction retries once after 3s on failure before logging WARN.
+- **Clippy / code quality** — thread_local const init (state.rs), div_ceil/first/range contains (metrics), unnecessary casts and redundant closures (metrics), needless borrows (config, ioreport, test_discord_keychain), collapsible else-if (ioreport, lib.rs). Allow too_many_arguments on history from_metrics.
 - **ModelCatalog** — Removed unused `eligible()` in ollama/models.rs (clean build).
 - **FETCH_URL URL validation (task-002)** — `extract_first_url()` in browser.rs takes the first http(s) URL from arg (trim, up to first whitespace); `validate_fetch_url()` enforces http/https and returns a clear error for IDN ("international domain names (IDN) are not supported..."). Used in `fetch_page_content`, `parse_fetch_url_from_response`, and scheduler FETCH_URL so malformed or multi-token URLs are rejected with one clear message.
 - **Session compaction log (task-005)** — On compaction failure the log now says "keeping full history (N messages) for this request" instead of "using raw history" so the number is clearly message count, not HTTP 401.

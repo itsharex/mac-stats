@@ -117,6 +117,8 @@ use state::*;
 
 // Re-export for Tauri commands
 pub use metrics::{SystemMetrics, CpuDetails, get_cpu_details, get_metrics, get_app_version, get_window_decorations, set_window_decorations, get_process_details, force_quit_process, get_changelog};
+// Re-export for CLI (e.g. discord run-ollama)
+pub use commands::ollama::{answer_with_ollama_and_fetch, ensure_ollama_agent_ready_at_startup, OllamaReply};
 
 
 // UI functions are now in ui module
@@ -909,10 +911,10 @@ fn run_internal(open_cpu_window: bool) {
                             }
                         }
                         
-                        // CRITICAL: Only read temperature every 5 seconds to reduce CPU usage
+                        // CRITICAL: Only read temperature every 20 seconds to reduce CPU usage
                         // all_data() iteration is VERY expensive - limit it as much as possible
-                        // STEP 3: Reduce temperature reading frequency from 5s to 15s to save CPU
-                        // Temperature doesn't change rapidly, so 15s is still responsive
+                        // STEP 3: Temperature reading every 20s to save CPU
+                        // Temperature doesn't change rapidly, so 20s is still responsive
                         let should_read_temp_now = if let Ok(mut last) = LAST_TEMP_UPDATE.lock() {
                             let should = last.as_ref()
                                 .map(|t| t.elapsed().as_secs() >= 20)
@@ -1028,8 +1030,8 @@ fn run_internal(open_cpu_window: bool) {
                         
                         // STEP 3: Read CPU frequency from IOReport (real-time, dynamic)
                         // This is the same approach exelban/stats uses - efficient native API
-                        // CPU EFFICIENCY: Only read frequency every 20 seconds (IOReport sampling still has overhead)
-                        // Increased from 10s to 20s to save CPU - frequency doesn't change that rapidly
+                        // CPU EFFICIENCY: Only read frequency every 30 seconds (IOReport sampling still has overhead)
+                        // Threshold 30s to save CPU - frequency doesn't change that rapidly
                         let should_read_freq = if let Ok(mut last) = LAST_FREQ_READ.lock() {
                             debug3!("========> LAST_FREQ_READ: {:?}", last);
                             let should = last.as_ref()
@@ -1188,10 +1190,8 @@ fn run_internal(open_cpu_window: bool) {
                                             debug3!("E-core frequency cache updated: {:.2} GHz", e_core_freq);
                                         }
                                     }
-                                } else {
-                                    if freq_logging {
-                                        debug3!("E-core frequency is 0.0 - NOT updating cache");
-                                    }
+                                } else if freq_logging {
+                                    debug3!("E-core frequency is 0.0 - NOT updating cache");
                                 }
                                 
                                 // OPTIMIZATION Phase 3: Update OnceLock to indicate frequency reading works

@@ -32,8 +32,8 @@ pub(crate) static LAST_SYSTEM_REFRESH: Mutex<Option<Instant>> = Mutex::new(None)
 // UI state
 // Note: Thread-local is required for UI elements that must be accessed from main thread
 thread_local! {
-    pub(crate) static STATUS_ITEM: RefCell<Option<Retained<NSStatusItem>>> = RefCell::new(None);
-    pub(crate) static CLICK_HANDLER: RefCell<Option<Retained<AnyObject>>> = RefCell::new(None);
+    pub(crate) static STATUS_ITEM: RefCell<Option<Retained<NSStatusItem>>> = const { RefCell::new(None) };
+    pub(crate) static CLICK_HANDLER: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
 }
 pub(crate) static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 pub(crate) static MENU_BAR_TEXT: Mutex<Option<String>> = Mutex::new(None);

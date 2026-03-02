@@ -113,7 +113,7 @@ pub fn get_chip_info() -> String {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 // Try to parse JSON
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                    if let Some(hardware) = json.get("SPHardwareDataType").and_then(|v| v.as_array()).and_then(|a| a.get(0)) {
+                    if let Some(hardware) = json.get("SPHardwareDataType").and_then(|v| v.as_array()).and_then(|a| a.first()) {
                         let chip_type = hardware.get("chip_type")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
@@ -132,7 +132,7 @@ pub fn get_chip_info() -> String {
                                 // Try to get total cores
                                 let total_cores = if parts.len() >= 3 {
                                     // Format: "16:12:4" - first number is total cores
-                                    parts.get(0).and_then(|s| s.parse::<u32>().ok())
+                                    parts.first().and_then(|s| s.parse::<u32>().ok())
                                         .or_else(|| {
                                             // Fallback: add P + E cores if first number fails
                                             let p_cores = parts.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
@@ -250,7 +250,7 @@ fn read_gpu_usage_from_system() -> f32 {
                     if line.contains("Device Utilization %") {
                         debug3!("Found 'Device Utilization %' in line: {}", line);
                         if let Some(percent) = extract_percentage_after_key(line, "Device Utilization %") {
-                            if percent >= 0.0 && percent <= 100.0 {
+                            if (0.0..=100.0).contains(&percent) {
                                 debug3!("GPU usage from ioreg (Device Utilization %): {}%", percent);
                                 return percent;
                             } else {
@@ -264,7 +264,7 @@ fn read_gpu_usage_from_system() -> f32 {
                     if line.contains("Renderer Utilization %") {
                         debug3!("Found 'Renderer Utilization %' in line: {}", line);
                         if let Some(percent) = extract_percentage_after_key(line, "Renderer Utilization %") {
-                            if percent >= 0.0 && percent <= 100.0 {
+                            if (0.0..=100.0).contains(&percent) {
                                 debug3!("GPU usage from ioreg (Renderer Utilization %): {}%", percent);
                                 return percent;
                             }
@@ -274,7 +274,7 @@ fn read_gpu_usage_from_system() -> f32 {
                     if line.contains("Tiler Utilization %") {
                         debug3!("Found 'Tiler Utilization %' in line: {}", line);
                         if let Some(percent) = extract_percentage_after_key(line, "Tiler Utilization %") {
-                            if percent >= 0.0 && percent <= 100.0 {
+                            if (0.0..=100.0).contains(&percent) {
                                 debug3!("GPU usage from ioreg (Tiler Utilization %): {}%", percent);
                                 return percent;
                             }
@@ -309,7 +309,7 @@ fn read_gpu_usage_from_system() -> f32 {
             for line in stdout.lines() {
                 if line.contains("Utilization") || line.contains("utilization") {
                     if let Some(percent) = extract_percentage_from_line(line) {
-                        if percent >= 0.0 && percent <= 100.0 {
+                        if (0.0..=100.0).contains(&percent) {
                             debug3!("GPU usage from ioreg (IOGPUWrangler): {}%", percent);
                             return percent;
                         }
@@ -360,7 +360,7 @@ fn extract_percentage_after_key(line: &str, key: &str) -> Option<f32> {
                 
                 if !num_str.is_empty() {
                     if let Ok(num) = num_str.parse::<f32>() {
-                        if num >= 0.0 && num <= 100.0 {
+                        if (0.0..=100.0).contains(&num) {
                             debug3!("Successfully extracted {}% from '{}'", num, trimmed);
                             return Some(num);
                         } else {
@@ -373,7 +373,7 @@ fn extract_percentage_after_key(line: &str, key: &str) -> Option<f32> {
                 
                 // Fallback: try parsing the whole trimmed string
                 if let Ok(num) = trimmed.parse::<f32>() {
-                    if num >= 0.0 && num <= 100.0 {
+                    if (0.0..=100.0).contains(&num) {
                         debug3!("Successfully extracted {}% (fallback parse)", num);
                         return Some(num);
                     }
@@ -383,7 +383,7 @@ fn extract_percentage_after_key(line: &str, key: &str) -> Option<f32> {
                 for word in trimmed.split_whitespace() {
                     let cleaned = word.trim_end_matches(',').trim_end_matches('}');
                     if let Ok(num) = cleaned.parse::<f32>() {
-                        if num >= 0.0 && num <= 100.0 {
+                        if (0.0..=100.0).contains(&num) {
                             debug3!("Successfully extracted {}% (from split)", num);
                             return Some(num);
                         }
@@ -407,7 +407,7 @@ fn extract_percentage_from_line(line: &str) -> Option<f32> {
         // Remove any trailing commas or other punctuation
         let trimmed = after_eq.trim().trim_end_matches(',');
         if let Ok(num) = trimmed.parse::<f32>() {
-            if num >= 0.0 && num <= 100.0 {
+            if (0.0..=100.0).contains(&num) {
                 return Some(num);
             }
         }
@@ -415,7 +415,7 @@ fn extract_percentage_from_line(line: &str) -> Option<f32> {
         for word in after_eq.split_whitespace() {
             let cleaned = word.trim_end_matches(',');
             if let Ok(num) = cleaned.parse::<f32>() {
-                if num >= 0.0 && num <= 100.0 {
+                if (0.0..=100.0).contains(&num) {
                     return Some(num);
                 }
             }
@@ -439,7 +439,7 @@ fn extract_percentage_from_line(line: &str) -> Option<f32> {
         // Remove common punctuation but keep decimal point
         let cleaned = word.trim_matches(|c: char| !c.is_numeric() && c != '.' && c != '-');
         if let Ok(num) = cleaned.parse::<f32>() {
-            if num >= 0.0 && num <= 100.0 {
+            if (0.0..=100.0).contains(&num) {
                 return Some(num);
             }
         }
@@ -756,10 +756,10 @@ pub fn get_battery_info() -> (f32, bool, bool) {
                                 
                                 // Update cache
                                 if let Ok(mut cache) = crate::state::BATTERY_CACHE.try_lock() {
-                                    *cache = Some((percentage as f32, is_charging, std::time::Instant::now()));
+                                    *cache = Some((percentage, is_charging, std::time::Instant::now()));
                                 }
                                 
-                                (percentage as f32, is_charging, true)
+                                (percentage, is_charging, true)
                             },
                             Err(e) => {
                                 debug3!("Failed to read battery: {:?}", e);
@@ -1728,7 +1728,7 @@ pub fn get_process_details(pid: u32) -> Result<ProcessDetails, String> {
                     let uid_str = uid.to_string();
                     let username = uid_str.parse::<u32>()
                         .ok()
-                        .and_then(|uid_value| get_username_from_uid(uid_value));
+                        .and_then(get_username_from_uid);
                     (Some(uid_str), username)
                 } else {
                     (None, None)
@@ -1738,7 +1738,7 @@ pub fn get_process_details(pid: u32) -> Result<ProcessDetails, String> {
                     let euid_str = euid.to_string();
                     let username = euid_str.parse::<u32>()
                         .ok()
-                        .and_then(|euid_value| get_username_from_uid(euid_value));
+                        .and_then(get_username_from_uid);
                     (Some(euid_str), username)
                 } else {
                     (None, None)

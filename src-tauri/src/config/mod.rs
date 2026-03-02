@@ -446,7 +446,7 @@ impl Config {
         let _ = std::fs::create_dir_all(&agents);
         let _ = std::fs::create_dir_all(&prompts);
         let _ = std::fs::create_dir_all(&tmp);
-        let _ = std::fs::create_dir_all(&Self::tmp_js_dir());
+        let _ = std::fs::create_dir_all(Self::tmp_js_dir());
 
         // Shared soul (personality/tone for all agents when no per-agent soul.md). Read by load_soul_content().
         Self::write_default_if_missing(&agents.join("soul.md"), Self::DEFAULT_SOUL);

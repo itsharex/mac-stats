@@ -838,8 +838,8 @@ unsafe fn process_actual_channels(
             match lookup_channel_dict(
                 &channel_key,
                 orig_channels,
-                &channel_keys_buf,
-                &channel_values_buf,
+                channel_keys_buf,
+                channel_values_buf,
                 channels_count,
             ) {
                 Some((_, name_ref)) => {
@@ -903,12 +903,10 @@ fn calculate_frequencies(accumulator: &FrequencyAccumulator, freq_logging: bool)
         } else {
             debug3!("IOReport frequency parsed: {:.2} GHz (max frequency)", result.overall);
         }
+    } else if freq_logging {
+        debug3!("Could not extract overall frequency from IOReport");
     } else {
-        if freq_logging {
-            debug3!("Could not extract overall frequency from IOReport");
-        } else {
-            debug3!("Could not extract overall frequency from IOReport");
-        }
+        debug3!("Could not extract overall frequency from IOReport");
     }
     
     // Calculate P-core frequency
@@ -927,11 +925,9 @@ fn calculate_frequencies(accumulator: &FrequencyAccumulator, freq_logging: bool)
         } else {
             debug3!("IOReport P-core frequency parsed: {:.2} GHz (max frequency)", result.p_core);
         }
-    } else {
-        if freq_logging {
-            debug3!("P-core frequency: NOT FOUND (p_core_total_residency={:.3} s, p_core_max_freq_mhz={:.2} MHz)", 
-                accumulator.p_core_total_residency, accumulator.p_core_max_freq_mhz);
-        }
+    } else if freq_logging {
+        debug3!("P-core frequency: NOT FOUND (p_core_total_residency={:.3} s, p_core_max_freq_mhz={:.2} MHz)", 
+            accumulator.p_core_total_residency, accumulator.p_core_max_freq_mhz);
     }
     
     // Calculate E-core frequency
@@ -950,11 +946,9 @@ fn calculate_frequencies(accumulator: &FrequencyAccumulator, freq_logging: bool)
         } else {
             debug3!("IOReport E-core frequency parsed: {:.2} GHz (max frequency)", result.e_core);
         }
-    } else {
-        if freq_logging {
-            debug3!("E-core frequency: NOT FOUND (e_core_total_residency={:.3} s, e_core_max_freq_mhz={:.2} MHz)", 
-                accumulator.e_core_total_residency, accumulator.e_core_max_freq_mhz);
-        }
+    } else if freq_logging {
+        debug3!("E-core frequency: NOT FOUND (e_core_total_residency={:.3} s, e_core_max_freq_mhz={:.2} MHz)", 
+            accumulator.e_core_total_residency, accumulator.e_core_max_freq_mhz);
     }
     
     result
@@ -1571,7 +1565,7 @@ pub unsafe fn read_power_from_ioreport(
                     
                     // Only use state-based operations if state_count is valid
                     // Channels with state_count=-1 don't support state operations, but may have valid energy values
-                    let state_count = if state_count_raw < 0 || state_count_raw > 1000 {
+                    let state_count = if !(0..=1000).contains(&state_count_raw) {
                         // Invalid state count - skip state-based operations but still use energy_value
                         0
                     } else {
@@ -1581,7 +1575,7 @@ pub unsafe fn read_power_from_ioreport(
                     // Safety check: If we got a suspiciously large energy value, it might be invalid
                     // Energy values are typically in micro-joules or nano-joules, so very large values
                     // (like > 1e15) are likely invalid/corrupted data
-                    if energy_value > 1_000_000_000_000_000 || energy_value < -1_000_000_000_000_000 {
+                    if !(-1_000_000_000_000_000..=1_000_000_000_000_000).contains(&energy_value) {
                         debug3!("Suspicious energy value {} for channel '{}', treating as 0", energy_value, channel_name_str);
                         energy_value = 0;
                     }
