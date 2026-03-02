@@ -32,7 +32,7 @@ pub async fn run_task_until_finished(task_path: PathBuf, max_iterations: u32) ->
         let agents = crate::agents::load_agents();
         let agent_override = crate::agents::find_agent_by_id_or_name(&agents, &assignee).cloned();
         let question = format!(
-            "Current task file content:\n\n{}\n\nDecide the next step. Use TASK_APPEND to add feedback and TASK_STATUS to set wip or finished when done. Reply with your action (TASK_APPEND, TASK_STATUS, or a final summary).",
+            "Current task file content:\n\n{}\n\nDecide the next step. For implement/refactor/add-feature/code tasks: use CURSOR_AGENT: <instruction> to have the editor apply changes, then TASK_APPEND with the result and TASK_STATUS when done. Otherwise use TASK_APPEND to add feedback and TASK_STATUS to set wip or finished. Reply with your action (CURSOR_AGENT, TASK_APPEND, TASK_STATUS, or a final summary).",
             content
         );
         info!("Task loop: iteration {}/{} for task '{}' (assignee: {})", iteration + 1, max_iterations, task_name, assignee);

@@ -322,10 +322,88 @@ async fn detect_first_model(endpoint: &str, api_key: Option<&str>) -> String {
                 list.models.len(),
                 list.models.iter().map(|m| m.name.as_str()).collect::<Vec<_>>().join(", ")
             );
-            list.models[0].name.clone()
+            // Prefer local models; use cloud only as fallback (cloud models require ollama.com auth).
+            let local = list
+                .models
+                .iter()
+                .find(|m| !crate::ollama::models::is_cloud_model(&m.name));
+            let chosen = local
+                .map(|m| m.name.clone())
+                .unwrap_or_else(|| list.models[0].name.clone());
+            if local.is_none() && list.models.len() > 1 {
+                tracing::debug!(
+                    "Ollama agent: no local model found, using cloud fallback '{}'",
+                    chosen
+                );
+            }
+            chosen
         }
         _ => "llama3.2".to_string(),
     }
+}
+
+/// Read OLLAMA_API_KEY from env or .config.env. Used when Ollama requires auth (e.g. remote server)
+/// so Discord/scheduler/UI all send the key without requiring Keychain in every context.
+fn read_ollama_api_key_from_env_or_config() -> Option<String> {
+    if let Ok(v) = std::env::var("OLLAMA_API_KEY") {
+        let v = v.trim().to_string();
+        if !v.is_empty() {
+            return Some(v);
+        }
+    }
+    let paths = [
+        std::env::current_dir().ok().map(|d| d.join(".config.env")),
+        std::env::current_dir().ok().map(|d| d.join("src-tauri").join(".config.env")),
+        std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".mac-stats").join(".config.env")),
+    ];
+    for maybe_path in paths.iter().flatten() {
+        if let Ok(content) = std::fs::read_to_string(maybe_path) {
+            for line in content.lines() {
+                let t = line.trim();
+                if t.starts_with("OLLAMA_API_KEY=") || t.starts_with("OLLAMA-API-KEY=") {
+                    if let Some((_, v)) = t.split_once('=') {
+                        let v = v.trim().to_string();
+                        if !v.is_empty() {
+                            return Some(v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Read OLLAMA_FAST_MODEL from env or .config.env. When set, used as the default model for
+/// agent router (Discord/scheduler) when no channel/message override — gives faster replies (e.g. qwen2.5:1.5b).
+fn read_ollama_fast_model_from_env_or_config() -> Option<String> {
+    if let Ok(v) = std::env::var("OLLAMA_FAST_MODEL") {
+        let v = v.trim().to_string();
+        if !v.is_empty() {
+            return Some(v);
+        }
+    }
+    let paths = [
+        std::env::current_dir().ok().map(|d| d.join(".config.env")),
+        std::env::current_dir().ok().map(|d| d.join("src-tauri").join(".config.env")),
+        std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".mac-stats").join(".config.env")),
+    ];
+    for maybe_path in paths.iter().flatten() {
+        if let Ok(content) = std::fs::read_to_string(maybe_path) {
+            for line in content.lines() {
+                let t = line.trim();
+                if t.starts_with("OLLAMA_FAST_MODEL=") || t.starts_with("OLLAMA-FAST-MODEL=") {
+                    if let Some((_, v)) = t.split_once('=') {
+                        let v = v.trim().to_string();
+                        if !v.is_empty() {
+                            return Some(v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Read OLLAMA_MODEL from env or .config.env files.
@@ -451,12 +529,14 @@ pub async fn send_ollama_chat_messages(
     }
 
     let mut http_request = temp_client.post(&url).json(&chat_request);
-    if let Some(keychain_account) = &api_key {
-        if let Ok(Some(api_key_value)) = crate::security::get_credential(keychain_account) {
-            let _masked = crate::security::mask_credential(&api_key_value);
-            http_request = http_request.header("Authorization", format!("Bearer {}", api_key_value));
-            debug!("Ollama: Using API key for chat request");
-        }
+    let api_key_value = api_key
+        .as_ref()
+        .and_then(|acc| crate::security::get_credential(acc).ok().flatten())
+        .or_else(read_ollama_api_key_from_env_or_config);
+    if let Some(key) = &api_key_value {
+        let _masked = crate::security::mask_credential(key);
+        http_request = http_request.header("Authorization", format!("Bearer {}", key));
+        debug!("Ollama: Using API key for chat request");
     }
 
     let response = http_request
@@ -513,8 +593,8 @@ pub async fn ollama_chat(request: ChatRequest) -> Result<crate::ollama::ChatResp
     send_ollama_chat_messages(request.messages, None, None).await
 }
 
-/// Base agent descriptions (without MCP). Includes RUN_JS, FETCH_URL, BRAVE_SEARCH, SCHEDULE.
-const AGENT_DESCRIPTIONS_BASE: &str = r#"We have 7 base tools available:
+/// Base agent descriptions (without MCP). Includes RUN_JS, FETCH_URL, BROWSER_*, BRAVE_SEARCH, SCHEDULE.
+const AGENT_DESCRIPTIONS_BASE: &str = r#"We have 10 base tools available:
 
 1. **RUN_JS** (JavaScript superpowers): Execute JavaScript in the app context (e.g. browser console). Use for: dynamic data, DOM inspection, client-side state. To invoke: reply with exactly one line: RUN_JS: <JavaScript code>. Note: In some contexts (e.g. Discord) JS is not executed; then answer without running code.
 
@@ -522,17 +602,19 @@ const AGENT_DESCRIPTIONS_BASE: &str = r#"We have 7 base tools available:
 
 3. **BROWSER_SCREENSHOT**: Open a URL in a headless browser and take a screenshot. Use when the user asks to "go to" a URL and take a screenshot, or to capture a page as an image. To invoke: reply with exactly one line: BROWSER_SCREENSHOT: <URL> (e.g. BROWSER_SCREENSHOT: https://www.amvara.de). The app will return the path to the saved PNG (e.g. ~/.mac-stats/screenshots/...). Tell the user where the screenshot was saved; in Discord you cannot attach the image in-chat, so report the path.
 
-4. **BRAVE_SEARCH**: Web search via Brave Search API. Use for: finding current info, facts, multiple sources. To invoke: reply with exactly one line: BRAVE_SEARCH: <search query>. The app will return search results.
+4. **BROWSER_NAVIGATE**, **BROWSER_CLICK**, **BROWSER_INPUT**, **BROWSER_SCROLL**, **BROWSER_EXTRACT** (lightweight browser): Use for multi-step browser tasks (e.g. accept cookie consent then search). BROWSER_NAVIGATE: <url> — open URL and return current page state with numbered elements. BROWSER_CLICK: <index> — click the element at that index (1-based). BROWSER_INPUT: <index> <text> — type text into the element at that index. BROWSER_SCROLL: <direction> — scroll the current page: use "down", "up", "bottom", "top", or a number of pixels (e.g. BROWSER_SCROLL: 500 or BROWSER_SCROLL: bottom). BROWSER_EXTRACT — return the visible text of the current page (use after navigating/clicking to get content for answering). After each action you get "Current page: ..." and an Elements list; use the index for the next CLICK or INPUT. **If the Elements list shows cookie consent** (e.g. \"Rechazar todo\", \"Aceptar todo\", \"Accept all\", \"Reject all\"), **click the accept button first** (use the index of \"Aceptar todo\" or \"Accept all\") before typing in search boxes or submitting. Reply with exactly one line per tool (e.g. BROWSER_NAVIGATE: https://google.com then BROWSER_CLICK: 27 for Aceptar todo, then BROWSER_INPUT: 10 <query> then BROWSER_CLICK: 9 for the search button).
 
-5. **SCHEDULE** (scheduler): Add a task to run at scheduled times (recurring or one-shot). Use when the user wants something to run later or repeatedly. Three formats (reply exactly one line):
+5. **BRAVE_SEARCH**: Web search via Brave Search API. Use for: finding current info, facts, multiple sources. To invoke: reply with exactly one line: BRAVE_SEARCH: <search query>. The app will return search results.
+
+6. **SCHEDULE** (scheduler): Add a task to run at scheduled times (recurring or one-shot). Use when the user wants something to run later or repeatedly. Three formats (reply exactly one line):
    - SCHEDULE: every N minutes <task> (e.g. SCHEDULE: every 5 minutes Execute RUN_JS to fetch CPU and RAM).
    - SCHEDULE: <cron expression> <task> — cron is 6-field (sec min hour day month dow) or 5-field (min hour day month dow; we accept and prepend 0 for seconds). Examples below.
    - SCHEDULE: at <datetime> <task> — one-shot (e.g. reminder tomorrow 5am: use RUN_CMD: date +%Y-%m-%d to get today, then SCHEDULE: at 2025-02-09T05:00:00 Remind me of my flight). Datetime must be ISO local: YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM.
    We add to ~/.mac-stats/schedules.json and return a schedule ID (e.g. discord-1770648842). Always tell the user this ID so they can remove it later with REMOVE_SCHEDULE.
 
-6. **REMOVE_SCHEDULE**: Remove a scheduled task by its ID. Use when the user asks to remove, delete, or cancel a schedule (e.g. "Remove schedule: discord-1770648842"). Reply with exactly one line: REMOVE_SCHEDULE: <schedule-id> (e.g. REMOVE_SCHEDULE: discord-1770648842).
+7. **REMOVE_SCHEDULE**: Remove a scheduled task by its ID. Use when the user asks to remove, delete, or cancel a schedule (e.g. "Remove schedule: discord-1770648842"). Reply with exactly one line: REMOVE_SCHEDULE: <schedule-id> (e.g. REMOVE_SCHEDULE: discord-1770648842).
 
-7. **LIST_SCHEDULES**: List all active schedules (id, type, next run, task). Use when the user asks to list schedules, show schedules, what's scheduled, what reminders are set, etc. Reply with exactly one line: LIST_SCHEDULES or LIST_SCHEDULES:."#;
+8. **LIST_SCHEDULES**: List all active schedules (id, type, next run, task). Use when the user asks to list schedules, show schedules, what's scheduled, what reminders are set, etc. Reply with exactly one line: LIST_SCHEDULES or LIST_SCHEDULES:."#;
 
 /// Cron examples for SCHEDULE (6-field: sec min hour day month dow). Shown to the model so it can pick the right pattern (see crontab.guru for more).
 const SCHEDULE_CRON_EXAMPLES: &str = r#"
@@ -1290,18 +1372,33 @@ pub async fn answer_with_ollama_and_fetch(
     let (endpoint, effective_model, api_key) = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
         let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
-        let effective = model_override.clone().unwrap_or_else(|| client.config.model.clone());
+        let effective = model_override.clone().unwrap_or_else(|| {
+            read_ollama_fast_model_from_env_or_config()
+                .unwrap_or_else(|| client.config.model.clone())
+        });
+        // Prefer local model: if the chosen model is cloud (e.g. qwen3.5:cloud) and we have no
+        // explicit override, use first local model so Discord/scheduler work without ollama.com auth.
+        let effective = if model_override.is_some() {
+            effective
+        } else if crate::ollama::models::is_cloud_model(&effective) {
+            crate::ollama::models::get_first_local_model_name().unwrap_or(effective)
+        } else {
+            effective
+        };
         let api_key = client
             .config
             .api_key
             .as_ref()
-            .and_then(|acc| crate::security::get_credential(acc).ok().flatten());
+            .and_then(|acc| crate::security::get_credential(acc).ok().flatten())
+            .or_else(read_ollama_api_key_from_env_or_config);
         (
             client.config.endpoint.clone(),
             effective,
             api_key,
         )
     };
+    // Use resolved model (local when default was cloud) for all chat calls in this request.
+    let model_override = Some(effective_model.clone());
     let model_info = crate::ollama::get_model_info(&endpoint, &effective_model, api_key.as_deref())
         .await
         .unwrap_or_else(|_| crate::ollama::ModelInfo::default());
@@ -1673,26 +1770,28 @@ pub async fn answer_with_ollama_and_fetch(
     let mut current_task_path: Option<std::path::PathBuf> = None;
 
     while tool_count < max_tool_iterations {
-        let (tool, arg) = match parse_tool_from_response(&response_content) {
-            Some((t, a)) => {
-                let arg_preview: String = a.chars().take(80).collect();
-                let arg_len = a.chars().count();
-                if arg_len > 80 {
-                    info!("Agent router: understood tool {} (arg: {}... [{} chars])", t, arg_preview, arg_len);
-                } else {
-                    info!("Agent router: understood tool {} (arg: {})", t, arg_preview);
-                }
-                (t, a)
-            }
-            None => {
-                info!("Agent router: no tool call in response ({} chars), treating as final answer: {}", response_content.chars().count(), log_content(&response_content));
+        let tools = parse_all_tools_from_response(&response_content);
+        if tools.is_empty() {
+            info!("Agent router: no tool call in response ({} chars), treating as final answer: {}", response_content.chars().count(), log_content(&response_content));
+            break;
+        }
+        if tools.len() > 1 {
+            info!("Agent router: running {} tools in one turn: {}", tools.len(), tools.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join(", "));
+        }
+        let mut tool_results: Vec<String> = Vec::with_capacity(tools.len());
+        for (tool, arg) in tools {
+            if tool_count >= max_tool_iterations {
                 break;
             }
-        };
-        tool_count += 1;
-        info!("Agent router: running tool {}/{} — {}", tool_count, max_tool_iterations, tool);
+            tool_count += 1;
+            let arg_preview: String = arg.chars().take(80).collect();
+            if arg.chars().count() > 80 {
+                info!("Agent router: running tool {}/{} — {} (arg: {}...)", tool_count, max_tool_iterations, tool, arg_preview);
+            } else {
+                info!("Agent router: running tool {}/{} — {} (arg: {})", tool_count, max_tool_iterations, tool, arg_preview);
+            }
 
-        let user_message = match tool.as_str() {
+            let user_message = match tool.as_str() {
             "FETCH_URL" if arg.contains("discord.com") => {
                 let path = if let Some(pos) = arg.find("/api/v10") {
                     arg[pos + "/api/v10".len()..].to_string()
@@ -1785,6 +1884,87 @@ pub async fn answer_with_ollama_and_fetch(
                         }
                         Err(e) => format!("Screenshot task error: {}", e),
                     }
+                }
+            }
+            "BROWSER_NAVIGATE" => {
+                send_status("Navigating…");
+                let url_arg = arg.trim().to_string();
+                if url_arg.is_empty() {
+                    "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
+                } else {
+                    info!("BROWSER_NAVIGATE: URL sent to CDP: {}", url_arg);
+                    match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_and_get_state(&url_arg)).await {
+                        Ok(Ok(state_str)) => state_str,
+                        Ok(Err(e)) => {
+                            info!("BROWSER_NAVIGATE failed: {}", crate::logging::ellipse(&e, 200));
+                            format!("BROWSER_NAVIGATE failed: {}. (Chrome may need to be available on port 9222.)", e)
+                        }
+                        Err(e) => format!("BROWSER_NAVIGATE task error: {}", e),
+                    }
+                }
+            }
+            "BROWSER_CLICK" => {
+                send_status("Clicking…");
+                let index_arg = arg.trim().split_whitespace().next().unwrap_or("").trim();
+                let index = index_arg.parse::<u32>().ok();
+                match index {
+                    Some(idx) => {
+                        info!("BROWSER_CLICK: index {}", idx);
+                        match tokio::task::spawn_blocking(move || crate::browser_agent::click_by_index(idx)).await {
+                            Ok(Ok(state_str)) => state_str,
+                            Ok(Err(e)) => {
+                                info!("BROWSER_CLICK failed: {}", crate::logging::ellipse(&e, 200));
+                                format!("BROWSER_CLICK failed: {}", e)
+                            }
+                            Err(e) => format!("BROWSER_CLICK task error: {}", e),
+                        }
+                    }
+                    None => "BROWSER_CLICK requires a numeric index (e.g. BROWSER_CLICK: 3). Use the index from the Current page Elements list.".to_string(),
+                }
+            }
+            "BROWSER_INPUT" => {
+                send_status("Typing…");
+                let mut parts = arg.trim().splitn(2, |c: char| c.is_whitespace());
+                let index_arg = parts.next().unwrap_or("").trim();
+                let text = parts.next().unwrap_or("").trim().to_string();
+                let index = index_arg.parse::<u32>().ok();
+                match index {
+                    Some(idx) => {
+                        info!("BROWSER_INPUT: index {} ({} chars)", idx, text.len());
+                        let text_clone = text.clone();
+                        match tokio::task::spawn_blocking(move || crate::browser_agent::input_by_index(idx, &text_clone)).await {
+                            Ok(Ok(state_str)) => state_str,
+                            Ok(Err(e)) => {
+                                info!("BROWSER_INPUT failed: {}", crate::logging::ellipse(&e, 200));
+                                format!("BROWSER_INPUT failed: {}", e)
+                            }
+                            Err(e) => format!("BROWSER_INPUT task error: {}", e),
+                        }
+                    }
+                    None => "BROWSER_INPUT requires a numeric index and text (e.g. BROWSER_INPUT: 4 search query). Use the index from the Current page Elements list.".to_string(),
+                }
+            }
+            "BROWSER_SCROLL" => {
+                send_status("Scrolling…");
+                let scroll_arg = if arg.trim().is_empty() { "down".to_string() } else { arg.trim().to_string() };
+                match tokio::task::spawn_blocking(move || crate::browser_agent::scroll_page(&scroll_arg)).await {
+                    Ok(Ok(state_str)) => state_str,
+                    Ok(Err(e)) => {
+                        info!("BROWSER_SCROLL failed: {}", crate::logging::ellipse(&e, 200));
+                        format!("BROWSER_SCROLL failed: {}", e)
+                    }
+                    Err(e) => format!("BROWSER_SCROLL task error: {}", e),
+                }
+            }
+            "BROWSER_EXTRACT" => {
+                send_status("Extracting page text…");
+                match tokio::task::spawn_blocking(|| crate::browser_agent::extract_page_text()).await {
+                    Ok(Ok(text)) => text,
+                    Ok(Err(e)) => {
+                        info!("BROWSER_EXTRACT failed: {}", crate::logging::ellipse(&e, 200));
+                        format!("BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)", e)
+                    }
+                    Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
                 }
             }
             "BRAVE_SEARCH" => {
@@ -2734,6 +2914,10 @@ pub async fn answer_with_ollama_and_fetch(
             last_run_cmd_raw_output = None;
         }
 
+        tool_results.push(user_message);
+        }
+        let user_message = tool_results.join("\n\n---\n\n");
+
         messages.push(crate::ollama::ChatMessage {
             role: "assistant".to_string(),
             content: response_content.clone(),
@@ -3017,112 +3201,115 @@ fn line_starts_with_tool_prefix(line: &str) -> bool {
     false
 }
 
-/// Parse one of FETCH_URL:, BRAVE_SEARCH:, RUN_JS:, SCHEDULE:/SCHEDULER:, MCP:, PYTHON_SCRIPT: from assistant content.
-/// Also accepts lines starting with "RECOMMEND: " (e.g. "RECOMMEND: SCHEDULER: Every 5 minutes...").
-/// For TASK_APPEND and TASK_CREATE, content is taken to the end of the block (all lines until the next tool line) so research/full text is stored completely.
-/// Returns (tool_name, argument) or None.
-fn parse_tool_from_response(content: &str) -> Option<(String, String)> {
-    let prefixes = ["FETCH_URL:", "BRAVE_SEARCH:", "BROWSER_SCREENSHOT:", "PERPLEXITY_SEARCH:", "RUN_JS:", "SKILL:", "AGENT:", "RUN_CMD:", "SCHEDULE:", "SCHEDULER:", "REMOVE_SCHEDULE:", "LIST_SCHEDULES:", "TASK_LIST:", "TASK_SHOW:", "TASK_APPEND:", "TASK_STATUS:", "TASK_CREATE:", "TASK_ASSIGN:", "TASK_SLEEP:", "OLLAMA_API:", "PYTHON_SCRIPT:", "MCP:", "DISCORD_API:", "CURSOR_AGENT:", "REDMINE_API:", "MEMORY_APPEND:", "MASTODON_POST:"];
-    let lines: Vec<&str> = content.lines().collect();
-    for (line_index, line) in lines.iter().enumerate() {
-        let line = line.trim();
-        // Ollama sometimes replies with just "TASK_LIST" or "LIST_SCHEDULES" (no colon); treat as tool call with empty arg.
-        if line.eq_ignore_ascii_case("TASK_LIST") {
-            return Some(("TASK_LIST".to_string(), String::new()));
-        }
-        if line.eq_ignore_ascii_case("LIST_SCHEDULES") {
-            return Some(("LIST_SCHEDULES".to_string(), String::new()));
-        }
-        // Strip leading list numbering ("1. ", "2) ", "- ", "* ") and RECOMMEND: prefixes.
-        let mut search = line;
-        loop {
-            let upper = search.to_uppercase();
-            if upper.starts_with("RECOMMEND: ") {
-                search = search[11..].trim();
-            } else if search.len() >= 2 && search.as_bytes()[0].is_ascii_digit() {
-                let rest = search.trim_start_matches(|c: char| c.is_ascii_digit());
-                if rest.starts_with(". ") || rest.starts_with(") ") || rest.starts_with(": ") {
-                    search = rest[2..].trim();
-                } else {
-                    break;
-                }
-            } else if search.starts_with("- ") || search.starts_with("* ") {
-                search = search[2..].trim();
+/// Parse one tool starting at the given line index. Returns (tool_name, argument) and the next line index to scan.
+fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String, String), usize)> {
+    let prefixes = ["FETCH_URL:", "BRAVE_SEARCH:", "BROWSER_SCREENSHOT:", "BROWSER_NAVIGATE:", "BROWSER_CLICK:", "BROWSER_INPUT:", "BROWSER_SCROLL:", "BROWSER_EXTRACT:", "PERPLEXITY_SEARCH:", "RUN_JS:", "SKILL:", "AGENT:", "RUN_CMD:", "SCHEDULE:", "SCHEDULER:", "REMOVE_SCHEDULE:", "LIST_SCHEDULES:", "TASK_LIST:", "TASK_SHOW:", "TASK_APPEND:", "TASK_STATUS:", "TASK_CREATE:", "TASK_ASSIGN:", "TASK_SLEEP:", "OLLAMA_API:", "PYTHON_SCRIPT:", "MCP:", "DISCORD_API:", "CURSOR_AGENT:", "REDMINE_API:", "MEMORY_APPEND:", "MASTODON_POST:"];
+    let line = lines.get(line_index)?.trim();
+    if line.eq_ignore_ascii_case("TASK_LIST") {
+        return Some((("TASK_LIST".to_string(), String::new()), line_index + 1));
+    }
+    if line.eq_ignore_ascii_case("LIST_SCHEDULES") {
+        return Some((("LIST_SCHEDULES".to_string(), String::new()), line_index + 1));
+    }
+    let mut search = line;
+    loop {
+        let upper = search.to_uppercase();
+        if upper.starts_with("RECOMMEND: ") {
+            search = search[11..].trim();
+        } else if search.len() >= 2 && search.as_bytes()[0].is_ascii_digit() {
+            let rest = search.trim_start_matches(|c: char| c.is_ascii_digit());
+            if rest.starts_with(". ") || rest.starts_with(") ") || rest.starts_with(": ") {
+                search = rest[2..].trim();
             } else {
                 break;
             }
+        } else if search.starts_with("- ") || search.starts_with("* ") {
+            search = search[2..].trim();
+        } else {
+            break;
         }
-        for prefix in prefixes {
-            if search.to_uppercase().starts_with(prefix) {
-                let mut arg = search[prefix.len()..].trim().to_string();
-                if arg.is_empty() && prefix != "TASK_LIST:" && prefix != "TASK_SHOW:" && prefix != "LIST_SCHEDULES:" {
-                    continue;
+    }
+    for prefix in prefixes {
+        if search.to_uppercase().starts_with(prefix) {
+            let mut arg = search[prefix.len()..].trim().to_string();
+            if arg.is_empty() && prefix != "TASK_LIST:" && prefix != "TASK_SHOW:" && prefix != "LIST_SCHEDULES:" && prefix != "BROWSER_EXTRACT:" {
+                continue;
+            }
+            let tool_name = prefix.trim_end_matches(':');
+            let tool_name = if tool_name.eq_ignore_ascii_case("SCHEDULER") {
+                "SCHEDULE".to_string()
+            } else {
+                tool_name.to_string()
+            };
+            let next_line = if tool_name == "TASK_APPEND" || tool_name == "TASK_CREATE" {
+                line_index + 1 + lines[line_index + 1..].iter().take_while(|l| !line_starts_with_tool_prefix(l)).count()
+            } else {
+                line_index + 1
+            };
+            if tool_name == "FETCH_URL" || tool_name == "BRAVE_SEARCH" || tool_name == "BROWSER_SCREENSHOT" || tool_name == "BROWSER_NAVIGATE" || tool_name == "PERPLEXITY_SEARCH" {
+                if let Some(idx) = arg.find(';') {
+                    arg = arg[..idx].trim().to_string();
                 }
-                let tool_name = prefix.trim_end_matches(':');
-                let tool_name = if tool_name.eq_ignore_ascii_case("SCHEDULER") {
-                    "SCHEDULE".to_string()
-                } else {
-                    tool_name.to_string()
-                };
-                // TASK_APPEND and TASK_CREATE: take full content including all following lines until the next tool line (so research/long text is stored completely).
-                if tool_name == "TASK_APPEND" || tool_name == "TASK_CREATE" {
-                    let rest_lines: Vec<&str> = lines[line_index + 1..]
-                        .iter()
-                        .take_while(|l| !line_starts_with_tool_prefix(l))
-                        .copied()
-                        .collect();
-                    if !rest_lines.is_empty() {
-                        arg.push('\n');
-                        arg.push_str(&rest_lines.join("\n"));
-                    }
+            }
+            if tool_name == "FETCH_URL" || tool_name == "BROWSER_SCREENSHOT" || tool_name == "BROWSER_NAVIGATE" {
+                if let Some(first_space) = arg.find(' ') {
+                    arg = arg[..first_space].trim().to_string();
                 }
-                // Ollama sometimes concatenates multiple tools on one line. Truncate at first ';' for URLs/searches.
-                if tool_name == "FETCH_URL" || tool_name == "BRAVE_SEARCH" || tool_name == "BROWSER_SCREENSHOT" || tool_name == "PERPLEXITY_SEARCH" {
-                    if let Some(idx) = arg.find(';') {
-                        arg = arg[..idx].trim().to_string();
-                    }
-                }
-                // For URL tools, take only the first token (the URL) so "https://example.com to retrieve..." -> "https://example.com"
-                if tool_name == "FETCH_URL" || tool_name == "BROWSER_SCREENSHOT" {
-                    if let Some(first_space) = arg.find(' ') {
-                        arg = arg[..first_space].trim().to_string();
-                    }
-                    // Strip trailing sentence punctuation so "https://example.com." (model wrote "...usecases. The...") -> "https://example.com"
-                    arg = arg.trim_end_matches(|c: char| c == '.' || c == ',' || c == ';' || c == ':').to_string();
-                }
-                // Truncate at next numbered step boundary for single-line tools (not TASK_APPEND/TASK_CREATE — those keep full content).
-                if tool_name != "TASK_APPEND" && tool_name != "TASK_CREATE" {
-                    if let Some(pos) = arg.find(|c: char| c.is_ascii_digit()).and_then(|_| {
-                        let bytes = arg.as_bytes();
-                        for i in 1..bytes.len().saturating_sub(2) {
-                            if bytes[i].is_ascii_digit()
-                                && bytes[i - 1] == b' '
-                                && (bytes.get(i + 1) == Some(&b'.') || bytes.get(i + 1) == Some(&b')'))
-                                && bytes.get(i + 2) == Some(&b' ')
-                            {
-                                return Some(i - 1);
-                            }
+                arg = arg.trim_end_matches(|c: char| c == '.' || c == ',' || c == ';' || c == ':').to_string();
+            }
+            if tool_name != "TASK_APPEND" && tool_name != "TASK_CREATE" {
+                if let Some(pos) = arg.find(|c: char| c.is_ascii_digit()).and_then(|_| {
+                    let bytes = arg.as_bytes();
+                    for i in 1..bytes.len().saturating_sub(2) {
+                        if bytes[i].is_ascii_digit()
+                            && bytes[i - 1] == b' '
+                            && (bytes.get(i + 1) == Some(&b'.') || bytes.get(i + 1) == Some(&b')'))
+                            && bytes.get(i + 2) == Some(&b' ')
+                        {
+                            return Some(i - 1);
                         }
-                        None
-                    }) {
-                        arg = arg[..pos].trim().to_string();
                     }
+                    None
+                }) {
+                    arg = arg[..pos].trim().to_string();
                 }
-                if !arg.is_empty() || tool_name == "TASK_LIST" || tool_name == "TASK_SHOW" || tool_name == "LIST_SCHEDULES" {
-                    return Some((tool_name, arg));
-                }
-                if tool_name == "TASK_SLEEP" && !arg.is_empty() {
-                    return Some((tool_name, arg));
-                }
+            }
+            if !arg.is_empty() || tool_name == "TASK_LIST" || tool_name == "TASK_SHOW" || tool_name == "LIST_SCHEDULES" || tool_name == "BROWSER_EXTRACT" || (tool_name == "TASK_SLEEP" && !arg.is_empty()) {
+                return Some(((tool_name, arg), next_line));
             }
         }
     }
     None
 }
 
+/// Parse one of FETCH_URL:, BRAVE_SEARCH:, RUN_JS:, SCHEDULE:/SCHEDULER:, MCP:, PYTHON_SCRIPT: from assistant content (first match only).
+fn parse_tool_from_response(content: &str) -> Option<(String, String)> {
+    let lines: Vec<&str> = content.lines().collect();
+    parse_one_tool_at_line(&lines, 0).map(|(pair, _)| pair)
+}
+
+/// Parse all tool invocations from a response (e.g. BROWSER_CLICK and BROWSER_SCREENSHOT on consecutive lines).
+/// Returns up to 5 per response so one model reply can trigger multiple actions (fixes screenshot-after-click).
+const MAX_TOOLS_PER_RESPONSE: usize = 5;
+
+fn parse_all_tools_from_response(content: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut out = Vec::with_capacity(MAX_TOOLS_PER_RESPONSE);
+    let mut idx = 0;
+    while idx < lines.len() && out.len() < MAX_TOOLS_PER_RESPONSE {
+        if let Some(((tool, arg), next)) = parse_one_tool_at_line(&lines, idx) {
+            out.push((tool, arg));
+            idx = next;
+        } else {
+            idx += 1;
+        }
+    }
+    out
+}
+
 /// Tool line prefixes that indicate start of another tool (used to stop script body extraction).
 const TOOL_LINE_PREFIXES: &[&str] = &[
-    "FETCH_URL:", "BRAVE_SEARCH:", "PERPLEXITY_SEARCH:", "RUN_JS:", "SKILL:", "AGENT:", "RUN_CMD:", "SCHEDULE:", "SCHEDULER:", "REMOVE_SCHEDULE:", "LIST_SCHEDULES:",
+    "FETCH_URL:", "BRAVE_SEARCH:", "BROWSER_SCREENSHOT:", "BROWSER_NAVIGATE:", "BROWSER_CLICK:", "BROWSER_INPUT:", "BROWSER_SCROLL:", "BROWSER_EXTRACT:", "PERPLEXITY_SEARCH:", "RUN_JS:", "SKILL:", "AGENT:", "RUN_CMD:", "SCHEDULE:", "SCHEDULER:", "REMOVE_SCHEDULE:", "LIST_SCHEDULES:",
     "TASK_LIST:", "TASK_SHOW:", "TASK_APPEND:", "TASK_STATUS:", "TASK_CREATE:", "TASK_ASSIGN:", "TASK_SLEEP:", "OLLAMA_API:", "MCP:", "PYTHON_SCRIPT:", "DISCORD_API:", "CURSOR_AGENT:", "REDMINE_API:", "MEMORY_APPEND:",
 ];
 

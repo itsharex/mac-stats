@@ -1,10 +1,13 @@
 //! CDP (Chrome DevTools Protocol) browser agent.
 //!
-//! Connects to Chrome via WebSocket (user runs Chrome with --remote-debugging-port=9222),
-//! navigates, gets page content, extracts data. Supports BROWSER_NAVIGATE / BROWSER_CLICK /
-//! BROWSER_INPUT (index-based state, browser-use style). The browser session is kept alive
-//! and only closed after Config::browser_idle_timeout_secs() of inactivity (default 1 hour).
+//! To use the browser, either:
+//! 1. Start Chrome yourself: `Google Chrome --remote-debugging-port=9222`
+//! 2. Or let mac-stats launch Chrome on 9222 when nothing is listening (requires Chrome installed).
+//!
+//! Supports BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_INPUT / BROWSER_SCROLL / BROWSER_EXTRACT (index-based state). Session is kept
+//! until idle longer than Config::browser_idle_timeout_secs() (default 1 hour).
 
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -83,6 +86,55 @@ pub fn connect_cdp(port: u16) -> Result<Browser, String> {
     info!("Browser agent: connecting to CDP at port {}", port);
     Browser::connect_with_timeout(ws_url, Duration::from_secs(60))
         .map_err(|e| format!("CDP connect: {}", e))
+}
+
+/// Launch Chrome with --remote-debugging-port so mac-stats can connect. Chrome keeps running (process is detached).
+/// Returns Ok(()) if spawn succeeded; caller should wait 2–3s then try get_ws_url(port) / connect_cdp(port).
+#[cfg(target_os = "macos")]
+fn launch_chrome_on_port(port: u16) -> Result<(), String> {
+    let chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    Command::new(chrome_path)
+        .arg(format!("--remote-debugging-port={}", port))
+        .arg("--no-first-run")
+        .arg("--no-default-browser-check")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Launch Chrome: {} (is Chrome installed at {}?)", e, chrome_path))?;
+    info!("Browser agent [CDP]: launched Chrome on port {} (detached)", port);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn launch_chrome_on_port(port: u16) -> Result<(), String> {
+    let chrome_path = "google-chrome";
+    Command::new(chrome_path)
+        .arg(format!("--remote-debugging-port={}", port))
+        .arg("--no-first-run")
+        .arg("--no-default-browser-check")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Launch Chrome: {} (start Chrome manually with --remote-debugging-port={})", e, port))?;
+    info!("Browser agent [CDP]: launched Chrome on port {} (detached)", port);
+    Ok(())
+}
+
+/// Launch Chrome via headless_chrome crate (fallback when we cannot launch on a fixed port).
+fn launch_via_headless_chrome() -> Result<Browser, String> {
+    let b = Browser::default().map_err(|e| format!("Launch Chrome: {}", e))?;
+    for _ in 0..30 {
+        std::thread::sleep(Duration::from_millis(200));
+        let tabs = b.get_tabs().lock().map_err(|e| e.to_string())?;
+        if !tabs.is_empty() {
+            drop(tabs);
+            break;
+        }
+        drop(tabs);
+    }
+    Ok(b)
 }
 
 /// Navigate to URL and return the tab (first/only page tab). Caller must use tab.
@@ -315,6 +367,22 @@ fn browser_session() -> &'static Mutex<Option<(Browser, Instant)>> {
     BROWSER_SESSION.get_or_init(|| Mutex::new(None))
 }
 
+/// Clear the cached browser session so the next use will reconnect or relaunch. Call when a connection error is detected.
+fn clear_browser_session_on_error(err_msg: &str) {
+    if err_msg.contains("connection is closed")
+        || err_msg.contains("underlying connection")
+        || err_msg.contains("timeout while listening")
+        || err_msg.contains("Unable to make method calls")
+    {
+        if let Ok(mut guard) = browser_session().lock() {
+            if guard.is_some() {
+                *guard = None;
+                info!("Browser agent [CDP]: cleared session after connection error (next use will reconnect or relaunch)");
+            }
+        }
+    }
+}
+
 /// Get or create a browser; reuse if last use was within idle timeout, else close and create new. Updates last_used.
 fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     let timeout_secs = crate::config::Config::browser_idle_timeout_secs();
@@ -341,18 +409,20 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
         info!("Browser agent [CDP]: connecting to Chrome on port {}", port);
         connect_cdp(port)?
     } else {
-        info!("Browser agent [CDP]: no Chrome on port {}, launching", port);
-        let b = Browser::default().map_err(|e| format!("Launch Chrome: {}", e))?;
-        for _ in 0..30 {
-            std::thread::sleep(Duration::from_millis(200));
-            let tabs = b.get_tabs().lock().map_err(|e| e.to_string())?;
-            if !tabs.is_empty() {
-                drop(tabs);
-                break;
+        info!("Browser agent [CDP]: no Chrome on port {}, trying to launch Chrome on {}", port, port);
+        if launch_chrome_on_port(port).is_ok() {
+            std::thread::sleep(Duration::from_secs(3));
+            if get_ws_url(port).is_ok() {
+                info!("Browser agent [CDP]: connecting to Chrome on port {} (after launch)", port);
+                connect_cdp(port)?
+            } else {
+                warn!("Browser agent [CDP]: Chrome launch may have failed or not ready; falling back to headless_chrome launcher");
+                launch_via_headless_chrome()?
             }
-            drop(tabs);
+        } else {
+            info!("Browser agent [CDP]: could not launch Chrome on {}, using headless_chrome launcher", port);
+            launch_via_headless_chrome()?
         }
-        b
     };
     *browser_session().lock().map_err(|e| e.to_string())? = Some((browser.clone(), Instant::now()));
     Ok(browser)
@@ -389,13 +459,27 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
 pub fn navigate_and_get_state(url: &str) -> Result<String, String> {
     let url_normalized = normalize_url_for_screenshot(url);
     info!("Browser agent [CDP]: BROWSER_NAVIGATE: {}", url_normalized);
-    let (_, tab) = get_current_tab()?;
+    let (_, tab) = get_current_tab().map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
     tab.navigate_to(&url_normalized)
-        .map_err(|e| format!("Navigate: {}", e))?;
+        .map_err(|e| {
+            let s = format!("Navigate: {}", e);
+            clear_browser_session_on_error(&s);
+            s
+        })?;
     tab.wait_until_navigated()
-        .map_err(|e| format!("Wait navigated: {}", e))?;
+        .map_err(|e| {
+            let s = format!("Wait navigated: {}", e);
+            clear_browser_session_on_error(&s);
+            s
+        })?;
     std::thread::sleep(Duration::from_millis(1500));
-    let state = get_browser_state(&tab)?;
+    let state = get_browser_state(&tab).map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
     Ok(format_browser_state_for_llm(&state))
 }
 
@@ -404,7 +488,10 @@ pub fn click_by_index(index: u32) -> Result<String, String> {
     if index == 0 {
         return Err("BROWSER_CLICK index must be >= 1".to_string());
     }
-    let (_, tab) = get_current_tab()?;
+    let (_, tab) = get_current_tab().map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
     let click_js = format!(
         r#"
 (function() {{
@@ -429,7 +516,11 @@ pub fn click_by_index(index: u32) -> Result<String, String> {
 "#,
         index
     );
-    let result = tab.evaluate(&click_js, false).map_err(|e| format!("Click evaluate: {}", e))?;
+    let result = tab.evaluate(&click_js, false).map_err(|e| {
+        let s = format!("Click evaluate: {}", e);
+        clear_browser_session_on_error(&s);
+        s
+    })?;
     let msg = result
         .value
         .as_ref()
@@ -440,7 +531,10 @@ pub fn click_by_index(index: u32) -> Result<String, String> {
         return Err(format!("BROWSER_CLICK: {}", msg));
     }
     std::thread::sleep(Duration::from_millis(800));
-    let state = get_browser_state(&tab)?;
+    let state = get_browser_state(&tab).map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
     Ok(format_browser_state_for_llm(&state))
 }
 
@@ -449,7 +543,10 @@ pub fn input_by_index(index: u32, text: &str) -> Result<String, String> {
     if index == 0 {
         return Err("BROWSER_INPUT index must be >= 1".to_string());
     }
-    let (_, tab) = get_current_tab()?;
+    let (_, tab) = get_current_tab().map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
     let escaped = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
     let input_js = format!(
         r#"
@@ -485,7 +582,11 @@ pub fn input_by_index(index: u32, text: &str) -> Result<String, String> {
         escaped,
         escaped
     );
-    let result = tab.evaluate(&input_js, false).map_err(|e| format!("Input evaluate: {}", e))?;
+    let result = tab.evaluate(&input_js, false).map_err(|e| {
+        let s = format!("Input evaluate: {}", e);
+        clear_browser_session_on_error(&s);
+        s
+    })?;
     let msg = result
         .value
         .as_ref()
@@ -496,8 +597,73 @@ pub fn input_by_index(index: u32, text: &str) -> Result<String, String> {
         return Err(format!("BROWSER_INPUT: {}", msg));
     }
     std::thread::sleep(Duration::from_millis(300));
-    let state = get_browser_state(&tab)?;
+    let state = get_browser_state(&tab).map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
     Ok(format_browser_state_for_llm(&state))
+}
+
+/// Scroll the current page. Arg: "down", "up", "bottom", "top", or pixels (e.g. "500"). Returns updated browser state.
+pub fn scroll_page(arg: &str) -> Result<String, String> {
+    let (_, tab) = get_current_tab().map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
+    let arg = arg.trim().to_lowercase();
+    let scroll_js = if arg == "bottom" || arg == "end" {
+        "window.scrollTo(0, document.body.scrollHeight); 'scrolled to bottom'".to_string()
+    } else if arg == "top" || arg == "start" {
+        "window.scrollTo(0, 0); 'scrolled to top'".to_string()
+    } else if arg == "down" {
+        "window.scrollBy(0, 500); 'scrolled down 500px'".to_string()
+    } else if arg == "up" {
+        "window.scrollBy(0, -500); 'scrolled up 500px'".to_string()
+    } else if let Ok(pixels) = arg.parse::<i32>() {
+        let px = pixels.clamp(-10000, 10000);
+        if px >= 0 {
+            format!("window.scrollBy(0, {}); 'scrolled down {}px'", px, px)
+        } else {
+            format!("window.scrollBy(0, {}); 'scrolled up {}px'", px, -px)
+        }
+    } else {
+        "window.scrollBy(0, 500); 'scrolled down 500px'".to_string()
+    };
+    tab.evaluate(&scroll_js, false).map_err(|e| {
+        let s = format!("Scroll evaluate: {}", e);
+        clear_browser_session_on_error(&s);
+        s
+    })?;
+    std::thread::sleep(Duration::from_millis(400));
+    let state = get_browser_state(&tab).map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
+    Ok(format_browser_state_for_llm(&state))
+}
+
+/// Extract visible text from the current page (body innerText). Use after BROWSER_NAVIGATE/CLICK to get page content for the LLM.
+pub fn extract_page_text() -> Result<String, String> {
+    let (_, tab) = get_current_tab().map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
+    let text = get_page_text(&tab).map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
+    const MAX_EXTRACT_CHARS: usize = 30_000;
+    let out = if text.chars().count() > MAX_EXTRACT_CHARS {
+        format!(
+            "{}\n\n[Truncated: {} chars total; showing first {}.]",
+            text.chars().take(MAX_EXTRACT_CHARS).collect::<String>(),
+            text.chars().count(),
+            MAX_EXTRACT_CHARS
+        )
+    } else {
+        text
+    };
+    Ok(out)
 }
 
 /// Take a screenshot of the given URL using CDP (reuses session if within idle timeout, else connects or launches).
@@ -508,20 +674,31 @@ pub fn take_screenshot(url: &str) -> Result<PathBuf, String> {
     let url_normalized = normalize_url_for_screenshot(url);
     info!("Browser agent [CDP]: normalized URL: {}", url_normalized);
     let port = 9222u16;
-    let browser = get_or_create_browser(port)?;
-    let tabs = browser.get_tabs().lock().map_err(|e| e.to_string())?;
+    let browser = get_or_create_browser(port).map_err(|e| {
+        clear_browser_session_on_error(&e);
+        e
+    })?;
+    let tabs = browser.get_tabs().lock().map_err(|e| {
+        let s = e.to_string();
+        clear_browser_session_on_error(&s);
+        s
+    })?;
     let tab = tabs.first().cloned().ok_or_else(|| "No tab".to_string())?;
     drop(tabs);
     info!("Browser agent [CDP]: navigating to: {}", url_normalized);
     tab.navigate_to(&url_normalized)
         .map_err(|e| {
+            let s = format!("Navigate: {}", e);
             warn!("Browser agent [CDP]: navigate_to failed: {}", e);
-            format!("Navigate: {}", e)
+            clear_browser_session_on_error(&s);
+            s
         })?;
     tab.wait_until_navigated()
         .map_err(|e| {
+            let s = format!("Wait navigated: {}", e);
             warn!("Browser agent [CDP]: wait_until_navigated failed: {}", e);
-            format!("Wait navigated: {}", e)
+            clear_browser_session_on_error(&s);
+            s
         })?;
     let final_url = tab.get_url();
     info!("Browser agent [CDP]: navigated; final tab URL: {}", final_url);
@@ -539,7 +716,11 @@ pub fn take_screenshot(url: &str) -> Result<PathBuf, String> {
     std::thread::sleep(Duration::from_secs(2));
     let png_data = tab
         .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, true)
-        .map_err(|e| format!("Capture screenshot: {}", e))?;
+        .map_err(|e| {
+            let s = format!("Capture screenshot: {}", e);
+            clear_browser_session_on_error(&s);
+            s
+        })?;
     let dir = crate::config::Config::screenshots_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("Create screenshots dir: {}", e))?;
     let domain = url_normalized
