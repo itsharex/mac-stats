@@ -95,7 +95,11 @@ pub fn connect_cdp(port: u16) -> Result<Browser, String> {
 }
 
 /// Ensure Chrome is listening on port (launch if not). Call before retrying CDP when it failed.
+/// When headless was requested for this run, we do not launch visible Chrome — retry will use headless launcher instead.
 pub fn ensure_chrome_on_port(port: u16) {
+    if prefer_headless_for_run() {
+        return;
+    }
     if get_ws_url(port).is_ok() {
         return;
     }
@@ -426,6 +430,11 @@ static PREFER_HEADLESS: AtomicBool = AtomicBool::new(false);
 /// "headless" in question → true. Otherwise → false (visible Chrome).
 pub fn set_prefer_headless_for_run(prefer: bool) {
     PREFER_HEADLESS.store(prefer, Ordering::Relaxed);
+}
+
+/// Current headless preference. Used so we never launch visible Chrome when headless was requested (e.g. on BROWSER_NAVIGATE retry).
+pub fn prefer_headless_for_run() -> bool {
+    PREFER_HEADLESS.load(Ordering::Relaxed)
 }
 
 fn browser_session() -> &'static Mutex<Option<(Browser, Instant, bool)>> {

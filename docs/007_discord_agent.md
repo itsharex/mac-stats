@@ -227,3 +227,14 @@ If clicking **Save token** does nothing or the app stalls:
    - `Discord: configure_discord invoked (has_token=true, len=...)`
    - `Discord: Token stored (restart app to connect)`
    If these lines never appear, the click is not reaching the Rust command (e.g. invoke not available or handler not attached). If they appear and the UI still hangs, the hang is after the command (e.g. alert or refresh).
+
+## Testing the pipeline without Discord
+
+To run the same Ollama+tools pipeline as a Discord DM (planning, tool loop, **headless** browser) without sending a real message:
+
+```bash
+cd src-tauri
+./target/release/mac_stats -vv discord run-ollama 'Your question here'
+```
+
+Requires **Ollama** running and configured (env `OLLAMA_HOST` or `~/.mac-stats/.config.env`). The app ensures defaults and initializes the Ollama client before running. Reply and any attachment paths (e.g. screenshots under `~/.mac-stats/screenshots/`) are printed to stdout. Logs: `~/.mac-stats/debug.log` (e.g. `grep -E "headless|BROWSER_NAVIGATE|screenshot" ~/.mac-stats/debug.log`).

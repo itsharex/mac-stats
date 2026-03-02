@@ -20,7 +20,7 @@ Build a polished macOS (Apple Silicon) stats app (Rust + Tauri) that reads CPU/p
 - **After changes that affect runtime behavior** (Redmine, tasks, agent prompts, scheduler, Discord, Ollama tools): **restart mac-stats automatically** (e.g. `pkill -f mac_stats; cd src-tauri && cargo run --release`). Default verbosity is -vv so logs are visible. Then test (run a relevant task, trigger the feature, or check `~/.mac-stats/debug.log`). Do not assume it works without restart and verification. Do not skip the restart step.
 - Never install software on the host. Always ask before installing.
 - If you need to install software, use containers.  
-- No "god files": split into `metrics/`, `ffi/`, `ui/bridge/`, `cli/`, `logging/`.
+- No "god files": split into `metrics/`, `ffi/`, `ui/`, `config/`, `logging/`.
 - Prefer safe Rust. Minimize `unsafe` and isolate it in `ffi/` with strict audits.
 - Every `unsafe` block must have a comment explaining invariants and safety assumptions.
 

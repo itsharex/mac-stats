@@ -115,8 +115,8 @@ The app achieves low CPU usage through several key strategies:
 
 1. **Lazy Initialization**: CPU window created on-demand (not at startup)
 2. **Selective Resource Usage**:
-   - Temperature read every 15 seconds (only when window visible)
-   - Frequency read every 20 seconds (via expensive IOReport API)
+   - Temperature read every 20 seconds (only when window visible)
+   - Frequency read every 30 seconds (via expensive IOReport API)
    - SMC and IOReport subscriptions cleared when window closes
 3. **Efficient SMC Caching**:
    - M3 temperature keys cached after first discovery (avoids all_data() iteration)
@@ -196,7 +196,6 @@ The app achieves low CPU usage through several key strategies:
 - **Rust learner codebase**: May not follow all Rust best practices, but is functional and efficient
 - **Tauri limitations**: run_on_main_thread callbacks unreliable; click handler workaround used instead
 - **No test suite**: This is a simple monitoring app without formal tests
-- **Git status**: Currently on main branch with changes to agents.md, Cargo files, CSS, and tauri.conf.json (feat/theming branch)
 
 ## Testing and Debugging
 

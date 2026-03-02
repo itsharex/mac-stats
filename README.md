@@ -33,7 +33,7 @@ Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/ref
 - **Discord bot** — Optional; @mentions, DMs, having_fun mode (let your Mac chat with other bots when bored—yes, it gets weird); full Ollama + tools.
 - **Tasks & scheduler** — Task files under `~/.mac-stats/task/`; cron or one-shot; optional Discord reply.
 - **All local** — Models and data on your Mac; no cloud backend; works offline.
-- **Low CPU** — &lt;0.1% with window closed, ~3% with window open.
+- **Low CPU** — ~0.5% with window closed, &lt;1% with CPU window open.
 
 ---
 
