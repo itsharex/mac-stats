@@ -164,8 +164,10 @@ pub fn navigate(browser: &Browser, url: &str) -> Result<Arc<headless_chrome::Tab
     drop(tabs);
     tab.navigate_to(url)
         .map_err(|e| format!("Navigate to {}: {}", url, e))?;
-    tab.wait_until_navigated()
-        .map_err(|e| format!("Wait navigated: {}", e))?;
+    if let Err(e) = tab.wait_until_navigated() {
+        warn!("Browser agent: wait_until_navigated failed (SPA/hash nav?): {} — continuing after short delay", e);
+        std::thread::sleep(Duration::from_secs(2));
+    }
     info!("Browser agent: navigated to {}", url);
     Ok(tab)
 }
@@ -345,8 +347,10 @@ fn fetch_page_and_extract_phones_with_browser(browser: &Browser, url: &str) -> R
     info!("Browser agent: navigating to {}", url);
     tab.navigate_to(url)
         .map_err(|e| format!("Navigate: {}", e))?;
-    tab.wait_until_navigated()
-        .map_err(|e| format!("Wait navigated: {}", e))?;
+    if let Err(e) = tab.wait_until_navigated() {
+        warn!("Browser agent: wait_until_navigated failed (SPA?): {} — continuing after delay", e);
+        std::thread::sleep(Duration::from_secs(2));
+    }
     std::thread::sleep(Duration::from_secs(2));
     // Scroll to bottom to trigger footer/lazy content
     let _ = tab.evaluate("window.scrollTo(0, document.body.scrollHeight)", false);
@@ -380,6 +384,41 @@ fn fetch_page_and_extract_phones_with_browser(browser: &Browser, url: &str) -> R
 /// Cached browser session: (Browser, last_used, was_headless). Dropped when idle longer than browser_idle_timeout_secs.
 static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant, bool)>>> = OnceLock::new();
 
+/// Last page's element list (index, label) for status messages. Set after each navigate/click/input so "Clicking element 7 (Accept all)…" can show the label.
+static LAST_ELEMENT_LABELS: OnceLock<Mutex<Option<Vec<(u32, String)>>>> = OnceLock::new();
+
+fn last_element_labels() -> &'static Mutex<Option<Vec<(u32, String)>>> {
+    LAST_ELEMENT_LABELS.get_or_init(|| Mutex::new(None))
+}
+
+fn element_label_for_status(i: &Interactable) -> String {
+    let label = if !i.text.is_empty() {
+        i.text.as_str()
+    } else if let Some(ref p) = i.placeholder {
+        p.as_str()
+    } else if let Some(ref h) = i.href {
+        h.as_str()
+    } else {
+        "(no label)"
+    };
+    label.replace('\n', " ").chars().take(40).collect::<String>()
+}
+
+/// Set the last page's element labels (called after navigate/click/input). Used so status can show "Clicking element 7 (Accept all)…".
+pub(crate) fn set_last_element_labels(labels: Vec<(u32, String)>) {
+    if let Ok(mut g) = last_element_labels().lock() {
+        *g = Some(labels);
+    }
+}
+
+/// Get the label for element at 1-based index from the last cached page state. Used for status message context.
+pub fn get_last_element_label(index: u32) -> Option<String> {
+    last_element_labels()
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().and_then(|labels| labels.iter().find(|(i, _)| *i == index).map(|(_, l)| l.clone())))
+}
+
 /// User said "headless" → true (no visible window). User said "browser" or default → false (visible desktop app).
 static PREFER_HEADLESS: AtomicBool = AtomicBool::new(false);
 
@@ -397,8 +436,20 @@ fn is_connection_error(err_msg: &str) -> bool {
     err_msg.contains("connection is closed")
         || err_msg.contains("underlying connection")
         || err_msg.contains("timeout while listening")
+        || err_msg.contains("Transport loop")
         || err_msg.contains("Unable to make method calls")
 }
+
+/// True if the current tab is a new-tab or blank page (e.g. after session reset). Caller should ask user to BROWSER_NAVIGATE first.
+fn is_new_tab_or_blank(url: &str) -> bool {
+    let u = url.trim();
+    u.is_empty()
+        || u.eq_ignore_ascii_case("about:blank")
+        || u.starts_with("chrome://newtab")
+        || u == "chrome://newtab/"
+}
+
+const SESSION_RESET_MSG: &str = "Browser session was reset; current page is a new tab. Use BROWSER_NAVIGATE: <your target URL> first to reopen the page, then retry.";
 
 /// Clear the cached browser session so the next use will reconnect or relaunch. Call when a connection error is detected.
 fn clear_browser_session_on_error(err_msg: &str) {
@@ -529,17 +580,18 @@ fn navigate_and_get_state_inner(url: &str) -> Result<String, String> {
             clear_browser_session_on_error(&s);
             s
         })?;
-    tab.wait_until_navigated()
-        .map_err(|e| {
-            let s = format!("Wait navigated: {}", e);
-            clear_browser_session_on_error(&s);
-            s
-        })?;
+    if let Err(e) = tab.wait_until_navigated() {
+        warn!("Browser agent [CDP]: wait_until_navigated failed (SPA/hash?): {} — continuing after delay", e);
+        std::thread::sleep(Duration::from_secs(2));
+    }
     std::thread::sleep(Duration::from_millis(1500));
     let state = get_browser_state(&tab).map_err(|e| {
         clear_browser_session_on_error(&e);
         e
     })?;
+    set_last_element_labels(
+        state.interactables.iter().map(|i| (i.index, element_label_for_status(i))).collect(),
+    );
     Ok(format_browser_state_for_llm(&state))
 }
 
@@ -556,6 +608,9 @@ fn click_by_index_inner(index: u32) -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    if is_new_tab_or_blank(tab.get_url().as_str()) {
+        return Err(SESSION_RESET_MSG.to_string());
+    }
     let click_js = format!(
         r#"
 (function() {{
@@ -599,6 +654,9 @@ fn click_by_index_inner(index: u32) -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    set_last_element_labels(
+        state.interactables.iter().map(|i| (i.index, element_label_for_status(i))).collect(),
+    );
     Ok(format_browser_state_for_llm(&state))
 }
 
@@ -615,6 +673,9 @@ fn input_by_index_inner(index: u32, text: &str) -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    if is_new_tab_or_blank(tab.get_url().as_str()) {
+        return Err(SESSION_RESET_MSG.to_string());
+    }
     let escaped = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
     let input_js = format!(
         r#"
@@ -669,6 +730,9 @@ fn input_by_index_inner(index: u32, text: &str) -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    set_last_element_labels(
+        state.interactables.iter().map(|i| (i.index, element_label_for_status(i))).collect(),
+    );
     Ok(format_browser_state_for_llm(&state))
 }
 
@@ -682,6 +746,9 @@ fn scroll_page_inner(arg: &str) -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    if is_new_tab_or_blank(tab.get_url().as_str()) {
+        return Err(SESSION_RESET_MSG.to_string());
+    }
     let arg = arg.trim().to_lowercase();
     let scroll_js = if arg == "bottom" || arg == "end" {
         "window.scrollTo(0, document.body.scrollHeight); 'scrolled to bottom'".to_string()
@@ -725,6 +792,9 @@ fn search_page_text_inner(pattern: &str) -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    if is_new_tab_or_blank(tab.get_url().as_str()) {
+        return Err(SESSION_RESET_MSG.to_string());
+    }
     // Escape for JS string: backslash and quotes
     let pattern_escaped = pattern
         .replace('\\', "\\\\")
@@ -843,6 +913,9 @@ fn extract_page_text_inner() -> Result<String, String> {
         clear_browser_session_on_error(&e);
         e
     })?;
+    if is_new_tab_or_blank(tab.get_url().as_str()) {
+        return Err(SESSION_RESET_MSG.to_string());
+    }
     let text = get_page_text(&tab).map_err(|e| {
         clear_browser_session_on_error(&e);
         e
@@ -874,6 +947,9 @@ fn take_screenshot_current_page_inner() -> Result<PathBuf, String> {
         e
     })?;
     let final_url = tab.get_url();
+    if is_new_tab_or_blank(final_url.as_str()) {
+        return Err(SESSION_RESET_MSG.to_string());
+    }
     info!("Browser agent [CDP]: screenshotting current page: {}", final_url);
     std::thread::sleep(Duration::from_secs(1));
     let png_data = tab
@@ -929,13 +1005,10 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
             clear_browser_session_on_error(&s);
             s
         })?;
-    tab.wait_until_navigated()
-        .map_err(|e| {
-            let s = format!("Wait navigated: {}", e);
-            warn!("Browser agent [CDP]: wait_until_navigated failed: {}", e);
-            clear_browser_session_on_error(&s);
-            s
-        })?;
+    if let Err(e) = tab.wait_until_navigated() {
+        warn!("Browser agent [CDP]: wait_until_navigated failed (SPA/hash?): {} — continuing after delay", e);
+        std::thread::sleep(Duration::from_secs(2));
+    }
     let final_url = tab.get_url();
     info!("Browser agent [CDP]: navigated; final tab URL: {}", final_url);
     if let Ok(title) = tab.evaluate("document.title", false) {

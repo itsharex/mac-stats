@@ -128,6 +128,25 @@ fn parse_html(html: &str, base_url: &str) -> (Vec<HttpInteractable>, String) {
     (interactables, body_text)
 }
 
+fn http_interactable_label(i: &HttpInteractable) -> String {
+    let s = if i.text.trim().is_empty() {
+        i.name.as_deref().unwrap_or("")
+    } else {
+        i.text.trim()
+    };
+    let s = if s.is_empty() {
+        i.href.as_deref().unwrap_or("link")
+    } else {
+        s
+    };
+    let max = 50;
+    if s.len() > max {
+        format!("{}…", &s[..max.saturating_sub(1)])
+    } else {
+        s.to_string()
+    }
+}
+
 fn format_http_state_for_llm(url: &str, interactables: &[HttpInteractable]) -> String {
     let mut s = format!("Current page (HTTP): {}\n", url);
     s.push_str("Elements:\n");
@@ -174,6 +193,9 @@ pub fn navigate_http(url: &str) -> Result<String, String> {
     state.body_text = body_text;
     state.form_values.clear();
     drop(state);
+    super::set_last_element_labels(
+        interactables.iter().map(|i| (i.index, http_interactable_label(i))).collect(),
+    );
     Ok(format_http_state_for_llm(&url, &interactables))
 }
 
@@ -229,6 +251,9 @@ fn submit_http_form(_interactables: &[HttpInteractable], _current_url: &str) -> 
     state.body_text = body_text;
     state.form_values.clear();
     drop(state);
+    super::set_last_element_labels(
+        interactables.iter().map(|i| (i.index, http_interactable_label(i))).collect(),
+    );
     Ok(format_http_state_for_llm(&target, &interactables))
 }
 

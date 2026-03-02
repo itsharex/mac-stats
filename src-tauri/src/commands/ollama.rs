@@ -1470,11 +1470,13 @@ fn first_image_as_base64(paths: &[PathBuf]) -> Option<String> {
 /// One short Ollama call to check if we fully satisfied the user's request.
 /// Returns (satisfied, optional reason when not satisfied).
 /// When we have image attachment(s) and a local vision model, sends the first image and asks "Does this image satisfy the request?"; otherwise text-only verification.
+/// When page_content_from_browser is Some (e.g. from BROWSER_EXTRACT), it is included so the verifier can check requested text against JS-rendered content (SPAs).
 async fn verify_completion(
     question: &str,
     response_content: &str,
     attachment_paths: &[PathBuf],
     success_criteria: Option<&[String]>,
+    page_content_from_browser: Option<&str>,
     model_override: Option<String>,
     options_override: Option<crate::ollama::ChatOptions>,
 ) -> Result<(bool, Option<String>), String> {
@@ -1487,11 +1489,22 @@ async fn verify_completion(
         .filter(|c| !c.is_empty())
         .map(|c| format!("Success criteria (from user request):\n{}\n\n", c.join("\n")))
         .unwrap_or_default();
+    let browser_content_block = page_content_from_browser
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| {
+            let truncated = s.chars().take(8000).collect::<String>();
+            format!(
+                "Rendered page text from browser (JS-rendered; use this to check if requested text appears on the page):\n\n{}\n\n",
+                truncated
+            )
+        })
+        .unwrap_or_default();
     let user_text = format!(
-        "Original request: {}\n\n{}What we did (summary): {}\n\nAttachments sent: {}.\n\nDid we fully satisfy the request (e.g. screenshot taken and attached if asked)? Reply YES or NO. If NO, on the next line add one sentence: what's missing.",
+        "Original request: {}\n\n{}What we did (summary): {}\n\n{}Attachments sent: {}.\n\nDid we fully satisfy the request (e.g. screenshot taken and attached if asked)? Reply YES or NO. If NO, on the next line add one sentence: what's missing.",
         question.chars().take(500).collect::<String>(),
         criteria_block,
         response_summary,
+        browser_content_block,
         if has_attachments { "yes" } else { "no" }
     );
 
@@ -1715,6 +1728,8 @@ pub fn answer_with_ollama_and_fetch(
     } else {
         info!("Agent router: starting (question: {})", q_preview);
     }
+    // Discord message limit 2000; wrapper ~50 chars → leave room for full question
+    const DISCORD_STATUS_QUESTION_MAX: usize = 1940;
     let truncate_status = |s: &str, max: usize| {
         let taken: String = s.chars().take(max).collect();
         if s.chars().count() > max {
@@ -1725,7 +1740,7 @@ pub fn answer_with_ollama_and_fetch(
     };
     send_status(&format!(
         "Asking Ollama for a plan (sending your question: \"{}\")…",
-        truncate_status(question, 50)
+        truncate_status(question, DISCORD_STATUS_QUESTION_MAX)
     ));
 
     // Criteria at start: extract 1–3 success criteria to feed into end verification
@@ -2092,6 +2107,8 @@ pub fn answer_with_ollama_and_fetch(
     let mut current_task_path: Option<std::path::PathBuf> = None;
     // When the model calls DONE we break the tool loop; strip the DONE line from the final reply.
     let mut exited_via_done: bool = false;
+    // Last BROWSER_EXTRACT result (JS-rendered page text) for completion verification so we check against real content, not FETCH_URL HTML.
+    let mut last_browser_extract: Option<String> = None;
 
     while tool_count < max_tool_iterations {
         let tools = parse_all_tools_from_response(&response_content);
@@ -2232,7 +2249,7 @@ pub fn answer_with_ollama_and_fetch(
             }
             "BROWSER_NAVIGATE" => {
                 let url_arg = arg.trim().to_string();
-                send_status(&format!("🧭 Navigating to {}…", crate::logging::ellipse(&url_arg, 50)));
+                send_status(&format!("🧭 Navigating to {}…", url_arg));
                 if url_arg.is_empty() {
                     "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
                 } else {
@@ -2271,8 +2288,19 @@ pub fn answer_with_ollama_and_fetch(
             }
             "BROWSER_CLICK" => {
                 let index_arg = arg.trim().split_whitespace().next().unwrap_or("").trim();
-                send_status(&format!("🖱️ Clicking element {}…", if index_arg.is_empty() { "?" } else { index_arg }));
                 let index = index_arg.parse::<u32>().ok();
+                let status_msg = match index {
+                    Some(idx) => {
+                        let label = crate::browser_agent::get_last_element_label(idx);
+                        if let Some(l) = label {
+                            format!("🖱️ Clicking element {} ({})…", idx, crate::logging::ellipse(&l, 30))
+                        } else {
+                            format!("🖱️ Clicking element {}…", idx)
+                        }
+                    }
+                    None => format!("🖱️ Clicking element {}…", if index_arg.is_empty() { "?" } else { index_arg }),
+                };
+                send_status(&status_msg);
                 match index {
                     Some(idx) => {
                         info!("BROWSER_CLICK: index {}", idx);
@@ -3304,6 +3332,9 @@ pub fn answer_with_ollama_and_fetch(
         if tool != "TASK_APPEND" && tool != "RUN_CMD" {
             last_run_cmd_raw_output = None;
         }
+        if tool == "BROWSER_EXTRACT" && !user_message.is_empty() && !user_message.contains("BROWSER_EXTRACT failed") {
+            last_browser_extract = Some(user_message.clone());
+        }
 
         tool_results.push(user_message);
         }
@@ -3428,6 +3459,7 @@ pub fn answer_with_ollama_and_fetch(
         &response_content,
         &attachment_paths,
         success_criteria.as_deref(),
+        last_browser_extract.as_deref(),
         model_override.clone(),
         options_override.clone(),
     )

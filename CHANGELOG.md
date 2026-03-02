@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(No changes yet.)
+### Changed
+- **Completion verification uses browser-rendered content** — When the model ran BROWSER_EXTRACT, the last extracted page text (JS-rendered) is now passed into completion verification so the verifier can check requested text (e.g. "rhythem") against real page content instead of FETCH_URL HTML (SPA shell). Fixes false "text not found" on SPAs like amvara.de.
+- **CDP navigation wait non-fatal for SPAs** — If `wait_until_navigated` fails (e.g. hash-only or in-app navigation), we log a warning, sleep 2s, and continue instead of failing. Avoids "Wait navigated: The event waited for never came" on hash-routed sites; BROWSER_NAVIGATE no longer falls back to HTTP unnecessarily.
+- **Session reset recovery** — When the CDP session is lost (timeout, Transport loop, TargetDestroyed) the next action may run in a new browser on `chrome://newtab/`. We now detect new-tab/blank and return a clear error: "Browser session was reset; current page is a new tab. Use BROWSER_NAVIGATE: <your target URL> first to reopen the page, then retry." so the model can re-navigate instead of clicking/screenshotting the wrong page. Applied to BROWSER_CLICK, BROWSER_INPUT, BROWSER_SCREENSHOT (current), BROWSER_EXTRACT, BROWSER_SCROLL, BROWSER_SEARCH_PAGE. Also treat "Transport loop" timeout as a connection error so we clear and retry.
 
 ## [0.1.24] - 2026-03-02
 

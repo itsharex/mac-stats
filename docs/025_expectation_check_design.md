@@ -57,6 +57,15 @@ When the bot gives you a shrug or a half-baked answer, you don’t have to stick
 | Vision verification (screenshot tasks) | **Done** | When we have image attachment(s) and a local vision model is available, we send the first image (base64) and ask "Does this image satisfy the request?" Fallback: text-only. |
 | Status messages (reasoning + emojis) | **Done** | In Discord/UI, tool-run status shows *what* we're doing: 🧭 Navigating to \<url\>…, 🖱️ Clicking element \<n\>…, 📜 Scrolling \<direction\>…, ✍️ Typing into element \<n\>…, 📸 screenshot, 🌐 fetch/search, 🔍 page search, 📄 extract. Long URLs/queries truncated. |
 | Optional: “done” tool (browser-use style) | **Done** | Model can end with **DONE: success** or **DONE: no**; we exit the tool loop, strip the DONE line from the reply, then run completion verification as usual. Described in agent base tools and planning prompt. |
+| Verification with browser-rendered content | **Done** | When the model ran BROWSER_EXTRACT, the last extracted page text (JS-rendered) is passed into `verify_completion()` so the verifier checks requested text against real page content, not FETCH_URL HTML. Fixes false text not found on SPAs. |
+| CDP navigation wait non-fatal for SPAs | **Done** | If `wait_until_navigated` fails (hash or in-app navigation), we log a warning, sleep 2s, and continue. BROWSER_NAVIGATE no longer fails on hash-routed sites. |
+
+---
+
+## Browser / SPA behaviour
+
+- **Verification:** For find X and screenshot on SPAs, FETCH_URL only returns the initial HTML shell; the requested text is often in JS-rendered content. We pass the last BROWSER_EXTRACT result (when present) into completion verification so the verifier can answer using the real visible text. Reduces false NO when the screenshot was correct but verification had only static HTML.
+- **Navigation:** Hash or in-app navigations (e.g. #/about, #/about-night) often do not fire the CDP navigated event. We treat wait_until_navigated failure as non-fatal: warn, short delay, then get state/screenshot anyway so BROWSER_NAVIGATE succeeds on hash-routed sites.
 
 ---
 
