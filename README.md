@@ -31,6 +31,7 @@ No subscription. No lock-in. Works offline for chat and monitoring.
 - **Scheduler** — Cron or one-shot (`~/.mac-stats/schedules.json`); tasks through Ollama; optional Discord reply channel.
 - **MCP** — Tools from any MCP server (HTTP/SSE or stdio).
 - **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Editable prompts in `~/.mac-stats/prompts/` and `soul.md`.
+- **cursor-agent** — When the [Cursor Agent CLI](https://cursor.com) is on PATH, agents can delegate coding tasks via **CURSOR_AGENT:** or **RUN_CMD: cursor-agent**; see [docs/012_cursor_agent_tasks.md](docs/012_cursor_agent_tasks.md).
 - **PYTHON_SCRIPT** — Ollama can run Python under `~/.mac-stats/scripts/` (disable with `ALLOW_PYTHON_SCRIPT=0`).
 
 ### UI

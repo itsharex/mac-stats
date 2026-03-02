@@ -19,6 +19,10 @@ You can ask for and use these by replying with **exactly one line**: `COMMAND: <
 
 Paths for tasks must be under ~/.mac-stats/task/. We run the command and give you the result; then you can reply or invoke another.
 
+## Implementation tasks: prefer CURSOR_AGENT
+
+For task files that describe **code changes or implementation work** (implement, refactor, fix, add feature): use **CURSOR_AGENT:** `<prompt>` with the task description, then TASK_APPEND the result and TASK_STATUS finished. Prefer CURSOR_AGENT over RUN_CMD for coding tasks when cursor-agent is available.
+
 ## Cursor-agent tasks (create + assign)
 
 When the user asks to **create a task that uses cursor-agent** (e.g. "organize ~/tmp", "use cursor-agent to clean up X"):

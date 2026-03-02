@@ -1,8 +1,9 @@
 //! CDP (Chrome DevTools Protocol) browser agent.
 //!
 //! Connects to Chrome via WebSocket (user runs Chrome with --remote-debugging-port=9222),
-//! navigates, gets page content, extracts data. Phase 1 of light browser-use style automation.
-//! The browser session is kept alive and only closed after Config::browser_idle_timeout_secs() of inactivity (default 1 hour).
+//! navigates, gets page content, extracts data. Supports BROWSER_NAVIGATE / BROWSER_CLICK /
+//! BROWSER_INPUT (index-based state, browser-use style). The browser session is kept alive
+//! and only closed after Config::browser_idle_timeout_secs() of inactivity (default 1 hour).
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -12,8 +13,45 @@ use std::time::{Duration, Instant};
 use headless_chrome::Browser;
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use regex::Regex;
+use serde::Deserialize;
 use std::path::PathBuf;
 use tracing::{info, warn};
+
+// ---------------------------------------------------------------------------
+// Browser state for BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_INPUT
+// ---------------------------------------------------------------------------
+
+/// One interactive element (link, button, input) with 1-based index for the LLM.
+#[derive(Debug, Clone)]
+pub struct Interactable {
+    pub index: u32,
+    pub tag: String,
+    pub text: String,
+    pub href: Option<String>,
+    pub placeholder: Option<String>,
+    pub input_type: Option<String>,
+}
+
+/// Current page state: URL, title, and numbered list of interactables.
+#[derive(Debug, Clone)]
+pub struct BrowserState {
+    pub current_url: String,
+    pub page_title: Option<String>,
+    pub interactables: Vec<Interactable>,
+}
+
+/// Raw row returned from JS get_interactables snippet (before assigning index).
+#[derive(Debug, Deserialize)]
+struct InteractableRow {
+    tag: String,
+    text: String,
+    #[serde(default)]
+    href: Option<String>,
+    #[serde(default)]
+    placeholder: Option<String>,
+    #[serde(default)]
+    input_type: Option<String>,
+}
 
 /// Fetch WebSocket debugger URL from Chrome running with --remote-debugging-port.
 fn get_ws_url(port: u16) -> Result<String, String> {
@@ -79,6 +117,104 @@ pub fn get_page_text(tab: &headless_chrome::Tab) -> Result<String, String> {
 /// Get full HTML of the page (for tel: links etc.).
 pub fn get_page_html(tab: &headless_chrome::Tab) -> Result<String, String> {
     tab.get_content().map_err(|e| format!("Get content: {}", e))
+}
+
+/// JS snippet that returns JSON array of visible interactive elements (tag, text, href, placeholder, input_type).
+const GET_INTERACTABLES_JS: &str = r#"
+(function() {
+  var sel = 'a, button, input, textarea, [role="button"], [onclick], [type="submit"]';
+  var nodes = document.querySelectorAll(sel);
+  var out = [];
+  for (var i = 0; i < nodes.length; i++) {
+    var el = nodes[i];
+    var rect = el.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) continue;
+    var style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+    var tag = el.tagName.toLowerCase();
+    var text = (el.innerText || el.textContent || el.value || el.placeholder || '').trim().slice(0, 200);
+    var href = el.href ? el.href : null;
+    var placeholder = el.placeholder ? el.placeholder : null;
+    var inputType = el.type ? el.type : null;
+    out.push({ tag: tag, text: text, href: href, placeholder: placeholder, input_type: inputType });
+  }
+  return JSON.stringify(out);
+})()
+"#;
+
+/// Get visible interactive elements from the page via JS. Returns 1-based indices. Used for BROWSER_NAVIGATE state.
+pub fn get_interactables(tab: &headless_chrome::Tab) -> Result<Vec<Interactable>, String> {
+    let result = tab
+        .evaluate(GET_INTERACTABLES_JS, false)
+        .map_err(|e| format!("Evaluate get_interactables: {}", e))?;
+    let json_str = result
+        .value
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "get_interactables JS did not return a string".to_string())?;
+    let rows: Vec<InteractableRow> =
+        serde_json::from_str(json_str).map_err(|e| format!("Parse interactables JSON: {}", e))?;
+    let interactables = rows
+        .into_iter()
+        .enumerate()
+        .map(|(i, row)| Interactable {
+            index: (i + 1) as u32,
+            tag: row.tag,
+            text: row.text,
+            href: row.href,
+            placeholder: row.placeholder,
+            input_type: row.input_type,
+        })
+        .collect();
+    Ok(interactables)
+}
+
+/// Get current browser state (URL, title, interactables). Call after navigate or after click/input.
+pub fn get_browser_state(tab: &headless_chrome::Tab) -> Result<BrowserState, String> {
+    let current_url = tab.get_url();
+    let page_title = tab
+        .evaluate("document.title", false)
+        .ok()
+        .and_then(|r| r.value.as_ref().and_then(|v| v.as_str().map(String::from)));
+    let interactables = get_interactables(tab)?;
+    Ok(BrowserState {
+        current_url,
+        page_title,
+        interactables,
+    })
+}
+
+/// Format BrowserState as a string for the LLM (Current page: URL, Elements: [1] ...).
+pub fn format_browser_state_for_llm(state: &BrowserState) -> String {
+    let mut s = format!("Current page: {}\n", state.current_url);
+    if let Some(ref t) = state.page_title {
+        s.push_str(&format!("Title: {}\n", t));
+    }
+    s.push_str("Elements:\n");
+    for i in &state.interactables {
+        let kind = if i.tag == "a" {
+            "link"
+        } else if i.tag == "input" || i.tag == "textarea" {
+            "input"
+        } else {
+            "button"
+        };
+        let label = if !i.text.is_empty() {
+            i.text.as_str()
+        } else if let Some(ref p) = i.placeholder {
+            p.as_str()
+        } else if let Some(ref h) = i.href {
+            h.as_str()
+        } else {
+            "(no label)"
+        };
+        let label_escaped = label.replace('\n', " ").chars().take(80).collect::<String>();
+        s.push_str(&format!("[{}] {} '{}'\n", i.index, kind, label_escaped));
+    }
+    if state.interactables.is_empty() {
+        s.push_str("(no interactive elements found)\n");
+    }
+    s
 }
 
 /// Extract telephone numbers from text. German-style: +49..., 0..., etc.
@@ -233,6 +369,135 @@ fn normalize_url_for_screenshot(url: &str) -> String {
     } else {
         u.to_string()
     }
+}
+
+const PORT: u16 = 9222;
+
+/// Get the current tab from BROWSER_SESSION. Fails if no browser or no tab.
+fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
+    let browser = get_or_create_browser(PORT)?;
+    let tabs = browser.get_tabs().lock().map_err(|e| e.to_string())?;
+    let tab = tabs
+        .first()
+        .cloned()
+        .ok_or_else(|| "No tab in browser".to_string())?;
+    drop(tabs);
+    Ok((browser, tab))
+}
+
+/// Navigate to URL and return formatted browser state for the LLM. Used by BROWSER_NAVIGATE.
+pub fn navigate_and_get_state(url: &str) -> Result<String, String> {
+    let url_normalized = normalize_url_for_screenshot(url);
+    info!("Browser agent [CDP]: BROWSER_NAVIGATE: {}", url_normalized);
+    let (_, tab) = get_current_tab()?;
+    tab.navigate_to(&url_normalized)
+        .map_err(|e| format!("Navigate: {}", e))?;
+    tab.wait_until_navigated()
+        .map_err(|e| format!("Wait navigated: {}", e))?;
+    std::thread::sleep(Duration::from_millis(1500));
+    let state = get_browser_state(&tab)?;
+    Ok(format_browser_state_for_llm(&state))
+}
+
+/// Click the Nth interactive element (1-based index). Returns updated browser state string.
+pub fn click_by_index(index: u32) -> Result<String, String> {
+    if index == 0 {
+        return Err("BROWSER_CLICK index must be >= 1".to_string());
+    }
+    let (_, tab) = get_current_tab()?;
+    let click_js = format!(
+        r#"
+(function() {{
+  var sel = 'a, button, input, textarea, [role="button"], [onclick], [type="submit"]';
+  var nodes = document.querySelectorAll(sel);
+  var visible = [];
+  for (var i = 0; i < nodes.length; i++) {{
+    var el = nodes[i];
+    var rect = el.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) continue;
+    var style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+    visible.push(el);
+  }}
+  var idx = {};
+  if (idx >= 1 && idx <= visible.length) {{
+    visible[idx - 1].click();
+    return 'clicked';
+  }}
+  return 'index out of range (max ' + visible.length + ')';
+}})()
+"#,
+        index
+    );
+    let result = tab.evaluate(&click_js, false).map_err(|e| format!("Click evaluate: {}", e))?;
+    let msg = result
+        .value
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    if msg != "clicked" {
+        return Err(format!("BROWSER_CLICK: {}", msg));
+    }
+    std::thread::sleep(Duration::from_millis(800));
+    let state = get_browser_state(&tab)?;
+    Ok(format_browser_state_for_llm(&state))
+}
+
+/// Type text into the Nth interactive element (1-based index). Returns updated browser state string.
+pub fn input_by_index(index: u32, text: &str) -> Result<String, String> {
+    if index == 0 {
+        return Err("BROWSER_INPUT index must be >= 1".to_string());
+    }
+    let (_, tab) = get_current_tab()?;
+    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    let input_js = format!(
+        r#"
+(function() {{
+  var sel = 'a, button, input, textarea, [role="button"], [onclick], [type="submit"]';
+  var nodes = document.querySelectorAll(sel);
+  var visible = [];
+  for (var i = 0; i < nodes.length; i++) {{
+    var el = nodes[i];
+    var rect = el.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) continue;
+    var style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+    visible.push(el);
+  }}
+  var idx = {};
+  if (idx < 1 || idx > visible.length) return 'index out of range (max ' + visible.length + ')';
+  var el = visible[idx - 1];
+  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable) {{
+    el.focus();
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {{
+      el.value = "{}";
+      el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    }} else {{
+      el.innerText = "{}";
+    }}
+    return 'typed';
+  }}
+  return 'element at index is not an input or textarea';
+}})()
+"#,
+        index,
+        escaped,
+        escaped
+    );
+    let result = tab.evaluate(&input_js, false).map_err(|e| format!("Input evaluate: {}", e))?;
+    let msg = result
+        .value
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    if msg != "typed" {
+        return Err(format!("BROWSER_INPUT: {}", msg));
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let state = get_browser_state(&tab)?;
+    Ok(format_browser_state_for_llm(&state))
 }
 
 /// Take a screenshot of the given URL using CDP (reuses session if within idle timeout, else connects or launches).

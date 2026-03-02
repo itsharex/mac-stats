@@ -50,7 +50,7 @@ To make that more likely:
   In `src-tauri/src/task/runner.rs`, extend the `question` to mention that for coding tasks (implement, refactor, fix, add feature) the agent may use **CURSOR_AGENT:** `<prompt>` to delegate to the Cursor Agent CLI, then TASK_APPEND the result and TASK_STATUS finished.
 
 - **Option B – Orchestrator skill**  
-  In `~/.mac-stats/agents/agent-000/skill.md` (or your orchestrator’s skill), add a short rule: for task files that describe code changes or implementation work, use CURSOR_AGENT with the task description, then update the task with the result and set status to finished.
+  The default orchestrator skill (`src-tauri/defaults/agents/agent-000/skill.md`, synced to `~/.mac-stats/agents/agent-000/skill.md`) now includes a section **Implementation tasks: prefer CURSOR_AGENT** recommending CURSOR_AGENT for code changes or implementation work. If you use a custom orchestrator skill, add the same short rule: for task files that describe code changes or implementation work, use CURSOR_AGENT with the task description, then update the task with the result and set status to finished.
 
 - **Option C – Task file convention**  
   In task content, include a line like “Implement using Cursor Agent” or “Use CURSOR_AGENT for this.” The model will then see the hint in the task text.

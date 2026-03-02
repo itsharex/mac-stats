@@ -1,7 +1,7 @@
 [package]
 name = "mac_stats"
 version = "0.1.22"
-description = "macOS system monitor (Rust + Tauri): menu bar metrics (CPU/GPU/RAM/disk/temperature), process list, website monitoring and alerts, Ollama-powered AI (chat, Discord bot, scheduler, MCP, task system). Built for minimal CPU overhead."
+description = "Local AI agent for macOS (Rust + Tauri): Ollama chat, Discord bot, task runner, scheduler, MCP—all on your Mac. No cloud, no telemetry. Menu bar shows CPU/GPU/RAM/disk when you need it; website monitoring and alerts. Built for minimal CPU overhead."
 authors = ["raro42"]
 edition = "2021"
 default-run = "mac_stats"
