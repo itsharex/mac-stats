@@ -31,4 +31,4 @@ BROWSER_NAVIGATE, BROWSER_CLICK, BROWSER_INPUT, and BROWSER_SCREENSHOT use **Chr
 | Chrome not installed | Cannot launch; you must install Chrome and/or start it manually on 9222. |
 | Connection dies (timeout, crash) | Session is cleared on error; next use will reconnect to 9222 or relaunch. |
 
-See also: `docs/026_light_browser_agent_plan.md`, `src-tauri/src/bin/test_cdp_browser.rs`.
+See also: `docs/026_light_browser_agent_plan_DONE.md`, `src-tauri/src/bin/test_cdp_browser.rs`.

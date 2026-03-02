@@ -2,7 +2,7 @@
 
 ## Context
 
-- **025** (`docs/025_expectation_check_design.md`): Expectation check (criteria at start, verification at end, heuristic, escalation, retry on NO, DONE tool, status messages with reasoning + emojis).
+- **025** (`docs/025_expectation_check_design_DONE.md`): Expectation check (criteria at start, verification at end, heuristic, escalation, retry on NO, DONE tool, status messages with reasoning + emojis).
 - **Observed**: Many browser windows popping up again and again during a run; status shows "🖱️ Clicking element 7…" with no indication *what* element 7 is (e.g. "Accept all", "Search", link text).
 
 ## Goals

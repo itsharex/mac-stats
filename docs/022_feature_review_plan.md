@@ -228,4 +228,4 @@ After the initial feature review and merge to main, the following changes were m
 | F15 | **Tool parsing improvements** — strip numbered-list prefixes, multi-RECOMMEND, arg truncation | `commands/ollama.rs` | Low |
 | F16 | **Empty response fallback** — use raw tool output when Ollama returns empty | `commands/ollama.rs` | Low |
 
-See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts.md` for details.
+See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for details.

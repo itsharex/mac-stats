@@ -14,4 +14,4 @@
 - **TASK_CREATE**: Rejects when topic looks like an existing task filename; sanitizes id (strips quotes/slashes). Deduplication checks `## Topic:` and `## Id:` in existing files.
 - **TASK_APPEND / TASK_CREATE parsing**: Multi-line content is preserved (all lines until the next tool line), so research and long text are stored completely in the task file.
 - **Having_fun flow**: Before replying, the app fetches the latest messages from Discord (after the bot's last response) and uses those as context for better flow. Falls back to the in-memory buffer if the API fetch fails.
-- **Docs and memory**: All MD files and `~/.mac-stats/agents/memory.md` updated to document the new task naming. See `docs/013_task_agent.md`, `docs/021_task_system_fix_feb2026.md`, `docs/022_feature_review_plan.md`.
+- **Docs and memory**: All MD files and `~/.mac-stats/agents/memory.md` updated to document the new task naming. See `docs/013_task_agent.md`, `docs/021_task_system_fix_feb2026_DONE.md`, `docs/022_feature_review_plan.md`.

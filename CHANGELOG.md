@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Docs** — Implemented plan/design docs renamed with `_DONE` suffix: 021_task_system_fix_feb2026, 023_externalized_prompts, 025_expectation_check_design, 026_light_browser_agent_plan, 028_discord_attachments, 030_agent_model_assignment_plan, 031_orchestrator_tool_first_proposal, 032_tool_first_implementation_plan, session_compaction_and_memory_plan. All references updated in README, CHANGELOG, and other docs.
 - **README** — Single Install section (DMG + build + Gatekeeper note). Deduplicated CPU/GPU/RAM and low-CPU stats (one place: At a glance). Commands: binary vs app name note, repo-root hint for `./run dev`. Escalation and Development shortened; link to agent_workflow for Coder workflow.
 
 ## [0.1.25] - 2026-03-02

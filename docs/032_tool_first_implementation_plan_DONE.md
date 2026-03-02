@@ -2,7 +2,7 @@
 
 ## Status: core fix done, small follow-ups optional
 
-The fix for “orchestrator recommends AGENT instead of tool” is **implemented** for the minimal scope (proposal [031](031_orchestrator_tool_first_proposal.md)).
+The fix for “orchestrator recommends AGENT instead of tool” is **implemented** for the minimal scope (proposal [031](031_orchestrator_tool_first_proposal_DONE.md)).
 
 ---
 
@@ -12,7 +12,7 @@ The fix for “orchestrator recommends AGENT instead of tool” is **implemented
 |------|------|--------|
 | 1 | **Screenshot + URL pre-route** | `src-tauri/src/commands/ollama.rs`: `extract_url_from_question()`, `extract_screenshot_recommendation()`, and pre-routing runs screenshot first, then RUN_CMD, then REDMINE. Requests like “Use Chrome, goto https://example.com and create a screenshot” skip the planner and go straight to BROWSER_SCREENSHOT. |
 | 2 | **Tool-first rule in default planning prompt** | `src-tauri/defaults/prompts/planning_prompt.md`: paragraph “**Tool-first rule:** If the user request can be fulfilled by exactly one base tool … recommend that tool directly … Prefer the tool over AGENT …” |
-| 3 | **Proposal + OpenClaw references** | `docs/031_orchestrator_tool_first_proposal.md`: problem, OpenClaw comparison, codebase references, and mac-stats proposal. |
+| 3 | **Proposal + OpenClaw references** | `docs/031_orchestrator_tool_first_proposal_DONE.md`: problem, OpenClaw comparison, codebase references, and mac-stats proposal. |
 
 **User copy of planning prompt:** New installs get the default (with tool-first rule) via `write_default_if_missing`. Existing users who already have `~/.mac-stats/prompts/planning_prompt.md` keep their file as-is; they don’t auto-get the new paragraph.
 
@@ -23,7 +23,7 @@ The fix for “orchestrator recommends AGENT instead of tool” is **implemented
 ### Step 4 — Changelog (recommended)
 
 - [x] In `CHANGELOG.md` under `[Unreleased]` add:
-  - **Tool-first routing:** Pre-route “screenshot + URL” requests to BROWSER_SCREENSHOT (skip planner). Default planning prompt now includes a tool-first rule: when one base tool fits the request, recommend that tool instead of AGENT. See `docs/031_orchestrator_tool_first_proposal.md`.
+  - **Tool-first routing:** Pre-route “screenshot + URL” requests to BROWSER_SCREENSHOT (skip planner). Default planning prompt now includes a tool-first rule: when one base tool fits the request, recommend that tool instead of AGENT. See `docs/031_orchestrator_tool_first_proposal_DONE.md`.
 
 ### Step 5 — Document custom planning prompt (optional)
 

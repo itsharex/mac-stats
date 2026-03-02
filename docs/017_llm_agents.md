@@ -17,7 +17,7 @@ This document describes **LLM agents**: directory-based entities under `~/.mac-s
 
 **Combined prompt** for an agent: concatenate in order **soul → mood → skill**. Empty files are skipped.
 
-**Model and model_role**: You can set either **`model`** (exact Ollama model name) or **`model_role`** (resolved at startup from the local model list). If both are set and `model` is available, it is used. **`model_role`** values (see `ollama/models.rs` and `docs/030_agent_model_assignment_plan.md`):
+**Model and model_role**: You can set either **`model`** (exact Ollama model name) or **`model_role`** (resolved at startup from the local model list). If both are set and `model` is available, it is used. **`model_role`** values (see `ollama/models.rs` and `docs/030_agent_model_assignment_plan_DONE.md`):
 
 | Role | Picks |
 |------|--------|

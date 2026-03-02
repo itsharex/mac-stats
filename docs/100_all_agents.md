@@ -25,7 +25,7 @@ Whenever Ollama is asked to decide which agent to use (planning step in Discord 
 
 **Empty response fallback:** When Ollama returns an empty response after a successful tool execution (RUN_CMD, FETCH_URL, DISCORD_API, MCP, or search), the raw tool output is returned directly to the user instead of showing nothing.
 
-**System prompts:** The planning and execution prompts are loaded from `~/.mac-stats/prompts/planning_prompt.md` and `~/.mac-stats/prompts/execution_prompt.md`. The execution prompt contains a `{{AGENTS}}` placeholder that is replaced at runtime with the dynamically generated tool descriptions. Defaults are written on first launch from embedded content; edits take effect on the next request. See `docs/023_externalized_prompts.md`.
+**System prompts:** The planning and execution prompts are loaded from `~/.mac-stats/prompts/planning_prompt.md` and `~/.mac-stats/prompts/execution_prompt.md`. The execution prompt contains a `{{AGENTS}}` placeholder that is replaced at runtime with the dynamically generated tool descriptions. Defaults are written on first launch from embedded content; edits take effect on the next request. See `docs/023_externalized_prompts_DONE.md`.
 
 ---
 
