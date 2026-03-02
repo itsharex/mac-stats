@@ -159,13 +159,6 @@ impl ModelCatalog {
         })
     }
 
-    /// Eligible models (param_billions <= cap). Used only for above-cap fallback; role resolution uses local only.
-    fn eligible(&self) -> impl Iterator<Item = &ClassifiedModel> {
-        self.models
-            .iter()
-            .filter(|m| m.param_billions <= MAX_AUTO_PARAMS_B)
-    }
-
     /// Eligible local models only (no cloud). Role resolution uses this only; cloud is used only when the user explicitly configures it (e.g. model in agent.json or default).
     fn eligible_local(&self) -> impl Iterator<Item = &ClassifiedModel> {
         self.models
