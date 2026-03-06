@@ -6816,6 +6816,7 @@ mod tests {
     use super::{
         build_agent_runtime_context, build_perplexity_verbose_summary, extract_last_prefixed_argument,
         parse_agent_tool_from_response, parse_all_tools_from_response,
+        parse_tool_from_response,
         redmine_time_entries_range_for_date,
     };
 

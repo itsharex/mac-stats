@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.31] - 2026-03-06
+
+### Fixed
+- **Redmine worked-today ticket listing** — `time_entries` queries now use date-ranged Redmine API calls without the broken implicit `user_id=me` filter, so “tickets worked on today” returns the real entries from Redmine instead of false-empty results on this server.
+- **Redmine time-entry parsing** — The backend now parses paginated `/time_entries.json` responses, groups entries by issue, backfills missing issue subjects via `/issues/{id}.json`, and produces deterministic ticket summaries from Redmine data instead of relying on the model to infer issue lists from raw JSON.
+- **Redmine router follow-up handling** — For normal ticket-list questions, the Ollama router now returns the derived Redmine time-entry summary directly instead of doing an unnecessary second LLM summarization pass, which removes another source of wrong or slow worked-ticket replies.
+
 ## [0.1.30] - 2026-03-06
 
 ### Added
