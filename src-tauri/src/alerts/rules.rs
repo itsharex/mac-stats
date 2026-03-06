@@ -1,8 +1,8 @@
 //! Alert rule evaluation
 
 use super::AlertContext;
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 /// Alert rule types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,10 @@ pub enum AlertRule {
     /// CPU usage > N% sustained
     CpuHigh { threshold: f32, duration_secs: u64 },
     /// Custom rule (plugin-based)
-    Custom { plugin_id: String, config: serde_json::Value },
+    Custom {
+        plugin_id: String,
+        config: serde_json::Value,
+    },
 }
 
 impl AlertRule {
@@ -51,19 +54,28 @@ impl AlertRule {
                 }
                 Ok(false)
             }
-            AlertRule::TemperatureHigh { threshold, duration_secs: _ } => {
+            AlertRule::TemperatureHigh {
+                threshold,
+                duration_secs: _,
+            } => {
                 if let Some(ref cpu_details) = context.cpu_details {
                     return Ok(cpu_details.temperature > *threshold);
                 }
                 Ok(false)
             }
-            AlertRule::CpuHigh { threshold, duration_secs: _ } => {
+            AlertRule::CpuHigh {
+                threshold,
+                duration_secs: _,
+            } => {
                 if let Some(ref system_metrics) = context.system_metrics {
                     return Ok(system_metrics.cpu > *threshold);
                 }
                 Ok(false)
             }
-            AlertRule::Custom { plugin_id: _, config: _ } => {
+            AlertRule::Custom {
+                plugin_id: _,
+                config: _,
+            } => {
                 // Custom rules are evaluated by plugins
                 Ok(false)
             }

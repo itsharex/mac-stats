@@ -1,30 +1,30 @@
 //! Status bar UI implementation
-//! 
+//!
 //! Handles the macOS menu bar status item, click handlers, and window management.
 
-use std::sync::OnceLock;
 use objc2::declare::ClassBuilder;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, NSObject, Sel};
-use objc2::{msg_send, ClassType, MainThreadMarker, sel};
+use objc2::{msg_send, sel, ClassType, MainThreadMarker};
 use objc2_app_kit::{
     NSAboutPanelOptionApplicationName, NSAboutPanelOptionApplicationVersion,
-    NSAboutPanelOptionCredits, NSAboutPanelOptionVersion, NSApplication, NSColor, NSFont,
-    NSFontWeightRegular, NSFontWeightSemibold, NSBaselineOffsetAttributeName,
-    NSFontAttributeName, NSForegroundColorAttributeName, NSParagraphStyleAttributeName,
-    NSMutableParagraphStyle, NSStatusBar,
-    NSVariableStatusItemLength, NSTextAlignment, NSTextTab, NSTextTabOptionKey, NSEvent,
+    NSAboutPanelOptionCredits, NSAboutPanelOptionVersion, NSApplication,
+    NSBaselineOffsetAttributeName, NSColor, NSEvent, NSFont, NSFontAttributeName,
+    NSFontWeightRegular, NSFontWeightSemibold, NSForegroundColorAttributeName,
+    NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSStatusBar, NSTextAlignment,
+    NSTextTab, NSTextTabOptionKey, NSVariableStatusItemLength,
 };
 use objc2_foundation::{
-    NSArray, NSDictionary, NSMutableAttributedString, NSMutableDictionary, NSNumber,
-    NSAttributedString, NSRange, NSString,
+    NSArray, NSAttributedString, NSDictionary, NSMutableAttributedString, NSMutableDictionary,
+    NSNumber, NSRange, NSString,
 };
+use std::sync::OnceLock;
 use tauri::{AppHandle, Manager, WindowBuilder, WindowUrl};
 
-use crate::state::*;
-use crate::logging::write_structured_log;
 use crate::config::Config;
+use crate::logging::write_structured_log;
 use crate::metrics::SystemMetrics;
+use crate::state::*;
 
 // Import debug macros
 #[allow(unused_imports)]
@@ -56,11 +56,16 @@ pub fn process_menu_bar_update() {
             if let Ok(mut pending) = MENU_BAR_TEXT.try_lock() {
                 pending.take()
             } else {
-                write_structured_log("ui/status_bar.rs", "MENU_BAR_TEXT lock failed", &serde_json::json!({}), "G");
+                write_structured_log(
+                    "ui/status_bar.rs",
+                    "MENU_BAR_TEXT lock failed",
+                    &serde_json::json!({}),
+                    "G",
+                );
                 return;
             }
         };
-        
+
         if let Some(text) = update_text {
             debug3!("Processing menu bar update: '{}'", text);
             let attributed = make_attributed_title(&text);
@@ -70,13 +75,23 @@ pub fn process_menu_bar_update() {
                         button.setAttributedTitle(&attributed);
                         debug3!("Menu bar text updated successfully");
                     } else {
-                        write_structured_log("ui/status_bar.rs", "Button not found", &serde_json::json!({}), "G");
+                        write_structured_log(
+                            "ui/status_bar.rs",
+                            "Button not found",
+                            &serde_json::json!({}),
+                            "G",
+                        );
                     }
                 }
             });
         }
     } else {
-        write_structured_log("ui/status_bar.rs", "MainThreadMarker::new() FAILED", &serde_json::json!({}), "G");
+        write_structured_log(
+            "ui/status_bar.rs",
+            "MainThreadMarker::new() FAILED",
+            &serde_json::json!({}),
+            "G",
+        );
     }
 }
 
@@ -85,20 +100,13 @@ pub fn make_attributed_title(text: &str) -> Retained<NSMutableAttributedString> 
     let ns_text = NSString::from_str(text);
     let attributed = NSMutableAttributedString::from_nsstring(&ns_text);
     let length = ns_text.length();
-    let full_range = NSRange { location: 0, length };
+    let full_range = NSRange {
+        location: 0,
+        length,
+    };
 
-    let label_len = text
-        .split('\n')
-        .next()
-        .unwrap_or("")
-        .encode_utf16()
-        .count();
-    let value_len = text
-        .split('\n')
-        .nth(1)
-        .unwrap_or("")
-        .encode_utf16()
-        .count();
+    let label_len = text.split('\n').next().unwrap_or("").encode_utf16().count();
+    let value_len = text.split('\n').nth(1).unwrap_or("").encode_utf16().count();
     let label_range = NSRange {
         location: 0,
         length: label_len,
@@ -108,12 +116,9 @@ pub fn make_attributed_title(text: &str) -> Retained<NSMutableAttributedString> 
         length: value_len,
     };
 
-    let label_font = NSFont::monospacedSystemFontOfSize_weight(8.5, unsafe {
-        NSFontWeightRegular
-    });
-    let value_font = NSFont::monospacedSystemFontOfSize_weight(12.5, unsafe {
-        NSFontWeightSemibold
-    });
+    let label_font = NSFont::monospacedSystemFontOfSize_weight(8.5, unsafe { NSFontWeightRegular });
+    let value_font =
+        NSFont::monospacedSystemFontOfSize_weight(12.5, unsafe { NSFontWeightSemibold });
     // Use controlTextColor for menu bar - this works better than labelColor in status bar context
     // labelColor can sometimes turn black in menu bar, so use controlTextColor which adapts properly
     let color = NSColor::controlTextColor();
@@ -179,8 +184,13 @@ pub fn setup_status_item() {
 
     let handler_class = click_handler_class();
     debug2!("Creating handler instance from class");
-    write_structured_log("ui/status_bar.rs", "About to create handler instance", &serde_json::json!({"class": format!("{:?}", handler_class)}), "J");
-    
+    write_structured_log(
+        "ui/status_bar.rs",
+        "About to create handler instance",
+        &serde_json::json!({"class": format!("{:?}", handler_class)}),
+        "J",
+    );
+
     // Verify class responds to selector before creating instance
     let action_sel = sel!(onStatusItemClick:);
     let selector_name = action_sel.name().to_string_lossy();
@@ -188,50 +198,86 @@ pub fn setup_status_item() {
         let responds: bool = msg_send![handler_class, instancesRespondToSelector: action_sel];
         responds
     };
-    debug1!("Handler class responds to selector '{}': {}", selector_name, class_responds);
-    write_structured_log("ui/status_bar.rs", "Class selector check", &serde_json::json!({"selector": selector_name, "responds": class_responds}), "J");
-    
+    debug1!(
+        "Handler class responds to selector '{}': {}",
+        selector_name,
+        class_responds
+    );
+    write_structured_log(
+        "ui/status_bar.rs",
+        "Class selector check",
+        &serde_json::json!({"selector": selector_name, "responds": class_responds}),
+        "J",
+    );
+
     let handler: Retained<AnyObject> =
-        unsafe { Retained::from_raw(msg_send![handler_class, new]) }
-            .expect("click handler");
+        unsafe { Retained::from_raw(msg_send![handler_class, new]) }.expect("click handler");
     debug3!("Handler instance created: {:?}", handler);
-    write_structured_log("ui/status_bar.rs", "Handler instance created", &serde_json::json!({"handler": format!("{:p}", &*handler)}), "J");
-    
+    write_structured_log(
+        "ui/status_bar.rs",
+        "Handler instance created",
+        &serde_json::json!({"handler": format!("{:p}", &*handler)}),
+        "J",
+    );
+
     // Verify instance responds to selector
     let instance_responds = unsafe {
         let responds: bool = msg_send![&*handler, respondsToSelector: action_sel];
         responds
     };
-    debug1!("Handler instance responds to selector: {}", instance_responds);
-    write_structured_log("ui/status_bar.rs", "Instance selector check", &serde_json::json!({"responds": instance_responds}), "J");
-    
+    debug1!(
+        "Handler instance responds to selector: {}",
+        instance_responds
+    );
+    write_structured_log(
+        "ui/status_bar.rs",
+        "Instance selector check",
+        &serde_json::json!({"responds": instance_responds}),
+        "J",
+    );
+
     if !instance_responds {
         debug1!("ERROR: Handler instance does NOT respond to selector!");
-        write_structured_log("ui/status_bar.rs", "ERROR: Instance does not respond to selector", &serde_json::json!({}), "J");
+        write_structured_log(
+            "ui/status_bar.rs",
+            "ERROR: Instance does not respond to selector",
+            &serde_json::json!({}),
+            "J",
+        );
     }
-    
+
     // CRITICAL: Store handler in thread-local FIRST to keep it alive
     // The button will also retain it when we set it as target, but we keep our own reference
     CLICK_HANDLER.with(|cell| {
         *cell.borrow_mut() = Some(handler.clone());
         debug3!("Handler stored in CLICK_HANDLER thread-local (retained)");
-        write_structured_log("ui/status_bar.rs", "Handler stored in CLICK_HANDLER", &serde_json::json!({}), "J");
+        write_structured_log(
+            "ui/status_bar.rs",
+            "Handler stored in CLICK_HANDLER",
+            &serde_json::json!({}),
+            "J",
+        );
     });
 
     // CRITICAL: Do NOT set a menu on the status item if we want button action to work
     // Setting a menu disables the button's action/target behavior
     // Instead, use the button's action directly and handle events properly
     let action = sel!(onStatusItemClick:);
-    
+
     if let Some(button) = status_item.button(mtm) {
         debug2!("Setting up button target and action (NO menu set)...");
-        write_structured_log("ui/status_bar.rs", "Setting button target/action (no menu)", &serde_json::json!({"handler": format!("{:p}", &*handler), "action": action.name()}), "J");
+        write_structured_log(
+            "ui/status_bar.rs",
+            "Setting button target/action (no menu)",
+            &serde_json::json!({"handler": format!("{:p}", &*handler), "action": action.name()}),
+            "J",
+        );
         unsafe {
             // Set target and action on the button
             button.setTarget(Some(&*handler));
             button.setAction(Some(action));
             button.setEnabled(true);
-            
+
             // CRITICAL: Use sendActionOn to specify which events trigger the action
             // This is required for NSStatusBarButton to work properly
             // sendActionOn returns the previous mask, we want left mouse up events
@@ -239,39 +285,73 @@ pub fn setup_status_item() {
             use objc2_app_kit::NSEventMask;
             let event_mask = NSEventMask::LeftMouseUp;
             let _previous_mask = button.sendActionOn(event_mask);
-            
-            write_structured_log("ui/status_bar.rs", "Button target/action and sendAction set", &serde_json::json!({}), "J");
+
+            write_structured_log(
+                "ui/status_bar.rs",
+                "Button target/action and sendAction set",
+                &serde_json::json!({}),
+                "J",
+            );
             debug3!("Button target, action, and sendAction set");
-            
+
             // Verify setup
             if let Some(target) = button.target() {
                 debug3!("Button target verified: {:?}", target);
-                write_structured_log("ui/status_bar.rs", "Button target verified", &serde_json::json!({"target": format!("{:p}", target)}), "J");
-                
+                write_structured_log(
+                    "ui/status_bar.rs",
+                    "Button target verified",
+                    &serde_json::json!({"target": format!("{:p}", target)}),
+                    "J",
+                );
+
                 // CRITICAL: Verify target responds to the action selector
                 let target_responds = {
                     let responds: bool = msg_send![&*target, respondsToSelector: action];
                     responds
                 };
                 let selector_name = action.name().to_string_lossy();
-                debug1!("Button target responds to action selector '{}': {}", selector_name, target_responds);
-                write_structured_log("ui/status_bar.rs", "Target respondsToSelector check", &serde_json::json!({"responds": target_responds, "selector": selector_name}), "J");
-                
+                debug1!(
+                    "Button target responds to action selector '{}': {}",
+                    selector_name,
+                    target_responds
+                );
+                write_structured_log(
+                    "ui/status_bar.rs",
+                    "Target respondsToSelector check",
+                    &serde_json::json!({"responds": target_responds, "selector": selector_name}),
+                    "J",
+                );
+
                 if !target_responds {
                     debug1!("ERROR: Button target does NOT respond to action selector!");
-                    write_structured_log("ui/status_bar.rs", "ERROR: Target does not respond to selector", &serde_json::json!({}), "J");
+                    write_structured_log(
+                        "ui/status_bar.rs",
+                        "ERROR: Target does not respond to selector",
+                        &serde_json::json!({}),
+                        "J",
+                    );
                 }
             }
             if let Some(set_action) = button.action() {
                 debug3!("Button action verified: {:?}", set_action.name());
-                write_structured_log("ui/status_bar.rs", "Button action verified", &serde_json::json!({"action": set_action.name()}), "J");
+                write_structured_log(
+                    "ui/status_bar.rs",
+                    "Button action verified",
+                    &serde_json::json!({"action": set_action.name()}),
+                    "J",
+                );
             }
-            
+
             // CRITICAL: Check if button is enabled
             let is_enabled = button.isEnabled();
             debug1!("Button isEnabled: {}", is_enabled);
-            write_structured_log("ui/status_bar.rs", "Button enabled check", &serde_json::json!({"enabled": is_enabled}), "J");
-            
+            write_structured_log(
+                "ui/status_bar.rs",
+                "Button enabled check",
+                &serde_json::json!({"enabled": is_enabled}),
+                "J",
+            );
+
             // CRITICAL: Try manually sending the action to verify it works
             // if let Some(target) = button.target() {
             //     debug1!("Attempting to manually send action to verify it works...");
@@ -289,9 +369,14 @@ pub fn setup_status_item() {
         debug2!("Button target and action set (no menu)");
     } else {
         debug1!("ERROR: Could not get button from status item!");
-        write_structured_log("ui/status_bar.rs", "ERROR: Button not found", &serde_json::json!({}), "J");
+        write_structured_log(
+            "ui/status_bar.rs",
+            "ERROR: Button not found",
+            &serde_json::json!({}),
+            "J",
+        );
     }
-    
+
     // Handler is already stored in CLICK_HANDLER above, so it's retained
     // The button should also retain it via setTarget, so we have double retention
     debug3!("Handler retention: stored in CLICK_HANDLER and set as button target");
@@ -300,7 +385,7 @@ pub fn setup_status_item() {
         *cell.borrow_mut() = Some(status_item);
     });
     debug2!("Status item setup complete");
-    
+
     // Start automatic menu bar updates by scheduling the first update
     // The handler will reschedule itself every 2 seconds
     if let Some(handler) = CLICK_HANDLER.with(|cell| cell.borrow().clone()) {
@@ -309,7 +394,12 @@ pub fn setup_status_item() {
             // Schedule first update after 2 seconds
             let _: () = msg_send![&*handler, performSelector: update_sel, withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.0];
             debug1!("Scheduled automatic menu bar updates (first update in 2 seconds)");
-            write_structured_log("ui/status_bar.rs", "Automatic updates scheduled", &serde_json::json!({}), "M");
+            write_structured_log(
+                "ui/status_bar.rs",
+                "Automatic updates scheduled",
+                &serde_json::json!({}),
+                "M",
+            );
         }
     } else {
         debug1!("WARNING: Could not get handler for automatic updates");
@@ -454,12 +544,12 @@ pub fn click_handler_class() -> &'static AnyClass {
 pub fn show_about_panel() {
     let mtm = MainThreadMarker::new().unwrap();
     let app = NSApplication::sharedApplication(mtm);
-    
+
     // Use a nicer application name
     let name = NSString::from_str("mac-stats");
     let version = NSString::from_str(&Config::version());
     let build = NSString::from_str(&Config::build_date());
-    
+
     // Create a nicely formatted credits text with better styling
     let credits_text = format!(
         "A lightweight system monitor for macOS\n\n\
@@ -497,32 +587,41 @@ pub fn show_about_panel() {
 /// Create the CPU details window
 pub fn create_cpu_window(app_handle: &tauri::AppHandle) {
     debug1!("Creating CPU window...");
-    write_structured_log("ui/status_bar.rs", "create_cpu_window ENTRY", &serde_json::json!({}), "I");
-    
+    write_structured_log(
+        "ui/status_bar.rs",
+        "create_cpu_window ENTRY",
+        &serde_json::json!({}),
+        "I",
+    );
+
     // Read window decorations preference from config file
     // This allows the preference to be changed without recompiling
     use crate::config::Config;
     let decorations = Config::get_window_decorations();
-    debug1!("Window decorations preference: {} (from config file)", decorations);
-    
-    let cpu_window = WindowBuilder::new(
-        app_handle,
-        "cpu",
-        WindowUrl::App("cpu.html".into()),
-    )
-    .title("CPU")
-    .visible(true)  // Show immediately when created
-    .inner_size(644.0, 995.0)
-    .resizable(true)
-    .always_on_top(false)
-    .decorations(decorations)
-    .build();
-    
+    debug1!(
+        "Window decorations preference: {} (from config file)",
+        decorations
+    );
+
+    let cpu_window = WindowBuilder::new(app_handle, "cpu", WindowUrl::App("cpu.html".into()))
+        .title("CPU")
+        .visible(true) // Show immediately when created
+        .inner_size(644.0, 995.0)
+        .resizable(true)
+        .always_on_top(false)
+        .decorations(decorations)
+        .build();
+
     match cpu_window {
         Ok(window) => {
             debug1!("CPU window created successfully");
-            write_structured_log("ui/status_bar.rs", "CPU window created successfully", &serde_json::json!({}), "I");
-            
+            write_structured_log(
+                "ui/status_bar.rs",
+                "CPU window created successfully",
+                &serde_json::json!({}),
+                "I",
+            );
+
             // Clear process cache to force fresh collection on first call
             // This ensures we get up-to-date process list immediately when window opens
             use crate::state::PROCESS_CACHE;
@@ -530,14 +629,16 @@ pub fn create_cpu_window(app_handle: &tauri::AppHandle) {
                 *cache = None;
                 debug2!("Process cache cleared - will refresh immediately on first get_cpu_details() call");
             }
-            
+
             // Clear rate limiter so first call always goes through (instant data on window open)
             use crate::state::LAST_CPU_DETAILS_CALL;
             if let Ok(mut last_call) = LAST_CPU_DETAILS_CALL.try_lock() {
                 *last_call = None;
-                debug2!("Rate limiter cleared - first get_cpu_details() call will execute immediately");
+                debug2!(
+                    "Rate limiter cleared - first get_cpu_details() call will execute immediately"
+                );
             }
-            
+
             // Enable devtools for right-click inspect
             // In debug builds, devtools should be available by default
             // We can also try to enable it via the webview if needed
@@ -546,17 +647,27 @@ pub fn create_cpu_window(app_handle: &tauri::AppHandle) {
                 // Devtools are typically enabled by default in debug builds
                 // Right-click inspect should work
             }
-            
+
             let _ = window.set_always_on_top(false);
             let _ = window.show();
             let _ = window.set_focus();
             let _ = window.unminimize();
             debug1!("CPU window shown and focused");
-            write_structured_log("ui/status_bar.rs", "CPU window shown and focused", &serde_json::json!({}), "I");
-        },
+            write_structured_log(
+                "ui/status_bar.rs",
+                "CPU window shown and focused",
+                &serde_json::json!({}),
+                "I",
+            );
+        }
         Err(e) => {
             debug1!("ERROR: Failed to create CPU window: {:?}", e);
-            write_structured_log("ui/status_bar.rs", "ERROR: Failed to create CPU window", &serde_json::json!({"error": format!("{:?}", e)}), "I");
+            write_structured_log(
+                "ui/status_bar.rs",
+                "ERROR: Failed to create CPU window",
+                &serde_json::json!({"error": format!("{:?}", e)}),
+                "I",
+            );
         }
     }
 }

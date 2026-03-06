@@ -42,7 +42,10 @@ pub fn get_first_local_model_name() -> Option<String> {
 /// True if the given model name is vision-capable (per catalog). Used for verification with screenshot.
 pub fn is_vision_capable(model_name: &str) -> bool {
     get_global_catalog()
-        .and_then(|c| c.model_by_name(model_name).map(|m| m.capability == ModelCapability::Vision))
+        .and_then(|c| {
+            c.model_by_name(model_name)
+                .map(|m| m.capability == ModelCapability::Vision)
+        })
         .unwrap_or(false)
 }
 
@@ -99,15 +102,20 @@ pub struct ModelCatalog {
 impl ModelCatalog {
     /// Build a catalog from the `/api/tags` response.
     pub fn from_model_list(summaries: &[ModelSummary]) -> Self {
-        let mut models: Vec<ClassifiedModel> = summaries
-            .iter()
-            .filter_map(classify_model)
-            .collect();
+        let mut models: Vec<ClassifiedModel> =
+            summaries.iter().filter_map(classify_model).collect();
 
-        models.sort_by(|a, b| a.param_billions.partial_cmp(&b.param_billions).unwrap_or(std::cmp::Ordering::Equal));
+        models.sort_by(|a, b| {
+            a.param_billions
+                .partial_cmp(&b.param_billions)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         if models.is_empty() {
-            warn!("ModelCatalog: no models could be classified from {} summaries", summaries.len());
+            warn!(
+                "ModelCatalog: no models could be classified from {} summaries",
+                summaries.len()
+            );
         } else {
             info!(
                 "ModelCatalog: classified {} models: {}",
@@ -135,7 +143,10 @@ impl ModelCatalog {
             "thinking" | "reasoning" => self.pick_reasoning(),
             "expensive" => self.pick_expensive(),
             other => {
-                warn!("ModelCatalog: unknown model_role '{}', treating as 'general'", other);
+                warn!(
+                    "ModelCatalog: unknown model_role '{}', treating as 'general'",
+                    other
+                );
                 self.pick_general()
             }
         }
@@ -173,7 +184,10 @@ impl ModelCatalog {
             .filter(|m| m.capability == ModelCapability::Vision)
             .collect();
         if let Some(best) = vision.last() {
-            debug!("ModelCatalog: role=vision -> {} ({:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=vision -> {} ({:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
         debug!("ModelCatalog: role=vision -> no local vision models, falling back to general");
@@ -184,10 +198,15 @@ impl ModelCatalog {
         let local: Vec<_> = self.eligible_local().collect();
         let reasoning_medium: Vec<_> = local
             .iter()
-            .filter(|m| m.capability == ModelCapability::Reasoning && m.size_tier == ModelSizeTier::Medium)
+            .filter(|m| {
+                m.capability == ModelCapability::Reasoning && m.size_tier == ModelSizeTier::Medium
+            })
             .collect();
         if let Some(best) = reasoning_medium.last() {
-            debug!("ModelCatalog: role=thinking -> {} (reasoning/medium, {:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=thinking -> {} (reasoning/medium, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
         let reasoning: Vec<_> = local
@@ -195,7 +214,10 @@ impl ModelCatalog {
             .filter(|m| m.capability == ModelCapability::Reasoning)
             .collect();
         if let Some(best) = reasoning.last() {
-            debug!("ModelCatalog: role=thinking -> {} (reasoning/any, {:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=thinking -> {} (reasoning/any, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
         debug!("ModelCatalog: role=thinking -> no local reasoning models, falling back to general");
@@ -205,11 +227,17 @@ impl ModelCatalog {
     fn pick_expensive(&self) -> Option<&ClassifiedModel> {
         let local: Vec<_> = self.eligible_local().collect();
         if let Some(best) = local.last() {
-            debug!("ModelCatalog: role=expensive -> {} ({:.1}B, largest local)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=expensive -> {} ({:.1}B, largest local)",
+                best.name, best.param_billions
+            );
             return Some(best);
         }
         if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).next_back() {
-            warn!("ModelCatalog: role=expensive -> {} (above cap, local only)", best.name);
+            warn!(
+                "ModelCatalog: role=expensive -> {} (above cap, local only)",
+                best.name
+            );
             return Some(best);
         }
         None
@@ -219,14 +247,26 @@ impl ModelCatalog {
         let local: Vec<_> = self.eligible_local().collect();
         let code_medium: Vec<_> = local
             .iter()
-            .filter(|m| m.capability == ModelCapability::Code && m.size_tier == ModelSizeTier::Medium)
+            .filter(|m| {
+                m.capability == ModelCapability::Code && m.size_tier == ModelSizeTier::Medium
+            })
             .collect();
         if let Some(best) = code_medium.last() {
-            debug!("ModelCatalog: role=code -> {} (code/medium, {:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=code -> {} (code/medium, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
-        if let Some(best) = local.iter().filter(|m| m.capability == ModelCapability::Code).next_back() {
-            debug!("ModelCatalog: role=code -> {} (code/any, {:.1}B)", best.name, best.param_billions);
+        if let Some(best) = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::Code)
+            .next_back()
+        {
+            debug!(
+                "ModelCatalog: role=code -> {} (code/any, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
         debug!("ModelCatalog: role=code -> no local code models, falling back to general");
@@ -237,21 +277,40 @@ impl ModelCatalog {
         let local: Vec<_> = self.eligible_local().collect();
         let general_medium: Vec<_> = local
             .iter()
-            .filter(|m| m.capability == ModelCapability::General && m.size_tier == ModelSizeTier::Medium)
+            .filter(|m| {
+                m.capability == ModelCapability::General && m.size_tier == ModelSizeTier::Medium
+            })
             .collect();
         if let Some(best) = general_medium.last() {
-            debug!("ModelCatalog: role=general -> {} (general/medium, {:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=general -> {} (general/medium, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
-        if let Some(best) = local.iter().filter(|m| m.capability == ModelCapability::General).next_back() {
-            debug!("ModelCatalog: role=general -> {} (general/any, {:.1}B)", best.name, best.param_billions);
+        if let Some(best) = local
+            .iter()
+            .filter(|m| m.capability == ModelCapability::General)
+            .next_back()
+        {
+            debug!(
+                "ModelCatalog: role=general -> {} (general/any, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
         if let Some(best) = local.last() {
-            debug!("ModelCatalog: role=general -> {} (any local fallback, {:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=general -> {} (any local fallback, {:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(*best);
         }
-        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).min_by(|a, b| a.param_billions.partial_cmp(&b.param_billions).unwrap_or(std::cmp::Ordering::Equal)) {
+        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).min_by(|a, b| {
+            a.param_billions
+                .partial_cmp(&b.param_billions)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
             warn!(
                 "ModelCatalog: no local within cap, using smallest local: {} ({:.1}B)",
                 best.name, best.param_billions
@@ -264,11 +323,21 @@ impl ModelCatalog {
     fn pick_small(&self) -> Option<&ClassifiedModel> {
         let local: Vec<_> = self.eligible_local().collect();
         if let Some(best) = local.first() {
-            debug!("ModelCatalog: role=small -> {} ({:.1}B)", best.name, best.param_billions);
+            debug!(
+                "ModelCatalog: role=small -> {} ({:.1}B)",
+                best.name, best.param_billions
+            );
             return Some(best);
         }
-        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).min_by(|a, b| a.param_billions.partial_cmp(&b.param_billions).unwrap_or(std::cmp::Ordering::Equal)) {
-            warn!("ModelCatalog: role=small -> {} ({:.1}B, above cap, local only)", best.name, best.param_billions);
+        if let Some(best) = self.models.iter().filter(|m| !m.is_cloud).min_by(|a, b| {
+            a.param_billions
+                .partial_cmp(&b.param_billions)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            warn!(
+                "ModelCatalog: role=small -> {} ({:.1}B, above cap, local only)",
+                best.name, best.param_billions
+            );
             return Some(best);
         }
         None
@@ -323,7 +392,10 @@ fn parse_param_size(summary: &ModelSummary) -> Option<f64> {
         );
         return Some(estimated_b);
     }
-    warn!("ModelCatalog: cannot determine size for '{}', skipping", summary.name);
+    warn!(
+        "ModelCatalog: cannot determine size for '{}', skipping",
+        summary.name
+    );
     None
 }
 

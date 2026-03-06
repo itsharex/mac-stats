@@ -11,12 +11,13 @@
 pub mod api;
 
 use base64::Engine;
+use chrono::Timelike;
+use serenity::builder::EditMessage;
 use serenity::client::{Client, Context, EventHandler};
 use serenity::gateway::ShardManager;
+use serenity::model::channel::Message;
 use serenity::model::gateway::GatewayIntents;
 use serenity::model::id::UserId;
-use serenity::builder::EditMessage;
-use serenity::model::channel::Message;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,15 +26,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
-use chrono::Timelike;
 
 /// Time-of-day period for having_fun: influences tone (e.g. quieter at night).
 #[derive(Clone, Copy)]
 enum TimeOfDay {
-    Night,    // ~22:00–06:00
-    Morning,  // ~06:00–12:00
+    Night,     // ~22:00–06:00
+    Morning,   // ~06:00–12:00
     Afternoon, // ~12:00–17:00
-    Evening,  // ~17:00–22:00
+    Evening,   // ~17:00–22:00
 }
 
 fn time_of_day(hour: u32) -> TimeOfDay {
@@ -73,10 +73,7 @@ fn time_awareness_for_having_fun() -> String {
             "Relaxed tone; can be a bit more expansive if the conversation invites it.",
         ),
     };
-    format!(
-        "[Current time: {} — {}. {}]",
-        date, period_name, guidance
-    )
+    format!("[Current time: {} — {}. {}]", date, period_name, guidance)
 }
 
 /// If the message content looks like a long image-fetch 404 error, return a short user-facing line
@@ -85,14 +82,19 @@ fn sanitize_image_error_content(content: &str) -> String {
     let t = content.trim();
     let lower = t.to_lowercase();
     let is_image_error = lower.contains("404")
-        && (lower.contains("could not be fetched") || lower.contains("requested image") || lower.contains("verify the url"));
+        && (lower.contains("could not be fetched")
+            || lower.contains("requested image")
+            || lower.contains("verify the url"));
     if !is_image_error {
         return content.to_string();
     }
     if let Some((author, _)) = t.split_once(':') {
         let author = author.trim();
         if !author.is_empty() {
-            return format!("{}: Image link returned 404 — could not load image.", author);
+            return format!(
+                "{}: Image link returned 404 — could not load image.",
+                author
+            );
         }
     }
     "Image link returned 404 — could not load image.".to_string()
@@ -188,12 +190,22 @@ impl Default for HavingFunParams {
 
 /// Cached channel config, reloaded when `discord_channels.json` mtime changes.
 /// Holds (file mtime, default, overrides, having_fun params, default_verbose_dm, default_verbose_channel).
-static CHANNEL_CONFIG: RwLock<Option<(Option<std::time::SystemTime>, ChannelSettings, HashMap<u64, ChannelSettings>, HavingFunParams, bool, bool)>> =
-    RwLock::new(None);
+static CHANNEL_CONFIG: RwLock<
+    Option<(
+        Option<std::time::SystemTime>,
+        ChannelSettings,
+        HashMap<u64, ChannelSettings>,
+        HavingFunParams,
+        bool,
+        bool,
+    )>,
+> = RwLock::new(None);
 
 fn discord_channels_file_mtime() -> Option<std::time::SystemTime> {
     let path = crate::config::Config::discord_channels_path();
-    std::fs::metadata(&path).ok().and_then(|m| m.modified().ok())
+    std::fs::metadata(&path)
+        .ok()
+        .and_then(|m| m.modified().ok())
 }
 
 fn parse_mode(s: &str) -> ChannelMode {
@@ -226,25 +238,57 @@ fn ensure_having_fun_in_config(path: &Path, parsed: &mut serde_json::Value) {
     );
     if let Ok(pretty) = serde_json::to_string_pretty(parsed) {
         let _ = std::fs::write(path, pretty);
-        info!("Discord channels config: added default 'having_fun' block to {}", path.display());
+        info!(
+            "Discord channels config: added default 'having_fun' block to {}",
+            path.display()
+        );
     }
 }
 
-fn load_channel_config_full() -> (ChannelSettings, HashMap<u64, ChannelSettings>, HavingFunParams, bool, bool) {
-    let default_settings = ChannelSettings { mode: ChannelMode::MentionOnly, prompt: None, model: None, agent: None };
+fn load_channel_config_full() -> (
+    ChannelSettings,
+    HashMap<u64, ChannelSettings>,
+    HavingFunParams,
+    bool,
+    bool,
+) {
+    let default_settings = ChannelSettings {
+        mode: ChannelMode::MentionOnly,
+        prompt: None,
+        model: None,
+        agent: None,
+    };
     let path = crate::config::Config::discord_channels_path();
     let json = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(_) => {
-            info!("Discord channels config not found at {:?}, using mention_only default", path);
-            return (default_settings, HashMap::new(), HavingFunParams::default(), true, false);
+            info!(
+                "Discord channels config not found at {:?}, using mention_only default",
+                path
+            );
+            return (
+                default_settings,
+                HashMap::new(),
+                HavingFunParams::default(),
+                true,
+                false,
+            );
         }
     };
     let mut parsed: serde_json::Value = match serde_json::from_str(&json) {
         Ok(v) => v,
         Err(e) => {
-            tracing::warn!("Discord channels config parse error: {}, using mention_only default", e);
-            return (default_settings, HashMap::new(), HavingFunParams::default(), true, false);
+            tracing::warn!(
+                "Discord channels config parse error: {}, using mention_only default",
+                e
+            );
+            return (
+                default_settings,
+                HashMap::new(),
+                HavingFunParams::default(),
+                true,
+                false,
+            );
         }
     };
     // Upgrade: if file exists but has no having_fun block, add default and write back
@@ -258,7 +302,12 @@ fn load_channel_config_full() -> (ChannelSettings, HashMap<u64, ChannelSettings>
         .get("default_prompt")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    let default_settings = ChannelSettings { mode: default_mode, prompt: default_prompt, model: None, agent: None };
+    let default_settings = ChannelSettings {
+        mode: default_mode,
+        prompt: default_prompt,
+        model: None,
+        agent: None,
+    };
 
     let default_verbose_dm = parsed
         .get("default_verbose_for_dm")
@@ -296,25 +345,49 @@ fn load_channel_config_full() -> (ChannelSettings, HashMap<u64, ChannelSettings>
         for (k, v) in obj {
             let Ok(id) = k.parse::<u64>() else { continue };
             let settings = if let Some(mode_str) = v.as_str() {
-                ChannelSettings { mode: parse_mode(mode_str), prompt: None, model: None, agent: None }
+                ChannelSettings {
+                    mode: parse_mode(mode_str),
+                    prompt: None,
+                    model: None,
+                    agent: None,
+                }
             } else if let Some(obj) = v.as_object() {
-                let mode = obj.get("mode")
+                let mode = obj
+                    .get("mode")
                     .and_then(|v| v.as_str())
                     .map(parse_mode)
                     .unwrap_or(ChannelMode::MentionOnly);
-                let prompt = obj.get("prompt")
+                let prompt = obj
+                    .get("prompt")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                let model = obj.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let agent = obj.get("agent").and_then(|v| v.as_str()).map(|s| s.to_string());
-                ChannelSettings { mode, prompt, model, agent }
+                let model = obj
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let agent = obj
+                    .get("agent")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                ChannelSettings {
+                    mode,
+                    prompt,
+                    model,
+                    agent,
+                }
             } else {
                 continue;
             };
             channels.insert(id, settings);
         }
     }
-    (default_settings, channels, having_fun, default_verbose_dm, default_verbose_channel)
+    (
+        default_settings,
+        channels,
+        having_fun,
+        default_verbose_dm,
+        default_verbose_channel,
+    )
 }
 
 /// Ensures config is loaded; call before reading channel settings or having_fun params.
@@ -325,11 +398,22 @@ fn ensure_channel_config_loaded() {
     };
     if guard.is_none() {
         let mtime = discord_channels_file_mtime();
-        let (default, channels, having_fun, verbose_dm, verbose_channel) = load_channel_config_full();
-        *guard = Some((mtime, default.clone(), channels.clone(), having_fun.clone(), verbose_dm, verbose_channel));
+        let (default, channels, having_fun, verbose_dm, verbose_channel) =
+            load_channel_config_full();
+        *guard = Some((
+            mtime,
+            default.clone(),
+            channels.clone(),
+            having_fun.clone(),
+            verbose_dm,
+            verbose_channel,
+        ));
         drop(guard);
 
-        let having_fun_count = channels.values().filter(|s| s.mode == ChannelMode::HavingFun).count();
+        let having_fun_count = channels
+            .values()
+            .filter(|s| s.mode == ChannelMode::HavingFun)
+            .count();
         let timer_suffix = if having_fun_count > 0 {
             ensure_having_fun_state_for_configured_channels();
             let (next_resp, next_idle) = having_fun_states()
@@ -397,8 +481,16 @@ fn reload_channel_config_if_changed() {
         Some((cached_mtime, _, _, _, _, _)) => *cached_mtime != mtime,
     };
     if should_reload {
-        let (default, channels, having_fun, verbose_dm, verbose_channel) = load_channel_config_full();
-        *guard = Some((mtime, default, channels, having_fun, verbose_dm, verbose_channel));
+        let (default, channels, having_fun, verbose_dm, verbose_channel) =
+            load_channel_config_full();
+        *guard = Some((
+            mtime,
+            default,
+            channels,
+            having_fun,
+            verbose_dm,
+            verbose_channel,
+        ));
         info!("Discord channels config reloaded (file changed)");
     }
 }
@@ -407,12 +499,27 @@ fn channel_settings(channel_id: u64) -> ChannelSettings {
     ensure_channel_config_loaded();
     let guard = match CHANNEL_CONFIG.read() {
         Ok(g) => g,
-        Err(_) => return ChannelSettings { mode: ChannelMode::MentionOnly, prompt: None, model: None, agent: None },
+        Err(_) => {
+            return ChannelSettings {
+                mode: ChannelMode::MentionOnly,
+                prompt: None,
+                model: None,
+                agent: None,
+            }
+        }
     };
     let Some((_, default, overrides, _, _, _)) = guard.as_ref() else {
-        return ChannelSettings { mode: ChannelMode::MentionOnly, prompt: None, model: None, agent: None };
+        return ChannelSettings {
+            mode: ChannelMode::MentionOnly,
+            prompt: None,
+            model: None,
+            agent: None,
+        };
     };
-    overrides.get(&channel_id).cloned().unwrap_or_else(|| default.clone())
+    overrides
+        .get(&channel_id)
+        .cloned()
+        .unwrap_or_else(|| default.clone())
 }
 
 /// Default verbose for DMs (when not set in message). From discord_channels.json "default_verbose_for_dm", default true.
@@ -441,7 +548,10 @@ fn get_having_fun_params() -> HavingFunParams {
         Ok(g) => g,
         Err(_) => return HavingFunParams::default(),
     };
-    guard.as_ref().map(|(_, _, _, p, _, _)| p.clone()).unwrap_or_default()
+    guard
+        .as_ref()
+        .map(|(_, _, _, p, _, _)| p.clone())
+        .unwrap_or_default()
 }
 
 /// Number of channels configured as having_fun in discord_channels.json. Used for heartbeat logging.
@@ -453,7 +563,12 @@ fn count_configured_having_fun_channels() -> usize {
     };
     guard
         .as_ref()
-        .map(|(_, _, overrides, _, _, _)| overrides.values().filter(|s| s.mode == ChannelMode::HavingFun).count())
+        .map(|(_, _, overrides, _, _, _)| {
+            overrides
+                .values()
+                .filter(|s| s.mode == ChannelMode::HavingFun)
+                .count()
+        })
         .unwrap_or(0)
 }
 
@@ -487,8 +602,14 @@ fn ensure_having_fun_state_for_configured_channels() {
         for channel_id in channel_ids {
             map.entry(channel_id).or_insert_with(|| {
                 let now = std::time::Instant::now();
-                let idle_secs = random_secs_in_range(params.idle_thought_secs_min, params.idle_thought_secs_max);
-                let resp_secs = random_secs_in_range(params.response_delay_secs_min, params.response_delay_secs_max);
+                let idle_secs = random_secs_in_range(
+                    params.idle_thought_secs_min,
+                    params.idle_thought_secs_max,
+                );
+                let resp_secs = random_secs_in_range(
+                    params.response_delay_secs_min,
+                    params.response_delay_secs_max,
+                );
                 let next_response_after_secs = resp_secs.min(idle_secs);
                 HavingFunState {
                     buffer: Vec::new(),
@@ -595,7 +716,11 @@ async fn fetch_channel_messages_after(
     // API returns newest first; we want oldest first for conversation order.
     let mut out: Vec<(String, String)> = Vec::new();
     for msg in arr.into_iter().rev() {
-        let content = msg.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+        let content = msg
+            .get("content")
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_string();
         let author = msg
             .get("author")
             .and_then(|a| {
@@ -623,8 +748,12 @@ fn buffer_having_fun_message(
         let params = get_having_fun_params();
         let state = map.entry(channel_id).or_insert_with(|| {
             let now = std::time::Instant::now();
-            let idle_secs = random_secs_in_range(params.idle_thought_secs_min, params.idle_thought_secs_max);
-            let resp_secs = random_secs_in_range(params.response_delay_secs_min, params.response_delay_secs_max);
+            let idle_secs =
+                random_secs_in_range(params.idle_thought_secs_min, params.idle_thought_secs_max);
+            let resp_secs = random_secs_in_range(
+                params.response_delay_secs_min,
+                params.response_delay_secs_max,
+            );
             // Response must fire before idle thought: cap response at idle.
             let next_response_after_secs = resp_secs.min(idle_secs);
             HavingFunState {
@@ -645,24 +774,36 @@ fn buffer_having_fun_message(
         let max_bot = get_having_fun_params().max_consecutive_bot_replies;
         if is_bot && state.consecutive_bot_replies >= max_bot {
             state.loop_protection_drops = state.loop_protection_drops.saturating_add(1);
-            debug!("Discord: dropping bot message in having_fun channel {} (loop protection)", channel_id);
+            debug!(
+                "Discord: dropping bot message in having_fun channel {} (loop protection)",
+                channel_id
+            );
             return;
         }
         if answer_asap {
             state.next_response_after_secs = 0;
         }
-        state.buffer.push(BufferedMessage { author_name, content, is_bot });
+        state.buffer.push(BufferedMessage {
+            author_name,
+            content,
+            is_bot,
+        });
         state.last_activity = std::time::Instant::now();
         // Reset idle clock so response always fires before idle (no message = idle kicks in).
         state.last_thought = std::time::Instant::now();
         if state.buffer.len() == 1 {
-            let when = chrono::Local::now() + chrono::Duration::seconds(state.next_response_after_secs as i64);
+            let when = chrono::Local::now()
+                + chrono::Duration::seconds(state.next_response_after_secs as i64);
             info!(
                 "Having fun channel {}: will answer in {} (around {}){}",
                 channel_id,
                 format_secs_min_sec(state.next_response_after_secs),
                 when.format("%H:%M"),
-                if answer_asap { " (ASAP: mention or human)" } else { "" }
+                if answer_asap {
+                    " (ASAP: mention or human)"
+                } else {
+                    ""
+                }
             );
         }
     }
@@ -725,14 +866,26 @@ async fn having_fun_background_loop(ctx: Context) {
             let configured = count_configured_having_fun_channels();
             if configured > 0 {
                 if having_fun_count > 0 {
-                    let resp_str = next_response_in_secs.map(|s| format!("next response in {}", format_secs_min_sec(s))).unwrap_or_default();
-                    let idle_str = next_idle_in_secs.map(|s| format!("next idle thought in {}", format_secs_min_sec(s))).unwrap_or_default();
-                    let extra = [resp_str, idle_str].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", ");
+                    let resp_str = next_response_in_secs
+                        .map(|s| format!("next response in {}", format_secs_min_sec(s)))
+                        .unwrap_or_default();
+                    let idle_str = next_idle_in_secs
+                        .map(|s| format!("next idle thought in {}", format_secs_min_sec(s)))
+                        .unwrap_or_default();
+                    let extra = [resp_str, idle_str]
+                        .into_iter()
+                        .filter(|x| !x.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     info!(
                         "Having fun: {} channel(s) configured, {} with state — {}",
                         configured,
                         having_fun_count,
-                        if extra.is_empty() { "no pending response or idle".to_string() } else { extra }
+                        if extra.is_empty() {
+                            "no pending response or idle".to_string()
+                        } else {
+                            extra
+                        }
                     );
                 } else {
                     info!(
@@ -775,10 +928,15 @@ async fn having_fun_background_loop(ctx: Context) {
                     flush.push((*channel_id, std::mem::take(&mut state.buffer), after_id));
                     state.last_response = std::time::Instant::now();
                     let params = get_having_fun_params();
-                    let resp_secs = random_secs_in_range(params.response_delay_secs_min, params.response_delay_secs_max);
+                    let resp_secs = random_secs_in_range(
+                        params.response_delay_secs_min,
+                        params.response_delay_secs_max,
+                    );
                     // Response must fire before next idle thought.
-                    state.next_response_after_secs = resp_secs.min(state.next_idle_thought_after_secs);
-                    let next_when = chrono::Local::now() + chrono::Duration::seconds(state.next_response_after_secs as i64);
+                    state.next_response_after_secs =
+                        resp_secs.min(state.next_idle_thought_after_secs);
+                    let next_when = chrono::Local::now()
+                        + chrono::Duration::seconds(state.next_response_after_secs as i64);
                     info!(
                         "Having fun: answering now channel {} ({} msgs), next answer in {} (around {})",
                         channel_id,
@@ -793,7 +951,8 @@ async fn having_fun_background_loop(ctx: Context) {
 
         for (channel_id, messages, after_message_id) in channels_to_flush {
             let had_bot = messages.iter().any(|m| m.is_bot);
-            let new_reply_id = having_fun_respond(channel_id, messages, after_message_id, &ctx).await;
+            let new_reply_id =
+                having_fun_respond(channel_id, messages, after_message_id, &ctx).await;
             if let Some(id) = new_reply_id {
                 if let Ok(mut map) = having_fun_states().lock() {
                     if let Some(state) = map.get_mut(&channel_id) {
@@ -832,10 +991,18 @@ async fn having_fun_background_loop(ctx: Context) {
                     if let Some(state) = map.get(id) {
                         let idle = state.buffer.is_empty()
                             && state.last_activity.elapsed()
-                                >= std::time::Duration::from_secs(state.next_idle_thought_after_secs)
+                                >= std::time::Duration::from_secs(
+                                    state.next_idle_thought_after_secs,
+                                )
                             && state.last_thought.elapsed()
-                                >= std::time::Duration::from_secs(state.next_idle_thought_after_secs);
-                        if idle { Some(*id) } else { None }
+                                >= std::time::Duration::from_secs(
+                                    state.next_idle_thought_after_secs,
+                                );
+                        if idle {
+                            Some(*id)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
@@ -849,9 +1016,13 @@ async fn having_fun_background_loop(ctx: Context) {
                     state.last_thought = std::time::Instant::now();
                     state.last_activity = std::time::Instant::now();
                     let params = get_having_fun_params();
-                    let idle_secs = random_secs_in_range(params.idle_thought_secs_min, params.idle_thought_secs_max);
+                    let idle_secs = random_secs_in_range(
+                        params.idle_thought_secs_min,
+                        params.idle_thought_secs_max,
+                    );
                     // Idle thought must fire after next response (so response stays smaller).
-                    state.next_idle_thought_after_secs = idle_secs.max(state.next_response_after_secs);
+                    state.next_idle_thought_after_secs =
+                        idle_secs.max(state.next_response_after_secs);
                     Some(state.next_idle_thought_after_secs)
                 } else {
                     None
@@ -895,11 +1066,9 @@ async fn having_fun_respond(
             system.push_str(&crate::metrics::format_metrics_for_ai_context());
             (system, agent.model.clone())
         } else {
-            let soul = crate::config::Config::load_soul_content();
+            // Agent not found: use casual context only (no global soul) so we never mix work/Redmine/language from other channel types.
             let mut system = String::new();
             system.push_str(HAVING_FUN_CASUAL_CONTEXT);
-            system.push_str("\n\n");
-            system.push_str(&soul);
             if let Some(ref prompt) = chan.prompt {
                 system.push_str("\n\n");
                 system.push_str(prompt);
@@ -911,11 +1080,9 @@ async fn having_fun_respond(
             (system, chan.model.clone())
         }
     } else {
-        let soul = crate::config::Config::load_soul_content();
+        // No channel agent: use having_fun-specific context only (no global soul) so persona stays casual.
         let mut system = String::new();
         system.push_str(HAVING_FUN_CASUAL_CONTEXT);
-        system.push_str("\n\n");
-        system.push_str(&soul);
         if let Some(ref prompt) = chan.prompt {
             system.push_str("\n\n");
             system.push_str(prompt);
@@ -929,7 +1096,8 @@ async fn having_fun_respond(
 
     let mut prior = crate::session_memory::get_messages("discord", channel_id);
     if prior.is_empty() {
-        prior = crate::session_memory::load_messages_from_latest_session_file("discord", channel_id);
+        prior =
+            crate::session_memory::load_messages_from_latest_session_file("discord", channel_id);
     }
 
     // So the model can answer "which model are you running on?" with the actual Ollama model name.
@@ -954,7 +1122,11 @@ async fn having_fun_respond(
 
     const HISTORY_CAP: usize = 20;
     for (role, content) in prior.into_iter().rev().take(HISTORY_CAP).rev() {
-        ollama_msgs.push(crate::ollama::ChatMessage { role, content, images: None });
+        ollama_msgs.push(crate::ollama::ChatMessage {
+            role,
+            content,
+            images: None,
+        });
     }
 
     // Retrieve latest messages from Discord (after our last response) for better flow.
@@ -984,7 +1156,9 @@ async fn having_fun_respond(
     let channel = serenity::model::id::ChannelId::new(channel_id);
     let _ = channel.broadcast_typing(ctx).await;
 
-    match crate::commands::ollama::send_ollama_chat_messages(ollama_msgs, model_override, None).await {
+    match crate::commands::ollama::send_ollama_chat_messages(ollama_msgs, model_override, None)
+        .await
+    {
         Ok(response) => {
             let reply = strip_leading_label(response.message.content.trim());
             if reply.is_empty() {
@@ -1007,7 +1181,10 @@ async fn having_fun_respond(
             last_msg_id
         }
         Err(e) => {
-            debug!("Having fun: Ollama failed for channel {}: {}", channel_id, e);
+            debug!(
+                "Having fun: Ollama failed for channel {}: {}",
+                channel_id, e
+            );
             None
         }
     }
@@ -1029,11 +1206,9 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
             system.push_str(&crate::metrics::format_metrics_for_ai_context());
             (system, agent.model.clone())
         } else {
-            let soul = crate::config::Config::load_soul_content();
+            // Agent not found: use casual context only (no global soul) so we never mix work/Redmine/language from other channel types.
             let mut system = String::new();
             system.push_str(HAVING_FUN_CASUAL_CONTEXT);
-            system.push_str("\n\n");
-            system.push_str(&soul);
             if let Some(ref prompt) = chan.prompt {
                 system.push_str("\n\n");
                 system.push_str(prompt);
@@ -1045,11 +1220,9 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
             (system, chan.model.clone())
         }
     } else {
-        let soul = crate::config::Config::load_soul_content();
+        // No channel agent: use having_fun-specific context only (no global soul) so persona stays casual.
         let mut system = String::new();
         system.push_str(HAVING_FUN_CASUAL_CONTEXT);
-        system.push_str("\n\n");
-        system.push_str(&soul);
         if let Some(ref prompt) = chan.prompt {
             system.push_str("\n\n");
             system.push_str(prompt);
@@ -1063,7 +1236,8 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
 
     let mut prior = crate::session_memory::get_messages("discord", channel_id);
     if prior.is_empty() {
-        prior = crate::session_memory::load_messages_from_latest_session_file("discord", channel_id);
+        prior =
+            crate::session_memory::load_messages_from_latest_session_file("discord", channel_id);
     }
 
     let effective_model = model_override
@@ -1087,7 +1261,11 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
 
     const HISTORY_CAP: usize = 10;
     for (role, content) in prior.into_iter().rev().take(HISTORY_CAP).rev() {
-        ollama_msgs.push(crate::ollama::ChatMessage { role, content, images: None });
+        ollama_msgs.push(crate::ollama::ChatMessage {
+            role,
+            content,
+            images: None,
+        });
     }
 
     ollama_msgs.push(crate::ollama::ChatMessage {
@@ -1099,7 +1277,9 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
     let channel = serenity::model::id::ChannelId::new(channel_id);
     let _ = channel.broadcast_typing(&ctx).await;
 
-    match crate::commands::ollama::send_ollama_chat_messages(ollama_msgs, model_override, None).await {
+    match crate::commands::ollama::send_ollama_chat_messages(ollama_msgs, model_override, None)
+        .await
+    {
         Ok(response) => {
             let reply = strip_leading_label(response.message.content.trim());
             if reply.is_empty() {
@@ -1117,7 +1297,10 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
             crate::session_memory::add_message("discord", channel_id, "assistant", &reply);
         }
         Err(e) => {
-            debug!("Having fun: idle thought failed for channel {}: {}", channel_id, e);
+            debug!(
+                "Having fun: idle thought failed for channel {}: {}",
+                channel_id, e
+            );
         }
     }
 }
@@ -1139,7 +1322,11 @@ fn strip_leading_label(text: &str) -> String {
             && !label.contains(' ')
         {
             let rest = t[first_line_end..].trim();
-            return if rest.is_empty() { first_line.trim_end_matches(':').trim().to_string() } else { rest.to_string() };
+            return if rest.is_empty() {
+                first_line.trim_end_matches(':').trim().to_string()
+            } else {
+                rest.to_string()
+            };
         }
     }
     t.to_string()
@@ -1164,7 +1351,10 @@ fn split_message_for_discord(text: &str) -> Vec<String> {
         let (head, tail) = remaining.split_at(byte_pos);
         let split_at = head.rfind('\n').map(|i| i + 1).unwrap_or(byte_pos);
         let (chunk, put_back) = if split_at > 0 && split_at < byte_pos {
-            (head[..split_at].to_string(), format!("{}{}", &head[split_at..], tail))
+            (
+                head[..split_at].to_string(),
+                format!("{}{}", &head[split_at..], tail),
+            )
         } else {
             (head.to_string(), tail.to_string())
         };
@@ -1200,12 +1390,24 @@ fn extract_model_switch_from_question(question: &str) -> Option<(String, String)
     // Model name can contain / and : (e.g. huihui_ai/gpt-oss-abliterated:latest). Split on " and " or " then ".
     let rest_lower = lower.get(prefix_len..).unwrap_or("");
     let (model_name, rest) = if let Some(and_pos) = rest_lower.find(" and ") {
-        let model = after_prefix[..and_pos.min(after_prefix.len())].trim().to_string();
-        let tail = after_prefix.get(and_pos + 5..).unwrap_or("").trim().to_string();
+        let model = after_prefix[..and_pos.min(after_prefix.len())]
+            .trim()
+            .to_string();
+        let tail = after_prefix
+            .get(and_pos + 5..)
+            .unwrap_or("")
+            .trim()
+            .to_string();
         (model, tail)
     } else if let Some(then_pos) = rest_lower.find(" then ") {
-        let model = after_prefix[..then_pos.min(after_prefix.len())].trim().to_string();
-        let tail = after_prefix.get(then_pos + 6..).unwrap_or("").trim().to_string();
+        let model = after_prefix[..then_pos.min(after_prefix.len())]
+            .trim()
+            .to_string();
+        let tail = after_prefix
+            .get(then_pos + 6..)
+            .unwrap_or("")
+            .trim()
+            .to_string();
         (model, tail)
     } else {
         let model = after_prefix
@@ -1251,7 +1453,11 @@ fn parse_discord_ollama_overrides(
             continue;
         }
         let lower = line.to_lowercase();
-        if lower == "verbose" || lower == "verbose:" || lower == "verbose: true" || lower == "verbose=true" {
+        if lower == "verbose"
+            || lower == "verbose:"
+            || lower == "verbose: true"
+            || lower == "verbose=true"
+        {
             verbose = Some(true);
             consumed += 1;
         } else if lower == "verbose: false" || lower == "verbose=false" {
@@ -1348,7 +1554,14 @@ fn parse_discord_ollama_overrides(
         let skills = crate::skills::load_skills();
         crate::skills::find_skill_by_number_or_topic(&skills, &sel).map(|s| s.content.clone())
     });
-    (question, model_override, options_override, skill_content, agent_selector, verbose)
+    (
+        question,
+        model_override,
+        options_override,
+        skill_content,
+        agent_selector,
+        verbose,
+    )
 }
 
 /// True if the message clearly requests tools (search, browser, screenshot, send here) that only the full agent router can fulfill.
@@ -1358,26 +1571,38 @@ fn message_wants_agent_tools(content: &str) -> bool {
     if lower.len() < 10 {
         return false;
     }
-    let has_search = lower.contains("perplexity") || lower.contains("brave search") || lower.contains("search the web") || lower.contains("search for ");
-    let has_browser = lower.contains("browser") || lower.contains("visit ") || lower.contains(" open ") || lower.contains("url") || lower.contains("extract the url");
-    let has_screenshot = lower.contains("screenshot") || lower.contains("take a screen") || lower.contains("capture");
-    let has_send_here = lower.contains("send me") || lower.contains("send the") || lower.contains("here in discord") || lower.contains("in discord");
+    let has_search = lower.contains("perplexity")
+        || lower.contains("brave search")
+        || lower.contains("search the web")
+        || lower.contains("search for ");
+    let has_browser = lower.contains("browser")
+        || lower.contains("visit ")
+        || lower.contains(" open ")
+        || lower.contains("url")
+        || lower.contains("extract the url");
+    let has_screenshot = lower.contains("screenshot")
+        || lower.contains("take a screen")
+        || lower.contains("capture");
+    let has_send_here = lower.contains("send me")
+        || lower.contains("send the")
+        || lower.contains("here in discord")
+        || lower.contains("in discord");
     (has_search || has_browser) && (has_screenshot || has_send_here)
         || (has_screenshot && has_send_here)
-        || (lower.contains("perplexity") && lower.contains("url") && (lower.contains("visit") || lower.contains("screenshot")))
+        || (lower.contains("perplexity")
+            && lower.contains("url")
+            && (lower.contains("visit") || lower.contains("screenshot")))
 }
 
 /// True if the message indicates the user is not satisfied and wants the task actually completed.
-/// Patterns are loaded from ~/.mac-stats/escalation_patterns.md (one phrase per line; user-editable).
+/// Patterns are loaded from ~/.mac-stats/agents/escalation_patterns.md (one phrase per line; user-editable).
 fn is_escalation_message(question: &str) -> bool {
     let lower = question.trim().to_lowercase();
     if lower.is_empty() {
         return false;
     }
     let patterns = crate::config::Config::load_escalation_patterns();
-    patterns
-        .iter()
-        .any(|p| lower.contains(&p.to_lowercase()))
+    patterns.iter().any(|p| lower.contains(&p.to_lowercase()))
 }
 
 /// True if we already spawned the gateway thread (only one gateway per process).
@@ -1408,7 +1633,10 @@ pub fn set_discord_user_name(user_id: u64, display_name: String) {
 
 /// Get a cached Discord display name for a user id, if known.
 pub fn get_discord_display_name(user_id: u64) -> Option<String> {
-    discord_user_names().lock().ok().and_then(|map| map.get(&user_id).cloned())
+    discord_user_names()
+        .lock()
+        .ok()
+        .and_then(|map| map.get(&user_id).cloned())
 }
 
 struct Handler;
@@ -1418,7 +1646,10 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, data_about_bot: serenity::model::gateway::Ready) {
         let id = data_about_bot.user.id;
         let _ = BOT_USER_ID.set(id);
-        info!("Discord: Bot connected as {} (id: {})", data_about_bot.user.name, id);
+        info!(
+            "Discord: Bot connected as {} (id: {})",
+            data_about_bot.user.name, id
+        );
         tokio::spawn(having_fun_background_loop(ctx));
     }
 
@@ -1448,7 +1679,8 @@ impl EventHandler for Handler {
             let mention_tag = format!("<@{}>", bot_id);
             sanitize_image_error_content(raw.replace(&mention_tag, "").trim())
         };
-        let attachment_images_base64 = download_discord_image_attachments(&new_message.attachments).await;
+        let attachment_images_base64 =
+            download_discord_image_attachments(&new_message.attachments).await;
         let mut content = content;
         if content.is_empty() && !attachment_images_base64.is_empty() {
             content = DISCORD_IMAGE_ONLY_PROMPT.to_string();
@@ -1488,16 +1720,26 @@ impl EventHandler for Handler {
                     chan_id,
                     crate::logging::ellipse(&content, 100)
                 );
-                crate::session_memory::add_message("discord", chan_id, "user",
-                    &format!("{}: {}", author_name, content));
+                crate::session_memory::add_message(
+                    "discord",
+                    chan_id,
+                    "user",
+                    &format!("{}: {}", author_name, content),
+                );
                 let answer_asap = mentions_bot || !is_bot;
                 buffer_having_fun_message(chan_id, author_name, content, is_bot, answer_asap);
                 return;
             }
         }
 
-        let (mut question, mut model_override, options_override, skill_content, agent_selector, verbose_opt) =
-            parse_discord_ollama_overrides(&content);
+        let (
+            mut question,
+            mut model_override,
+            options_override,
+            skill_content,
+            agent_selector,
+            verbose_opt,
+        ) = parse_discord_ollama_overrides(&content);
         let escalation = is_escalation_message(&question);
         if escalation {
             info!("Discord: escalation detected (user wants task actually completed)");
@@ -1541,10 +1783,7 @@ impl EventHandler for Handler {
         };
         info!(
             "Discord: {} from {} (channel {}) verbose={}",
-            trigger,
-            new_message.author.name,
-            new_message.channel_id,
-            verbose
+            trigger, new_message.author.name, new_message.channel_id, verbose
         );
 
         let channel_id_u64 = new_message.channel_id.get();
@@ -1554,12 +1793,15 @@ impl EventHandler for Handler {
             let lower = question.trim().to_lowercase();
             if lower.starts_with("new session:") || lower.starts_with("new session ") {
                 crate::session_memory::clear_session("discord", channel_id_u64);
-                info!("Discord: new session requested, cleared history for channel {}", channel_id_u64);
+                info!(
+                    "Discord: new session requested, cleared history for channel {}",
+                    channel_id_u64
+                );
                 let stripped = question.trim();
                 let colon_pos = stripped.find(':').or_else(|| stripped.find(' '));
                 match colon_pos {
                     Some(i) if stripped[..i].to_lowercase().trim() == "new session" => {
-                        stripped[i+1..].trim().to_string()
+                        stripped[i + 1..].trim().to_string()
                     }
                     _ => stripped.replacen("new session", "", 1).trim().to_string(),
                 }
@@ -1572,7 +1814,11 @@ impl EventHandler for Handler {
         let to_ollama = if question.chars().count() <= LOG_MAX {
             question.to_string()
         } else {
-            format!("{} ({} chars)", crate::logging::ellipse(&question, LOG_MAX), question.chars().count())
+            format!(
+                "{} ({} chars)",
+                crate::logging::ellipse(&question, LOG_MAX),
+                question.chars().count()
+            )
         };
         info!("Discord→Ollama: sending: {}", to_ollama);
 
@@ -1585,7 +1831,10 @@ impl EventHandler for Handler {
         } else {
             let mut p = crate::session_memory::get_messages("discord", channel_id_u64);
             if p.is_empty() {
-                p = crate::session_memory::load_messages_from_latest_session_file("discord", channel_id_u64);
+                p = crate::session_memory::load_messages_from_latest_session_file(
+                    "discord",
+                    channel_id_u64,
+                );
             }
             p
         };
@@ -1595,7 +1844,11 @@ impl EventHandler for Handler {
             Some(
                 prior
                     .into_iter()
-                    .map(|(role, content)| crate::ollama::ChatMessage { role, content, images: None })
+                    .map(|(role, content)| crate::ollama::ChatMessage {
+                        role,
+                        content,
+                        images: None,
+                    })
                     .collect(),
             )
         };
@@ -1645,7 +1898,10 @@ impl EventHandler for Handler {
                 }
                 if let Some(edit_content) = msg.strip_prefix(EDIT_PREFIX) {
                     if let Some(mut m) = last_criteria_message.take() {
-                        if let Err(e) = m.edit(&ctx_send, EditMessage::new().content(edit_content)).await {
+                        if let Err(e) = m
+                            .edit(&ctx_send, EditMessage::new().content(edit_content))
+                            .await
+                        {
                             debug!("Discord: edit status message failed: {}", e);
                         }
                     }
@@ -1692,38 +1948,51 @@ impl EventHandler for Handler {
                 channel_id_u64
             );
         }
-        let (reply_text, attachment_paths) = match crate::commands::ollama::answer_with_ollama_and_fetch(
-            &question,
-            Some(status_tx),
-            Some(channel_id_u64),
-            Some(author_id_u64),
-            Some(display_name),
-            model_override,
-            options_override,
-            skill_content,
-            agent_override,
-            true,
-            conversation_history,
-            escalation,
-            true, // retry once when verification says NO
-            true, // from_remote: use headless browser unless user asks to see it
-            attachment_images_for_ollama,
-        ).await {
-            Ok(r) => (r.text, r.attachment_paths),
-            Err(e) => {
-                error!("Discord: Failed to generate reply (channel {}): {}", channel_id_u64, e);
-                let err_lower = e.to_string().to_lowercase();
-                let hint = if err_lower.contains("timed out") || err_lower.contains("timeout") {
-                    "Request timed out — Ollama may be busy; try again in a moment."
-                } else {
-                    "Is Ollama configured?"
-                };
-                (
-                    format!("Sorry, I couldn't generate a reply: {}. ({})", e, hint),
-                    Vec::new(),
-                )
-            }
-        };
+        info!(
+            "Discord: processing message (channel {}) — {}",
+            channel_id_u64,
+            crate::config::Config::version_display()
+        );
+        let (reply_text, attachment_paths) =
+            match crate::commands::ollama::answer_with_ollama_and_fetch(
+                &question,
+                Some(status_tx),
+                Some(channel_id_u64),
+                Some(author_id_u64),
+                Some(display_name),
+                model_override,
+                options_override,
+                skill_content,
+                agent_override,
+                true,
+                conversation_history,
+                escalation,
+                true, // retry once when verification says NO
+                true, // from_remote: use headless browser unless user asks to see it
+                attachment_images_for_ollama,
+                None,  // discord_intermediate: set only when recursing from retry path
+                false, // is_verification_retry
+            )
+            .await
+            {
+                Ok(r) => (r.text, r.attachment_paths),
+                Err(e) => {
+                    error!(
+                        "Discord: Failed to generate reply (channel {}): {}",
+                        channel_id_u64, e
+                    );
+                    let err_lower = e.to_string().to_lowercase();
+                    let hint = if err_lower.contains("timed out") || err_lower.contains("timeout") {
+                        "Request timed out — Ollama may be busy; try again in a moment."
+                    } else {
+                        "Is Ollama configured?"
+                    };
+                    (
+                        format!("Sorry, I couldn't generate a reply: {}. ({})", e, hint),
+                        Vec::new(),
+                    )
+                }
+            };
 
         typing_cancel.cancel();
         let _ = typing_task.await;
@@ -1740,16 +2009,30 @@ impl EventHandler for Handler {
         if verbosity >= 2 || nchars <= RECV_LOG_MAX {
             info!("Discord←Ollama: received ({} chars): {}", nchars, reply);
         } else {
-            info!("Discord←Ollama: received ({} chars): {}", nchars, crate::logging::ellipse(&reply, RECV_LOG_MAX));
+            info!(
+                "Discord←Ollama: received ({} chars): {}",
+                nchars,
+                crate::logging::ellipse(&reply, RECV_LOG_MAX)
+            );
         }
 
         let chunks = split_message_for_discord(&reply);
         for (i, chunk) in chunks.iter().enumerate() {
             if verbosity >= 3 {
-                debug!("Discord outbound (decoded) reply part {}/{}: {}", i + 1, chunks.len(), chunk);
+                debug!(
+                    "Discord outbound (decoded) reply part {}/{}: {}",
+                    i + 1,
+                    chunks.len(),
+                    chunk
+                );
             }
             if let Err(e) = new_message.channel_id.say(&ctx, chunk).await {
-                error!("Discord: Failed to send reply (part {}/{}): {}", i + 1, chunks.len(), e);
+                error!(
+                    "Discord: Failed to send reply (part {}/{}): {}",
+                    i + 1,
+                    chunks.len(),
+                    e
+                );
                 break;
             }
             if chunks.len() > 1 && i < chunks.len() - 1 {
@@ -1778,7 +2061,11 @@ impl EventHandler for Handler {
             );
         }
         if !allowed.is_empty() {
-            info!("Discord: sending {} screenshot(s) to channel {}", allowed.len(), channel_id_u64);
+            info!(
+                "Discord: sending {} screenshot(s) to channel {}",
+                allowed.len(),
+                channel_id_u64
+            );
             use serenity::builder::CreateAttachment;
             use serenity::builder::CreateMessage;
             let mut attachments = Vec::with_capacity(allowed.len());
@@ -1786,7 +2073,11 @@ impl EventHandler for Handler {
                 match CreateAttachment::path(path).await {
                     Ok(att) => attachments.push(att),
                     Err(e) => {
-                        error!("Discord: failed to read attachment {}: {}", path.display(), e);
+                        error!(
+                            "Discord: failed to read attachment {}: {}",
+                            path.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -1795,12 +2086,22 @@ impl EventHandler for Handler {
                     .content("Screenshot(s) as requested:")
                     .add_files(attachments);
                 if let Err(e) = new_message.channel_id.send_message(&ctx, builder).await {
-                    error!("Discord: Failed to send attachment(s) to channel {}: {}", channel_id_u64, e);
+                    error!(
+                        "Discord: Failed to send attachment(s) to channel {}: {}",
+                        channel_id_u64, e
+                    );
                 } else {
-                    info!("Discord: sent {} attachment(s) to channel {}", allowed.len(), channel_id_u64);
+                    info!(
+                        "Discord: sent {} attachment(s) to channel {}",
+                        allowed.len(),
+                        channel_id_u64
+                    );
                 }
             } else {
-                error!("Discord: all {} path(s) failed CreateAttachment::path", allowed.len());
+                error!(
+                    "Discord: all {} path(s) failed CreateAttachment::path",
+                    allowed.len()
+                );
             }
         }
 
@@ -1910,7 +2211,10 @@ pub async fn send_message_to_channel_with_attachments(
     } else {
         content.to_string()
     };
-    let url = format!("https://discord.com/api/v10/channels/{}/messages", channel_id);
+    let url = format!(
+        "https://discord.com/api/v10/channels/{}/messages",
+        channel_id
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -1961,9 +2265,15 @@ pub async fn send_message_to_channel(channel_id: u64, content: &str) -> Result<(
         content.to_string()
     };
     if crate::logging::VERBOSITY.load(Ordering::Relaxed) >= 3 {
-        debug!("Discord outbound (decoded) send_message_to_channel: {}", content);
+        debug!(
+            "Discord outbound (decoded) send_message_to_channel: {}",
+            content
+        );
     }
-    let url = format!("https://discord.com/api/v10/channels/{}/messages", channel_id);
+    let url = format!(
+        "https://discord.com/api/v10/channels/{}/messages",
+        channel_id
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -2021,7 +2331,10 @@ pub fn get_discord_token() -> Option<String> {
         Ok(Some(_)) => None,
         Ok(None) => None,
         Err(e) => {
-            debug!("Discord: Keychain read failed (using env/file instead): {}", e);
+            debug!(
+                "Discord: Keychain read failed (using env/file instead): {}",
+                e
+            );
             None
         }
     }
@@ -2073,13 +2386,21 @@ mod tests {
         let _ = std::fs::create_dir_all(&screenshots);
         let under = screenshots.join("test_attachment_allowed.png");
         let _ = std::fs::write(&under, b"x");
-        assert!(allowed_attachment_path(&under), "path under screenshots_dir should be allowed");
+        assert!(
+            allowed_attachment_path(&under),
+            "path under screenshots_dir should be allowed"
+        );
         let _ = std::fs::remove_file(&under);
 
-        let outside = std::env::temp_dir().join("mac-stats-attachment-test-outside").join("file.png");
+        let outside = std::env::temp_dir()
+            .join("mac-stats-attachment-test-outside")
+            .join("file.png");
         let _ = std::fs::create_dir_all(outside.parent().unwrap());
         let _ = std::fs::write(&outside, b"x");
-        assert!(!allowed_attachment_path(&outside), "path outside screenshots_dir should be rejected");
+        assert!(
+            !allowed_attachment_path(&outside),
+            "path outside screenshots_dir should be rejected"
+        );
         let _ = std::fs::remove_file(&outside);
         let _ = std::fs::remove_dir(outside.parent().unwrap());
     }

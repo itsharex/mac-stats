@@ -26,10 +26,10 @@ fn format_timestamp() -> String {
 pub fn write_log_entry(level_str: &str, message: &str) {
     let timestamp = format_timestamp();
     let log_line = format!("[{}] [{}] {}", timestamp, level_str, message);
-    
+
     // Write to terminal (stderr)
     eprintln!("{}", log_line);
-    
+
     // Write to log file using config module
     use crate::config::Config;
     let log_path = Config::log_file_path();
@@ -62,12 +62,18 @@ fn shorten_file_path(file_path: &str) -> String {
 
 // Write structured log entry (JSON) to log file
 // min_verbosity: minimum verbosity level required (1, 2, or 3)
-pub fn write_structured_log_with_verbosity(location: &str, message: &str, data: &serde_json::Value, hypothesis_id: &str, min_verbosity: u8) {
+pub fn write_structured_log_with_verbosity(
+    location: &str,
+    message: &str,
+    data: &serde_json::Value,
+    hypothesis_id: &str,
+    min_verbosity: u8,
+) {
     // Check verbosity level
     if VERBOSITY.load(Ordering::Relaxed) < min_verbosity {
         return;
     }
-    
+
     let log_data = serde_json::json!({
         "location": location,
         "message": message,
@@ -77,7 +83,7 @@ pub fn write_structured_log_with_verbosity(location: &str, message: &str, data: 
         "runId": "run3",
         "hypothesisId": hypothesis_id
     });
-    
+
     // Use config module for log file path
     use crate::config::Config;
     let log_path = Config::log_file_path();
@@ -91,22 +97,29 @@ pub fn write_structured_log_with_verbosity(location: &str, message: &str, data: 
             let _ = writeln!(file, "{}", json_str);
         }
     }
-    
+
     // Also write human-readable version to terminal
     let timestamp = format_timestamp();
     if hypothesis_id.is_empty() {
         eprintln!("[{}] [DEBUG] {}: {}", timestamp, location, message);
     } else {
-        eprintln!("[{}] [DEBUG] {}: {} (hypothesis: {})", timestamp, location, message, hypothesis_id);
+        eprintln!(
+            "[{}] [DEBUG] {}: {} (hypothesis: {})",
+            timestamp, location, message, hypothesis_id
+        );
     }
 }
 
 // Write structured log entry (JSON) to log file
 // Defaults to verbosity >= 2 for backward compatibility
-pub fn write_structured_log(location: &str, message: &str, data: &serde_json::Value, hypothesis_id: &str) {
+pub fn write_structured_log(
+    location: &str,
+    message: &str,
+    data: &serde_json::Value,
+    hypothesis_id: &str,
+) {
     write_structured_log_with_verbosity(location, message, data, hypothesis_id, 2);
 }
-    
 
 // Internal helper function for debug macros to convert file path
 pub fn shorten_file_path_internal(file_path: &str) -> String {

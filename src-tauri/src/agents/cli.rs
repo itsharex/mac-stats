@@ -60,7 +60,10 @@ pub async fn run_agent_test(selector: &str, path: Option<&Path>) -> Result<(), i
             let dir = Config::agents_dir().join(format!("agent-{}", agent.id));
             let p = dir.join("testing.md");
             if !p.exists() {
-                eprintln!("testing.md not found at {}. Required for each agent.", p.display());
+                eprintln!(
+                    "testing.md not found at {}. Required for each agent.",
+                    p.display()
+                );
                 return Err(1);
             }
             p
@@ -90,10 +93,20 @@ pub async fn run_agent_test(selector: &str, path: Option<&Path>) -> Result<(), i
     );
 
     for (i, prompt) in prompts.iter().enumerate() {
-        info!("Agent test {}/{}: running ({} chars)", i + 1, prompts.len(), prompt.chars().count());
+        info!(
+            "Agent test {}/{}: running ({} chars)",
+            i + 1,
+            prompts.len(),
+            prompt.chars().count()
+        );
         match crate::commands::ollama::run_agent_ollama_session(agent, prompt, None).await {
             Ok(response) => {
-                info!("Agent test {}/{}: response {} chars", i + 1, prompts.len(), response.chars().count());
+                info!(
+                    "Agent test {}/{}: response {} chars",
+                    i + 1,
+                    prompts.len(),
+                    response.chars().count()
+                );
                 println!("Test {}: {} chars", i + 1, response.chars().count());
             }
             Err(e) => {
@@ -103,6 +116,11 @@ pub async fn run_agent_test(selector: &str, path: Option<&Path>) -> Result<(), i
         }
     }
 
-    println!("Agent {} ({}): {} tests run, ok", agent.name, agent.id, prompts.len());
+    println!(
+        "Agent {} ({}): {} tests run, ok",
+        agent.name,
+        agent.id,
+        prompts.len()
+    );
     Ok(())
 }

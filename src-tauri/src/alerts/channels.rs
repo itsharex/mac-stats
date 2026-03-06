@@ -1,8 +1,8 @@
 //! Alert channel implementations
 
 use super::AlertContext;
-use anyhow::{Result, Context};
 use crate::security;
+use anyhow::{Context, Result};
 
 /// Trait for alert channels
 pub trait AlertChannel: Send + Sync {
@@ -51,7 +51,7 @@ impl AlertChannel for TelegramChannel {
     fn send(&mut self, message: &str, _context: &AlertContext) -> Result<()> {
         let token = self.get_bot_token()?;
         let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
-        
+
         let client = reqwest::blocking::Client::new();
         let payload = serde_json::json!({
             "chat_id": self.chat_id,
@@ -59,10 +59,7 @@ impl AlertChannel for TelegramChannel {
             "parse_mode": "Markdown"
         });
 
-        client
-            .post(&url)
-            .json(&payload)
-            .send()?;
+        client.post(&url).json(&payload).send()?;
 
         Ok(())
     }
@@ -103,16 +100,13 @@ impl AlertChannel for SlackChannel {
 
     fn send(&mut self, message: &str, _context: &AlertContext) -> Result<()> {
         let webhook_url = self.get_webhook_url()?;
-        
+
         let client = reqwest::blocking::Client::new();
         let payload = serde_json::json!({
             "text": message
         });
 
-        client
-            .post(&webhook_url)
-            .json(&payload)
-            .send()?;
+        client.post(&webhook_url).json(&payload).send()?;
 
         Ok(())
     }
@@ -156,7 +150,7 @@ impl AlertChannel for MastodonChannel {
     fn send(&mut self, message: &str, _context: &AlertContext) -> Result<()> {
         let token = self.get_api_token()?;
         let url = format!("{}/api/v1/statuses", self.instance_url);
-        
+
         let client = reqwest::blocking::Client::new();
         let payload = serde_json::json!({
             "status": message,
@@ -199,6 +193,8 @@ impl AlertChannel for SignalChannel {
     fn send(&mut self, _message: &str, _context: &AlertContext) -> Result<()> {
         // Signal requires Signal REST API or Signal CLI
         // This is a placeholder implementation
-        Err(anyhow::anyhow!("Signal channel not yet implemented - requires Signal REST API setup"))
+        Err(anyhow::anyhow!(
+            "Signal channel not yet implemented - requires Signal REST API setup"
+        ))
     }
 }

@@ -16,13 +16,11 @@ pub struct StoreCredentialRequest {
 /// Store a credential in Keychain
 #[tauri::command]
 pub fn store_credential(request: StoreCredentialRequest) -> Result<(), String> {
-    security::store_credential(&request.account, &request.password)
-        .map_err(|e| e.to_string())
+    security::store_credential(&request.account, &request.password).map_err(|e| e.to_string())
 }
 
 /// Delete a credential from Keychain
 #[tauri::command]
 pub fn delete_credential(account: String) -> Result<(), String> {
-    security::delete_credential(&account)
-        .map_err(|e| e.to_string())
+    security::delete_credential(&account).map_err(|e| e.to_string())
 }

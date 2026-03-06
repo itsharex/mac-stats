@@ -1,7 +1,7 @@
 //! Tauri commands for agent CRUD and listing.
 //! Agents live under ~/.mac-stats/agents/agent-<id>/ with agent.json, skill.md, soul.md, mood.md.
 
-use crate::agents::{load_all_agents, get_agent_dir, find_agent_by_id_or_name, AgentConfig};
+use crate::agents::{find_agent_by_id_or_name, get_agent_dir, load_all_agents, AgentConfig};
 use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -54,7 +54,8 @@ pub fn get_agent_details(selector: String) -> Result<AgentDetails, String> {
     let agents = load_all_agents();
     let agent = find_agent_by_id_or_name(&agents, &selector)
         .ok_or_else(|| format!("Agent not found: {}", selector))?;
-    let dir = get_agent_dir(&agent.id).ok_or_else(|| format!("Agent directory missing: {}", agent.id))?;
+    let dir =
+        get_agent_dir(&agent.id).ok_or_else(|| format!("Agent directory missing: {}", agent.id))?;
     let skill = std::fs::read_to_string(dir.join("skill.md")).unwrap_or_default();
     let soul = std::fs::read_to_string(dir.join("soul.md"))
         .ok()
@@ -114,18 +115,25 @@ pub struct UpdateAgentConfigPayload {
 }
 
 #[tauri::command]
-pub fn update_agent_config(agent_id: String, payload: UpdateAgentConfigPayload) -> Result<(), String> {
+pub fn update_agent_config(
+    agent_id: String,
+    payload: UpdateAgentConfigPayload,
+) -> Result<(), String> {
     let dir = get_agent_dir(&agent_id).ok_or_else(|| format!("Agent not found: {}", agent_id))?;
     let path = dir.join("agent.json");
     let current: AgentConfig = {
-        let s = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read agent.json: {}", e))?;
+        let s = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read agent.json: {}", e))?;
         serde_json::from_str(&s).map_err(|e| format!("Invalid agent.json: {}", e))?
     };
     let name = payload.name.unwrap_or(current.name);
     let slug = payload.slug.or(current.slug);
     let model = payload.model.or(current.model);
     let model_role = payload.model_role.or(current.model_role);
-    let orchestrator = payload.orchestrator.or(current.orchestrator).unwrap_or(false);
+    let orchestrator = payload
+        .orchestrator
+        .or(current.orchestrator)
+        .unwrap_or(false);
     let enabled = payload.enabled.unwrap_or(current.enabled.unwrap_or(true));
     let description = payload.description.or(current.description);
     let max_tool_iterations = payload.max_tool_iterations.or(current.max_tool_iterations);
@@ -202,8 +210,10 @@ pub fn delete_agent(agent_id: String) -> Result<(), String> {
 fn set_agent_enabled(agent_id: &str, enabled: bool) -> Result<(), String> {
     let dir = get_agent_dir(agent_id).ok_or_else(|| format!("Agent not found: {}", agent_id))?;
     let path = dir.join("agent.json");
-    let s = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read agent.json: {}", e))?;
-    let mut config: AgentConfig = serde_json::from_str(&s).map_err(|e| format!("Invalid agent.json: {}", e))?;
+    let s =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read agent.json: {}", e))?;
+    let mut config: AgentConfig =
+        serde_json::from_str(&s).map_err(|e| format!("Invalid agent.json: {}", e))?;
     config.enabled = Some(enabled);
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("Failed to write agent.json: {}", e))
@@ -244,7 +254,9 @@ pub fn list_prompt_files() -> Vec<PromptFile> {
         },
         PromptFile {
             name: "execution_prompt".to_string(),
-            path: Config::execution_prompt_path().to_string_lossy().to_string(),
+            path: Config::execution_prompt_path()
+                .to_string_lossy()
+                .to_string(),
             content: Config::load_execution_prompt(),
         },
     ]
@@ -257,10 +269,17 @@ pub fn save_prompt_file(name: String, content: String) -> Result<(), String> {
         "soul" => Config::soul_file_path(),
         "planning_prompt" => Config::planning_prompt_path(),
         "execution_prompt" => Config::execution_prompt_path(),
-        _ => return Err(format!("Unknown prompt file: {}. Use: soul, planning_prompt, execution_prompt.", name)),
+        _ => {
+            return Err(format!(
+                "Unknown prompt file: {}. Use: soul, planning_prompt, execution_prompt.",
+                name
+            ))
+        }
     };
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
-    std::fs::write(&path, content.trim()).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+    std::fs::write(&path, content.trim())
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }

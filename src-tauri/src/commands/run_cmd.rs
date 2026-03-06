@@ -2,7 +2,7 @@
 //!
 //! Allowlist is read from the first enabled orchestrator's skill.md (section "## RUN_CMD allowlist");
 //! if missing, the default list below is used. Paths under ~/.mac-stats where applicable.
-//! No shell; allowlist and path validation only. See docs/011_local_cmd_agent.md.
+//! Commands are executed via a shell (sh -c) so redirects (>, |, ;) work. See docs/011_local_cmd_agent.md.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -12,7 +12,17 @@ use tracing::info;
 /// Security: cursor-agent is an exception — it runs user/agent-controlled prompts in the user
 /// environment and receives args without path validation; treat it as a privileged capability.
 const DEFAULT_ALLOWED_COMMANDS: &[&str] = &[
-    "cat", "head", "tail", "ls", "grep", "date", "whoami", "ps", "wc", "uptime", "cursor-agent",
+    "cat",
+    "head",
+    "tail",
+    "ls",
+    "grep",
+    "date",
+    "whoami",
+    "ps",
+    "wc",
+    "uptime",
+    "cursor-agent",
 ];
 
 /// Commands that always require a path (under ~/.mac-stats). All others in the allowlist are treated as no-path.
@@ -20,8 +30,12 @@ const PATH_REQUIRED_COMMANDS: &[&str] = &["cat", "head", "tail", "grep"];
 
 /// Return the current allowlist (from orchestrator skill.md or default). Used by the tool loop for retry prompts.
 pub fn allowed_commands() -> Vec<String> {
-    crate::agents::get_run_cmd_allowlist()
-        .unwrap_or_else(|| DEFAULT_ALLOWED_COMMANDS.iter().map(|s| (*s).to_string()).collect())
+    crate::agents::get_run_cmd_allowlist().unwrap_or_else(|| {
+        DEFAULT_ALLOWED_COMMANDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect()
+    })
 }
 
 fn get_allowed_commands() -> Vec<String> {
@@ -114,61 +128,106 @@ fn path_under_base(path: &Path, base: &Path) -> Result<bool, String> {
     Ok(canonical.starts_with(base))
 }
 
-/// Parse RUN_CMD argument into (command, args). Simple whitespace split; no quoting.
+/// Parse RUN_CMD argument into tokens (whitespace split). Used for allowlist and path validation.
 fn parse_arg(arg: &str) -> Vec<String> {
-    arg.split_whitespace().map(|s| s.to_string()).collect::<Vec<_>>()
+    arg.split_whitespace()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
 }
 
-/// Validate and resolve path args: expand ~ and ensure under permitted base.
-/// Only treats an arg as a path if it contains '/' or starts with '~' (so -n 5 is passed through).
-fn validate_path_args(args: &[String], base: &Path) -> Result<Vec<String>, String> {
-    let mut out = Vec::with_capacity(args.len());
-    for a in args {
-        let a = a.as_str();
-        if a.starts_with('-') {
-            out.push(a.to_string());
-            continue;
+/// First token (command name) from a stage string, ignoring redirects for the purpose of allowlist.
+fn first_command_token(stage: &str) -> Option<String> {
+    parse_arg(stage)
+        .into_iter()
+        .next()
+        .map(|s| s.to_lowercase())
+}
+
+/// Run a single pipeline stage via shell so redirects (>, |, ;) are interpreted. Returns stdout bytes.
+/// Validates: first token is in allowlist; path-like tokens are under permitted base.
+fn run_single_command_shell(
+    stage: &str,
+    base: &Path,
+    stdin_data: Option<&[u8]>,
+) -> Result<Vec<u8>, String> {
+    use std::process::Stdio;
+
+    let allowed = get_allowed_commands();
+    let first = first_command_token(stage).ok_or_else(|| "RUN_CMD: empty command.".to_string())?;
+    if !allowed.contains(&first) {
+        return Err(format!(
+            "Command not allowed (allowed: {}).",
+            allowed.join(", ")
+        ));
+    }
+    if first == "cursor-agent" {
+        // cursor-agent: no path validation; run as-is via shell (args are prompt/CLI).
+        info!(
+            "RUN_CMD: executing via shell: {}",
+            crate::logging::ellipse(stage, 120)
+        );
+        let mut child = Command::new("sh")
+            .args(["-c", stage])
+            .stdin(if stdin_data.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Command failed: {}", e))?;
+        if let Some(data) = stdin_data {
+            use std::io::Write;
+            if let Some(ref mut stdin) = child.stdin {
+                let _ = stdin.write_all(data);
+            }
+            drop(child.stdin.take());
         }
-        let looks_like_path = a.contains('/') || a.starts_with('~');
-        if looks_like_path {
-            let expanded = expand_tilde(a);
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("Command failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !stderr.trim().is_empty() {
+                return Err(format!("Command failed: {}", stderr.trim()));
+            }
+        }
+        return Ok(output.stdout);
+    }
+    // Validate path-like tokens (contain / or start with ~) are under base.
+    let tokens = parse_arg(stage);
+    for t in &tokens {
+        let looks_like_path = t.contains('/') || t.starts_with('~');
+        if looks_like_path && !t.starts_with('-') {
+            let expanded = expand_tilde(t);
             let path = Path::new(&expanded);
             if path.exists() {
                 if !path_under_base(path, base)? {
                     return Err("Path not allowed (must be under ~/.mac-stats).".to_string());
                 }
-            } else {
-                // Path doesn't exist: ensure parent is under base so we don't allow e.g. /etc/passwd
-                if let Some(parent) = path.parent() {
-                    if parent.exists() && !path_under_base(parent, base)? {
-                        return Err("Path not allowed (must be under ~/.mac-stats).".to_string());
-                    }
-                } else {
+            } else if let Some(parent) = path.parent() {
+                if parent.exists() && !path_under_base(parent, base)? {
                     return Err("Path not allowed (must be under ~/.mac-stats).".to_string());
                 }
             }
-            out.push(expanded);
-        } else {
-            out.push(a.to_string());
         }
     }
-    Ok(out)
-}
-
-/// Run a single pipeline stage. Returns stdout bytes.
-fn run_single_command(cmd: &str, args: &[String], stdin_data: Option<&[u8]>) -> Result<Vec<u8>, String> {
-    use std::process::Stdio;
-
-    let exact = std::iter::once(cmd).chain(args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ");
-    info!("RUN_CMD: executing: {}", exact);
-    let mut child = Command::new(cmd)
-        .args(args)
-        .stdin(if stdin_data.is_some() { Stdio::piped() } else { Stdio::null() })
+    info!(
+        "RUN_CMD: executing via shell: {}",
+        crate::logging::ellipse(stage, 120)
+    );
+    let mut child = Command::new("sh")
+        .args(["-c", stage])
+        .stdin(if stdin_data.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Command failed: {}", e))?;
-
     if let Some(data) = stdin_data {
         use std::io::Write;
         if let Some(ref mut stdin) = child.stdin {
@@ -176,8 +235,9 @@ fn run_single_command(cmd: &str, args: &[String], stdin_data: Option<&[u8]>) -> 
         }
         drop(child.stdin.take());
     }
-
-    let output = child.wait_with_output().map_err(|e| format!("Command failed: {}", e))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Command failed: {}", e))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.trim().is_empty() {
@@ -187,14 +247,18 @@ fn run_single_command(cmd: &str, args: &[String], stdin_data: Option<&[u8]>) -> 
     Ok(output.stdout)
 }
 
-/// Run a restricted local command with pipe support.
+/// Run a restricted local command. Executes each pipeline stage via shell (sh -c) so redirects (>, |, ;) work.
 /// Allowlist from orchestrator skill.md "## RUN_CMD allowlist" or default (cat, head, tail, ls, grep, date, whoami, ps, wc, uptime, cursor-agent).
 /// cursor-agent runs user/agent-controlled prompts and is not path-bound; document or restrict via skill.md if locking down.
-/// Supports `cmd1 | cmd2 | cmd3` pipelines; each stage must use an allowed command.
-/// Paths under ~/.mac-stats where applicable.
+/// Supports `cmd1 | cmd2 | cmd3` pipelines; each stage runs in a shell so redirects and semicolons work.
+/// Path-like arguments must be under ~/.mac-stats where applicable.
 pub fn run_local_command(arg: &str) -> Result<String, String> {
     info!("RUN_CMD: exact command: {}", arg);
-    let stages: Vec<&str> = arg.split('|').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let stages: Vec<&str> = arg
+        .split('|')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if stages.is_empty() {
         return Err("RUN_CMD requires: RUN_CMD: <command> [args] (e.g. RUN_CMD: cat ~/.mac-stats/schedules.json).".to_string());
     }
@@ -203,11 +267,8 @@ pub fn run_local_command(arg: &str) -> Result<String, String> {
     let mut prev_stdout: Option<Vec<u8>> = None;
 
     for (i, stage) in stages.iter().enumerate() {
-        let tokens = parse_arg(stage);
-        if tokens.is_empty() {
-            return Err(format!("Empty command in pipeline stage {}", i + 1));
-        }
-        let cmd = tokens[0].to_lowercase();
+        let cmd = first_command_token(stage)
+            .ok_or_else(|| format!("Empty command in pipeline stage {}", i + 1))?;
         let allowed = get_allowed_commands();
         if !allowed.contains(&cmd) {
             return Err(format!(
@@ -215,29 +276,24 @@ pub fn run_local_command(arg: &str) -> Result<String, String> {
                 allowed.join(", ")
             ));
         }
-
-        let args = if cmd == "cursor-agent" {
-            // Privileged: args are passed through as prompt/CLI args; no path validation (see DEFAULT_ALLOWED_COMMANDS comment).
-            tokens[1..].to_vec()
-        } else if tokens.len() > 1 {
-            validate_path_args(&tokens[1..], &base)?
-        } else if cmd == "ls" {
-            vec![base.to_string_lossy().to_string()]
-        } else {
-            vec![]
-        };
-
         let no_path_needed = !PATH_REQUIRED_COMMANDS.contains(&cmd.as_str());
         let has_stdin = prev_stdout.is_some();
-        if args.is_empty() && !no_path_needed && !has_stdin {
-            return Err("RUN_CMD: command requires a path (e.g. RUN_CMD: cat ~/.mac-stats/schedules.json). Use date, whoami, ps, wc, or uptime with no path for system info.".to_string());
+        if cmd != "cursor-agent" && cmd != "grep" && !no_path_needed && !has_stdin {
+            // ls with no args is allowed (we run the stage as-is; shell will get ls from PATH).
+            let tokens = parse_arg(stage);
+            if tokens.len() <= 1 && !has_stdin {
+                return Err("RUN_CMD: command requires a path (e.g. RUN_CMD: cat ~/.mac-stats/schedules.json). Use date, whoami, ps, wc, or uptime with no path for system info.".to_string());
+            }
         }
-        if cmd == "grep" && args.len() < 2 && !has_stdin {
-            return Err("RUN_CMD: grep requires pattern and path, or pipe input (e.g. RUN_CMD: ps aux | grep tail).".to_string());
+        if cmd == "grep" && !has_stdin {
+            let tokens = parse_arg(stage);
+            if tokens.len() < 2 {
+                return Err("RUN_CMD: grep requires pattern and path, or pipe input (e.g. RUN_CMD: ps aux | grep tail).".to_string());
+            }
         }
 
         let stdin_data = prev_stdout.as_deref();
-        prev_stdout = Some(run_single_command(&cmd, &args, stdin_data)?);
+        prev_stdout = Some(run_single_command_shell(stage, &base, stdin_data)?);
     }
 
     let stdout = prev_stdout.unwrap_or_default();

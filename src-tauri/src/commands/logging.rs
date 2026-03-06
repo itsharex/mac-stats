@@ -14,13 +14,14 @@ pub struct LogMessage {
 /// Log a message from JavaScript console
 #[tauri::command]
 pub fn log_from_js(log: LogMessage) -> Result<(), String> {
-    let source_prefix = log.source
+    let source_prefix = log
+        .source
         .as_ref()
         .map(|s| format!("[{}] ", s))
         .unwrap_or_default();
-    
+
     let full_message = format!("{}{}", source_prefix, log.message);
-    
+
     match log.level.to_lowercase().as_str() {
         "error" => error!("JS: {}", full_message),
         "warn" => warn!("JS: {}", full_message),
@@ -29,7 +30,7 @@ pub fn log_from_js(log: LogMessage) -> Result<(), String> {
         "log" => info!("JS: {}", full_message),
         _ => info!("JS: {}", full_message),
     }
-    
+
     Ok(())
 }
 

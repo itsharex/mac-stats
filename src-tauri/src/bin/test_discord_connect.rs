@@ -15,7 +15,9 @@ fn main() {
     } else if let Ok(content) = std::fs::read_to_string(path) {
         content
             .lines()
-            .find(|l| l.starts_with("DISCORD-USER1-TOKEN=") || l.starts_with("DISCORD-USER2-TOKEN="))
+            .find(|l| {
+                l.starts_with("DISCORD-USER1-TOKEN=") || l.starts_with("DISCORD-USER2-TOKEN=")
+            })
             .and_then(|l| l.split_once('='))
             .map(|(_, v)| v.trim().to_string())
             .unwrap_or_default()
@@ -24,13 +26,17 @@ fn main() {
     };
 
     if token.is_empty() {
-        eprintln!("No token: set DISCORD_BOT_TOKEN or put DISCORD-USER1-TOKEN=... in {}", path);
+        eprintln!(
+            "No token: set DISCORD_BOT_TOKEN or put DISCORD-USER1-TOKEN=... in {}",
+            path
+        );
         std::process::exit(1);
     }
 
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env().add_directive("mac_stats=info".parse().unwrap()),
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("mac_stats=info".parse().unwrap()),
         )
         .with_writer(std::io::stderr)
         .init();

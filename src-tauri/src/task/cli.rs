@@ -18,9 +18,7 @@ pub enum TaskCmd {
         all: bool,
     },
     /// Show one task (status and full content)
-    Show {
-        id: String,
-    },
+    Show { id: String },
     /// Get or set task status
     Status {
         id: String,
@@ -28,26 +26,18 @@ pub enum TaskCmd {
         status: Option<String>,
     },
     /// Remove a task (deletes all status files for that task)
-    Remove {
-        id: String,
-    },
+    Remove { id: String },
     /// Assign task to an agent (scheduler|discord|cpu|default)
-    Assign {
-        id: String,
-        agent: String,
-    },
+    Assign { id: String, agent: String },
     /// Append feedback to a task
-    Append {
-        id: String,
-        content: String,
-    },
+    Append { id: String, content: String },
 }
 
 /// Run the task CLI subcommand. Prints to stdout/stderr. Returns Ok(()) on success, Err(exit_code) on failure.
 pub fn run(cmd: TaskCmd) -> Result<(), i32> {
     match cmd {
         TaskCmd::Add { topic, id, content } => {
-            match crate::task::create_task(&topic, &id, &content, None) {
+            match crate::task::create_task(&topic, &id, &content, None, None) {
                 Ok(path) => {
                     println!("Created: {}", path.display());
                     Ok(())
@@ -107,8 +97,7 @@ pub fn run(cmd: TaskCmd) -> Result<(), i32> {
             };
             match status {
                 None => {
-                    let s = crate::task::status_from_path(&path)
-                        .unwrap_or_else(|| "?".to_string());
+                    let s = crate::task::status_from_path(&path).unwrap_or_else(|| "?".to_string());
                     println!("{}", s);
                     Ok(())
                 }
@@ -131,18 +120,16 @@ pub fn run(cmd: TaskCmd) -> Result<(), i32> {
                 }
             }
         }
-        TaskCmd::Remove { id } => {
-            match crate::task::delete_task(&id) {
-                Ok(n) => {
-                    println!("Removed {} file(s) for task {}", n, id);
-                    Ok(())
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    Err(1)
-                }
+        TaskCmd::Remove { id } => match crate::task::delete_task(&id) {
+            Ok(n) => {
+                println!("Removed {} file(s) for task {}", n, id);
+                Ok(())
             }
-        }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                Err(1)
+            }
+        },
         TaskCmd::Assign { id, agent } => {
             let path = match crate::task::resolve_task_path(&id) {
                 Ok(p) => p,
@@ -153,7 +140,9 @@ pub fn run(cmd: TaskCmd) -> Result<(), i32> {
             };
             match crate::task::set_assignee(&path, &agent) {
                 Ok(()) => {
-                    if let Err(e) = crate::task::append_to_task(&path, &format!("Reassigned to {}.", agent)) {
+                    if let Err(e) =
+                        crate::task::append_to_task(&path, &format!("Reassigned to {}.", agent))
+                    {
                         eprintln!("Warning: append note failed: {}", e);
                     }
                     println!("Assigned task {} to {}", id, agent);

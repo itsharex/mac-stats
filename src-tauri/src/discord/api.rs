@@ -13,7 +13,11 @@ const MAX_RESPONSE_CHARS: usize = 8000;
 /// so we don't echo technical errors into the conversation (log-005).
 pub fn sanitize_discord_api_error(err: &str) -> String {
     let lower = err.to_lowercase();
-    if lower.contains("scope") || lower.contains("operator.read") || lower.contains("permission") || lower.contains("403") {
+    if lower.contains("scope")
+        || lower.contains("operator.read")
+        || lower.contains("permission")
+        || lower.contains("403")
+    {
         return "Message could not be sent (permission missing). Check bot permissions (e.g. operator.read scope).".to_string();
     }
     err.to_string()
@@ -79,7 +83,9 @@ pub async fn discord_api_request(
     // Do not log request/response headers or bodies that may contain credentials.
     let mut req = client
         .request(
-            method_upper.parse().map_err(|e| format!("Invalid method: {}", e))?,
+            method_upper
+                .parse()
+                .map_err(|e| format!("Invalid method: {}", e))?,
             &url,
         )
         .header("Authorization", format!("Bot {}", token))
@@ -90,9 +96,11 @@ pub async fn discord_api_request(
         if crate::logging::VERBOSITY.load(Ordering::Relaxed) >= 3 {
             debug!("Discord API request body (decoded): {}", body_str);
         }
-        let body_json: serde_json::Value = serde_json::from_str(body_str)
-            .map_err(|e| format!("Invalid JSON body: {}", e))?;
-        req = req.header("Content-Type", "application/json").json(&body_json);
+        let body_json: serde_json::Value =
+            serde_json::from_str(body_str).map_err(|e| format!("Invalid JSON body: {}", e))?;
+        req = req
+            .header("Content-Type", "application/json")
+            .json(&body_json);
     }
 
     let resp = req
@@ -131,8 +139,14 @@ pub async fn fetch_guild_channel_metadata(channel_id: u64) -> Result<String, Str
     let channel_json: serde_json::Value =
         serde_json::from_str(&channel_body).map_err(|e| format!("Parse channel JSON: {}", e))?;
 
-    let ch_id = channel_json.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-    let ch_name = channel_json.get("name").and_then(|v| v.as_str()).unwrap_or("(no name)");
+    let ch_id = channel_json
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let ch_name = channel_json
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("(no name)");
     let ch_type = channel_json
         .get("type")
         .and_then(|v| v.as_u64())
@@ -156,7 +170,8 @@ pub async fn fetch_guild_channel_metadata(channel_id: u64) -> Result<String, Str
     if let Some(gid) = guild_id {
         lines.push(format!("guild_id: {}", gid));
 
-        if let Ok(guild_body) = discord_api_request("GET", &format!("/guilds/{}", gid), None).await {
+        if let Ok(guild_body) = discord_api_request("GET", &format!("/guilds/{}", gid), None).await
+        {
             if let Ok(guild_json) = serde_json::from_str::<serde_json::Value>(&guild_body) {
                 let guild_name = guild_json
                     .get("name")
@@ -175,11 +190,11 @@ pub async fn fetch_guild_channel_metadata(channel_id: u64) -> Result<String, Str
                     .iter()
                     .map(|c| {
                         let id = c.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                        let name = c.get("name").and_then(|v| v.as_str()).unwrap_or("(no name)");
-                        let ty = c
-                            .get("type")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0);
+                        let name = c
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("(no name)");
+                        let ty = c.get("type").and_then(|v| v.as_u64()).unwrap_or(0);
                         let ty_name = match ty {
                             0 => "text",
                             2 => "voice",

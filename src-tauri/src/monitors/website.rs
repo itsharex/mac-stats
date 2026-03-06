@@ -1,11 +1,11 @@
 //! Website monitoring implementation
 
-use super::{Monitor, MonitorType, MonitorStatus, MonitorCheck};
-use serde::{Deserialize, Serialize};
-use url::Url;
-use anyhow::{Result, Context};
-use std::time::Duration;
+use super::{Monitor, MonitorCheck, MonitorStatus, MonitorType};
+use anyhow::{Context, Result};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use url::Url;
 
 /// Website monitor configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,8 +40,7 @@ impl WebsiteMonitor {
 
     /// Validate URL format
     pub fn validate_url(&self) -> Result<()> {
-        Url::parse(&self.url)
-            .context("Invalid URL format")?;
+        Url::parse(&self.url).context("Invalid URL format")?;
         Ok(())
     }
 }
@@ -53,12 +52,12 @@ impl MonitorCheck for WebsiteMonitor {
 
     fn check(&self) -> Result<MonitorStatus> {
         use tracing::trace;
-        
+
         trace!("Monitor: Starting website check - ID: {}, URL: {}, Timeout: {}s (SSL verification disabled - accepting invalid certificates)", 
               self.id, self.url, self.timeout_secs);
-        
+
         let start_time = std::time::Instant::now();
-        
+
         // Create HTTP client with timeout
         // Always accept invalid certificates for monitoring purposes (allows monitoring self-signed or expired certs)
         let client = reqwest::blocking::Client::builder()
@@ -68,9 +67,7 @@ impl MonitorCheck for WebsiteMonitor {
             .context("Failed to create HTTP client")?;
 
         // Perform HTTP request
-        let response = client
-            .get(&self.url)
-            .send();
+        let response = client.get(&self.url).send();
 
         let elapsed_ms = start_time.elapsed().as_millis() as u64;
         let checked_at = Utc::now();
@@ -78,7 +75,8 @@ impl MonitorCheck for WebsiteMonitor {
         match response {
             Ok(resp) => {
                 let status_code = resp.status().as_u16();
-                let is_up = self.expected_status_code
+                let is_up = self
+                    .expected_status_code
                     .map(|expected| status_code == expected)
                     .unwrap_or(resp.status().is_success());
 

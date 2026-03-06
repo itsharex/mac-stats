@@ -1,5 +1,5 @@
 //! Configuration module for portable paths and build information
-//! 
+//!
 //! This module provides a centralized way to access configuration values
 //! like log file paths and build information, replacing hard-coded values.
 
@@ -19,7 +19,7 @@
 //! leak secrets.
 //!
 //! **JSON config reload (no restart needed):**
-//! - `config.json` — read on every access (window decorations, scheduler interval, ollamaChatTimeoutSecs, browserViewportWidth/Height).
+//! - `config.json` — read on every access (window decorations, scheduler interval, ollamaChatTimeoutSecs, browserViewportWidth/Height, perplexityMaxResults, perplexitySnippetMaxChars).
 //! - `schedules.json` — scheduler checks file mtime each loop and reloads when changed.
 //! - `discord_channels.json` — Discord loop checks mtime every tick and reloads when changed.
 
@@ -31,9 +31,18 @@ macro_rules! default_agent_entry {
         (
             concat!("agent-", $id),
             &[
-                ("agent.json", include_str!(concat!("../../defaults/agents/agent-", $id, "/agent.json"))),
-                ("skill.md", include_str!(concat!("../../defaults/agents/agent-", $id, "/skill.md"))),
-                ("testing.md", include_str!(concat!("../../defaults/agents/agent-", $id, "/testing.md"))),
+                (
+                    "agent.json",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/agent.json")),
+                ),
+                (
+                    "skill.md",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/skill.md")),
+                ),
+                (
+                    "testing.md",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/testing.md")),
+                ),
             ] as &[(&str, &str)],
         )
     };
@@ -45,10 +54,22 @@ macro_rules! default_agent_entry_with_soul {
         (
             concat!("agent-", $id),
             &[
-                ("agent.json", include_str!(concat!("../../defaults/agents/agent-", $id, "/agent.json"))),
-                ("skill.md", include_str!(concat!("../../defaults/agents/agent-", $id, "/skill.md"))),
-                ("soul.md", include_str!(concat!("../../defaults/agents/agent-", $id, "/soul.md"))),
-                ("testing.md", include_str!(concat!("../../defaults/agents/agent-", $id, "/testing.md"))),
+                (
+                    "agent.json",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/agent.json")),
+                ),
+                (
+                    "skill.md",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/skill.md")),
+                ),
+                (
+                    "soul.md",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/soul.md")),
+                ),
+                (
+                    "testing.md",
+                    include_str!(concat!("../../defaults/agents/agent-", $id, "/testing.md")),
+                ),
             ] as &[(&str, &str)],
         )
     };
@@ -59,7 +80,7 @@ pub struct Config;
 
 impl Config {
     /// Get the log file path
-    /// 
+    ///
     /// Returns a path in the user's home directory: `$HOME/.mac-stats/debug.log`
     /// Falls back to a temporary directory if HOME is not available.
     pub fn log_file_path() -> PathBuf {
@@ -68,36 +89,47 @@ impl Config {
             let home_path = PathBuf::from(home);
             return home_path.join(".mac-stats").join("debug.log");
         }
-        
+
         // Fallback to temp directory
         std::env::temp_dir().join("mac-stats-debug.log")
     }
-    
+
     /// Get the build date
-    /// 
+    ///
     /// Returns the build date from the BUILD_DATE environment variable,
     /// or "unknown" if not available.
     pub fn build_date() -> String {
-        std::env::var("BUILD_DATE")
-            .unwrap_or_else(|_| "unknown".to_string())
+        std::env::var("BUILD_DATE").unwrap_or_else(|_| "unknown".to_string())
     }
-    
+
     /// Get the version string
-    /// 
+    ///
     /// Returns the package version from CARGO_PKG_VERSION.
     pub fn version() -> String {
         env!("CARGO_PKG_VERSION").to_string()
     }
-    
+
+    /// Version string for logs and UI when a session/interaction starts (version + short git hash).
+    /// Use this so you can see in logs whether the running binary is the latest build (e.g. "v0.1.28 (a1b2c3d4)").
+    pub fn version_display() -> String {
+        let v = Self::version();
+        let hash = option_env!("GIT_HASH").unwrap_or("unknown");
+        if hash.is_empty() || hash == "unknown" {
+            format!("v{}", v)
+        } else {
+            format!("v{} ({})", v, hash)
+        }
+    }
+
     /// Get the authors string
-    /// 
+    ///
     /// Returns the package authors from CARGO_PKG_AUTHORS.
     pub fn authors() -> String {
         env!("CARGO_PKG_AUTHORS").to_string()
     }
-    
+
     /// Ensure the log directory exists
-    /// 
+    ///
     /// Creates the directory containing the log file if it doesn't exist.
     pub fn ensure_log_directory() -> std::io::Result<()> {
         let log_path = Self::log_file_path();
@@ -106,9 +138,9 @@ impl Config {
         }
         Ok(())
     }
-    
+
     /// Get the config file path
-    /// 
+    ///
     /// Returns a path in the user's home directory: `$HOME/.mac-stats/config.json`
     /// Falls back to a temporary directory if HOME is not available.
     pub fn config_file_path() -> PathBuf {
@@ -117,13 +149,13 @@ impl Config {
             let home_path = PathBuf::from(home);
             return home_path.join(".mac-stats").join("config.json");
         }
-        
+
         // Fallback to temp directory
         std::env::temp_dir().join("mac-stats-config.json")
     }
-    
+
     /// Read window decorations preference from config file
-    /// 
+    ///
     /// Returns true (show decorations) by default if file doesn't exist or can't be read.
     pub fn get_window_decorations() -> bool {
         let config_path = Self::config_file_path();
@@ -137,9 +169,9 @@ impl Config {
         // Default to true (show decorations)
         true
     }
-    
+
     /// Get the monitors file path
-    /// 
+    ///
     /// Returns a path in the user's home directory: `$HOME/.mac-stats/monitors.json`
     /// Falls back to a temporary directory if HOME is not available.
     pub fn monitors_file_path() -> PathBuf {
@@ -148,13 +180,13 @@ impl Config {
             let home_path = PathBuf::from(home);
             return home_path.join(".mac-stats").join("monitors.json");
         }
-        
+
         // Fallback to temp directory
         std::env::temp_dir().join("mac-stats-monitors.json")
     }
-    
+
     /// Ensure the monitors directory exists
-    /// 
+    ///
     /// Creates the directory containing the monitors file if it doesn't exist.
     pub fn ensure_monitors_directory() -> std::io::Result<()> {
         let monitors_path = Self::monitors_file_path();
@@ -201,7 +233,10 @@ impl Config {
         let config_path = Self::config_file_path();
         if let Ok(content) = std::fs::read_to_string(&config_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(n) = json.get("schedulerCheckIntervalSecs").and_then(|v| v.as_u64()) {
+                if let Some(n) = json
+                    .get("schedulerCheckIntervalSecs")
+                    .and_then(|v| v.as_u64())
+                {
                     return n.clamp(1, 86400);
                 }
             }
@@ -290,6 +325,53 @@ impl Config {
         DEFAULT
     }
 
+    /// Perplexity search: max number of results to request from the API. Config: config.json `perplexityMaxResults`.
+    /// Default 8. Clamped to 1..=20. Env override: `MAC_STATS_PERPLEXITY_MAX_RESULTS`.
+    pub fn perplexity_max_results() -> u32 {
+        const DEFAULT: u32 = 8;
+        const MIN: u32 = 1;
+        const MAX: u32 = 20;
+        if let Ok(s) = std::env::var("MAC_STATS_PERPLEXITY_MAX_RESULTS") {
+            if let Ok(n) = s.parse::<u32>() {
+                return n.clamp(MIN, MAX);
+            }
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(n) = json.get("perplexityMaxResults").and_then(|v| v.as_u64()) {
+                    return (n as u32).clamp(MIN, MAX);
+                }
+            }
+        }
+        DEFAULT
+    }
+
+    /// Perplexity search: max characters per snippet when formatting results for the model. Config: config.json `perplexitySnippetMaxChars`.
+    /// Default 280. Clamped to 80..=2000. Env override: `MAC_STATS_PERPLEXITY_SNIPPET_MAX_CHARS`.
+    pub fn perplexity_snippet_max_chars() -> usize {
+        const DEFAULT: usize = 280;
+        const MIN: usize = 80;
+        const MAX: usize = 2000;
+        if let Ok(s) = std::env::var("MAC_STATS_PERPLEXITY_SNIPPET_MAX_CHARS") {
+            if let Ok(n) = s.parse::<usize>() {
+                return n.clamp(MIN, MAX);
+            }
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(n) = json
+                    .get("perplexitySnippetMaxChars")
+                    .and_then(|v| v.as_u64())
+                {
+                    return (n as usize).clamp(MIN, MAX);
+                }
+            }
+        }
+        DEFAULT
+    }
+
     /// Browser viewport height in pixels (CDP/headless window size). Config: config.json `browserViewportHeight`.
     /// Default 2400. Clamped to 600..=2160.
     pub fn browser_viewport_height() -> u32 {
@@ -307,14 +389,10 @@ impl Config {
         DEFAULT
     }
 
-    /// Skills directory for agent prompt overlays: `$HOME/.mac-stats/skills/`
+    /// Skills directory for agent prompt overlays: `$HOME/.mac-stats/agents/skills/`
     /// Files: skill-<number>-<topic>.md (e.g. skill-1-summarize.md, skill-2-code.md).
     pub fn skills_dir() -> PathBuf {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".mac-stats").join("skills")
-        } else {
-            std::env::temp_dir().join("mac-stats-skills")
-        }
+        Self::agents_dir().join("skills")
     }
 
     /// Ensure the skills directory exists.
@@ -388,39 +466,29 @@ impl Config {
     /// Path to Discord channel config: `$HOME/.mac-stats/discord_channels.json`
     pub fn discord_channels_path() -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".mac-stats").join("discord_channels.json")
+            PathBuf::from(home)
+                .join(".mac-stats")
+                .join("discord_channels.json")
         } else {
             std::env::temp_dir().join("mac-stats-discord_channels.json")
         }
     }
 
-    /// Path to escalation patterns: `$HOME/.mac-stats/escalation_patterns.md`
+    /// Path to escalation patterns: `$HOME/.mac-stats/agents/escalation_patterns.md`
     /// One phrase per line; when a user message contains any phrase (case-insensitive), escalation mode is triggered.
     pub fn escalation_patterns_path() -> PathBuf {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".mac-stats").join("escalation_patterns.md")
-        } else {
-            std::env::temp_dir().join("mac-stats-escalation_patterns.md")
-        }
+        Self::agents_dir().join("escalation_patterns.md")
     }
 
-    /// Path to session reset phrases: `$HOME/.mac-stats/session_reset_phrases.md`
+    /// Path to session reset phrases: `$HOME/.mac-stats/agents/session_reset_phrases.md`
     /// One phrase per line; when a user message contains any phrase (case-insensitive substring), the session is cleared (like OpenClaw's resetTriggers, but in an MD file).
     pub fn session_reset_phrases_path() -> PathBuf {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".mac-stats").join("session_reset_phrases.md")
-        } else {
-            std::env::temp_dir().join("mac-stats-session_reset_phrases.md")
-        }
+        Self::agents_dir().join("session_reset_phrases.md")
     }
 
-    /// Prompts directory: `$HOME/.mac-stats/prompts/`
+    /// Prompts directory: `$HOME/.mac-stats/agents/prompts/`
     pub fn prompts_dir() -> PathBuf {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".mac-stats").join("prompts")
-        } else {
-            std::env::temp_dir().join("mac-stats-prompts")
-        }
+        Self::agents_dir().join("prompts")
     }
 
     pub fn planning_prompt_path() -> PathBuf {
@@ -452,7 +520,8 @@ impl Config {
 
     pub const DEFAULT_SOUL: &str = include_str!("../../defaults/agents/soul.md");
     const DEFAULT_PLANNING_PROMPT: &str = include_str!("../../defaults/prompts/planning_prompt.md");
-    const DEFAULT_EXECUTION_PROMPT: &str = include_str!("../../defaults/prompts/execution_prompt.md");
+    const DEFAULT_EXECUTION_PROMPT: &str =
+        include_str!("../../defaults/prompts/execution_prompt.md");
 
     /// List of default agents. Agents are read in a loop; add new ids here and add the files under defaults/agents/agent-<id>/.
     const DEFAULT_AGENT_IDS: &[(&str, &[(&str, &str)])] = &[
@@ -462,12 +531,14 @@ impl Config {
         default_agent_entry!("003"),
         default_agent_entry!("004"),
         default_agent_entry!("005"),
+        default_agent_entry_with_soul!("006-redmine"),
         default_agent_entry_with_soul!("abliterated"),
     ];
 
     const DEFAULT_DISCORD_CHANNELS: &str = include_str!("../../defaults/discord_channels.json");
     const DEFAULT_ESCALATION_PATTERNS: &str = include_str!("../../defaults/escalation_patterns.md");
-    const DEFAULT_SESSION_RESET_PHRASES: &str = include_str!("../../defaults/session_reset_phrases.md");
+    const DEFAULT_SESSION_RESET_PHRASES: &str =
+        include_str!("../../defaults/session_reset_phrases.md");
 
     /// Write a default file if the target path does not exist (never overwrites user edits).
     fn write_default_if_missing(path: &std::path::Path, content: &str) {
@@ -502,9 +573,20 @@ impl Config {
         if existing_trim.is_empty() {
             return default_trim.to_string();
         }
-        let existing_blocks: Vec<&str> = existing_trim.split("\n\n").map(str::trim).filter(|s| !s.is_empty()).collect();
-        let existing_keys: std::collections::HashSet<String> = existing_blocks.iter().map(|b| Self::paragraph_key(b)).collect();
-        let default_blocks: Vec<&str> = default_trim.split("\n\n").map(str::trim).filter(|s| !s.is_empty()).collect();
+        let existing_blocks: Vec<&str> = existing_trim
+            .split("\n\n")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        let existing_keys: std::collections::HashSet<String> = existing_blocks
+            .iter()
+            .map(|b| Self::paragraph_key(b))
+            .collect();
+        let default_blocks: Vec<&str> = default_trim
+            .split("\n\n")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
         let mut out = existing_trim.to_string();
         for block in default_blocks {
             let key = Self::paragraph_key(block);
@@ -549,27 +631,95 @@ impl Config {
     pub fn ensure_defaults() {
         let agents = Self::agents_dir();
         let prompts = Self::prompts_dir();
+        let skills = Self::skills_dir();
         let tmp = Self::tmp_dir();
         let _ = std::fs::create_dir_all(&agents);
         let _ = std::fs::create_dir_all(&prompts);
+        let _ = std::fs::create_dir_all(&skills);
         let _ = std::fs::create_dir_all(&tmp);
         let _ = std::fs::create_dir_all(Self::tmp_js_dir());
+
+        // Migrate skills from old ~/.mac-stats/skills/ to agents/skills/ (one-time)
+        if let Ok(home) = std::env::var("HOME") {
+            let old_skills = PathBuf::from(&home).join(".mac-stats").join("skills");
+            if old_skills.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(&old_skills) {
+                    for e in entries.flatten() {
+                        let p = e.path();
+                        if p.extension().map_or(false, |e| e == "md") {
+                            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                            let dest = skills.join(name);
+                            if !dest.exists() {
+                                let _ = std::fs::copy(&p, &dest);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Migrate prompts from old ~/.mac-stats/prompts/ to agents/prompts/ (one-time)
+        if let Ok(home) = std::env::var("HOME") {
+            let old_prompts = PathBuf::from(&home).join(".mac-stats").join("prompts");
+            if old_prompts.is_dir() {
+                for name in ["planning_prompt.md", "execution_prompt.md"] {
+                    let src = old_prompts.join(name);
+                    let dest = prompts.join(name);
+                    if src.exists() && !dest.exists() {
+                        let _ = std::fs::copy(&src, &dest);
+                    }
+                }
+            }
+        }
 
         // Shared soul (personality/tone for all agents when no per-agent soul.md). Read by load_soul_content().
         Self::write_default_if_missing(&agents.join("soul.md"), Self::DEFAULT_SOUL);
 
         // Prompts: merge defaults into existing so new sections (e.g. Search → screenshot → Discord) are added without overwriting user edits.
-        Self::merge_default_prompt_if_exists(&prompts.join("planning_prompt.md"), Self::DEFAULT_PLANNING_PROMPT);
-        Self::merge_default_prompt_if_exists(&prompts.join("execution_prompt.md"), Self::DEFAULT_EXECUTION_PROMPT);
+        Self::merge_default_prompt_if_exists(
+            &prompts.join("planning_prompt.md"),
+            Self::DEFAULT_PLANNING_PROMPT,
+        );
+        Self::merge_default_prompt_if_exists(
+            &prompts.join("execution_prompt.md"),
+            Self::DEFAULT_EXECUTION_PROMPT,
+        );
 
         // Discord channel config
-        Self::write_default_if_missing(&Self::discord_channels_path(), Self::DEFAULT_DISCORD_CHANNELS);
+        Self::write_default_if_missing(
+            &Self::discord_channels_path(),
+            Self::DEFAULT_DISCORD_CHANNELS,
+        );
+
+        // Migrate escalation/session_reset from old ~/.mac-stats/ location to agents/ if user had them there
+        let old_escalation = std::env::var("HOME").ok().map(|h| {
+            PathBuf::from(h)
+                .join(".mac-stats")
+                .join("escalation_patterns.md")
+        });
+        let old_session_reset = std::env::var("HOME").ok().map(|h| {
+            PathBuf::from(h)
+                .join(".mac-stats")
+                .join("session_reset_phrases.md")
+        });
+        let new_escalation = Self::escalation_patterns_path();
+        let new_session_reset = Self::session_reset_phrases_path();
+        if let Some(ref p) = old_escalation {
+            if p.exists() && !new_escalation.exists() {
+                let _ = std::fs::copy(p, &new_escalation);
+            }
+        }
+        if let Some(ref p) = old_session_reset {
+            if p.exists() && !new_session_reset.exists() {
+                let _ = std::fs::copy(p, &new_session_reset);
+            }
+        }
 
         // Escalation patterns (user-editable; triggers "think harder" / completion-oriented run)
-        Self::write_default_if_missing(&Self::escalation_patterns_path(), Self::DEFAULT_ESCALATION_PATTERNS);
+        Self::write_default_if_missing(&new_escalation, Self::DEFAULT_ESCALATION_PATTERNS);
 
         // Session reset phrases (user-editable; phrases that clear session / start fresh, any language)
-        Self::write_default_if_missing(&Self::session_reset_phrases_path(), Self::DEFAULT_SESSION_RESET_PHRASES);
+        Self::write_default_if_missing(&new_session_reset, Self::DEFAULT_SESSION_RESET_PHRASES);
 
         // Default agents: loop over DEFAULT_AGENT_IDS. agent.json only if missing; skill.md and testing.md overwritten from bundle.
         for (dir_name, files) in Self::DEFAULT_AGENT_IDS {
@@ -592,19 +742,19 @@ impl Config {
         Self::load_file_or_default(&path, Self::DEFAULT_SOUL)
     }
 
-    /// Load planning prompt from ~/.mac-stats/prompts/planning_prompt.md.
+    /// Load planning prompt from ~/.mac-stats/agents/prompts/planning_prompt.md.
     pub fn load_planning_prompt() -> String {
         let path = Self::planning_prompt_path();
         Self::load_file_or_default(&path, Self::DEFAULT_PLANNING_PROMPT)
     }
 
-    /// Load execution prompt from ~/.mac-stats/prompts/execution_prompt.md.
+    /// Load execution prompt from ~/.mac-stats/agents/prompts/execution_prompt.md.
     pub fn load_execution_prompt() -> String {
         let path = Self::execution_prompt_path();
         Self::load_file_or_default(&path, Self::DEFAULT_EXECUTION_PROMPT)
     }
 
-    /// Load escalation patterns from ~/.mac-stats/escalation_patterns.md.
+    /// Load escalation patterns from ~/.mac-stats/agents/escalation_patterns.md.
     /// Returns a list of phrases (one per non-empty, non-comment line). When a user message
     /// contains any phrase case-insensitively, escalation mode is triggered.
     /// If the file is missing, writes the default and returns the default list.
@@ -619,7 +769,7 @@ impl Config {
             .collect::<Vec<_>>()
     }
 
-    /// Load session reset phrases from ~/.mac-stats/session_reset_phrases.md.
+    /// Load session reset phrases from ~/.mac-stats/agents/session_reset_phrases.md.
     /// Returns a list of phrases (one per non-empty, non-comment line). When a user message
     /// contains any phrase (case-insensitive substring), the session is cleared. If the file
     /// is missing, writes the default and returns the default list.
@@ -634,7 +784,7 @@ impl Config {
             .collect::<Vec<_>>()
     }
 
-    /// When we detect user dissatisfaction, append their phrase to escalation_patterns.md if it's not already there.
+    /// When we detect user dissatisfaction, append their phrase to agents/escalation_patterns.md if it's not already there.
     /// Normalizes to one trimmed line (collapses whitespace). Skips very short phrases and duplicates.
     pub fn append_escalation_pattern_if_new(phrase: &str) {
         let normalized = phrase
@@ -644,27 +794,31 @@ impl Config {
             .unwrap_or("")
             .trim()
             .chars()
-            .fold((String::with_capacity(phrase.len()), true), |(mut s, mut prev_ws), c| {
-                let is_ws = c.is_ascii_whitespace();
-                if is_ws && !prev_ws {
-                    s.push(' ');
-                } else if !is_ws {
-                    s.push(c);
-                }
-                prev_ws = is_ws;
-                (s, prev_ws)
-            })
+            .fold(
+                (String::with_capacity(phrase.len()), true),
+                |(mut s, mut prev_ws), c| {
+                    let is_ws = c.is_ascii_whitespace();
+                    if is_ws && !prev_ws {
+                        s.push(' ');
+                    } else if !is_ws {
+                        s.push(c);
+                    }
+                    prev_ws = is_ws;
+                    (s, prev_ws)
+                },
+            )
             .0;
         let normalized = normalized.trim();
         if normalized.len() < 2 || normalized.starts_with('#') {
             return;
         }
         let existing = Self::load_escalation_patterns();
-        let already = existing
-            .iter()
-            .any(|p| p.eq_ignore_ascii_case(normalized));
+        let already = existing.iter().any(|p| p.eq_ignore_ascii_case(normalized));
         if already {
-            tracing::debug!("Escalation pattern already in file, not appending: \"{}\"", normalized);
+            tracing::debug!(
+                "Escalation pattern already in file, not appending: \"{}\"",
+                normalized
+            );
             return;
         }
         let path = Self::escalation_patterns_path();

@@ -155,7 +155,10 @@ pub async fn brave_web_search(query: &str, api_key: &str) -> Result<String, Stri
 
     let mut lines = Vec::with_capacity(results.len().min(10));
     for (i, r) in results.iter().take(10).enumerate() {
-        let title = r.get("title").and_then(|t| t.as_str()).unwrap_or("(no title)");
+        let title = r
+            .get("title")
+            .and_then(|t| t.as_str())
+            .unwrap_or("(no title)");
         let url = r.get("url").and_then(|u| u.as_str()).unwrap_or("");
         let desc = r.get("description").and_then(|d| d.as_str()).unwrap_or("");
         lines.push(format!("{}. {} | {}\n   {}", i + 1, title, url, desc));
@@ -163,8 +166,16 @@ pub async fn brave_web_search(query: &str, api_key: &str) -> Result<String, Stri
     let text = if lines.is_empty() {
         "No web results found.".to_string()
     } else {
-        format!("Brave Search results for \"{}\":\n\n{}", query, lines.join("\n\n"))
+        format!(
+            "Brave Search results for \"{}\":\n\n{}",
+            query,
+            lines.join("\n\n")
+        )
     };
-    info!("Brave agent: got {} results for \"{}\"", results.len(), query);
+    info!(
+        "Brave agent: got {} results for \"{}\"",
+        results.len(),
+        query
+    );
     Ok(text)
 }

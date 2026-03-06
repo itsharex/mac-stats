@@ -1,10 +1,10 @@
 //! Social media monitoring implementation (Mastodon/X)
 
-use super::{Monitor, MonitorType, MonitorStatus, MonitorCheck};
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context};
-use chrono::Utc;
+use super::{Monitor, MonitorCheck, MonitorStatus, MonitorType};
 use crate::security;
+use anyhow::{Context, Result};
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 /// Mastodon monitor configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,17 +38,16 @@ impl MastodonMonitor {
     /// Get API token from Keychain
     fn get_api_token(&self) -> Result<String> {
         let account = format!("mastodon_{}", self.id);
-        security::get_credential(&account)?
-            .context("Mastodon API token not found in Keychain")
+        security::get_credential(&account)?.context("Mastodon API token not found in Keychain")
     }
 
     /// Check for new mentions
     pub fn check_mentions(&self) -> Result<u64> {
         let token = self.get_api_token()?;
-        
+
         // Mastodon API: GET /api/v1/notifications
         let url = format!("{}/api/v1/notifications", self.instance_url);
-        
+
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()?;
@@ -66,7 +65,7 @@ impl MastodonMonitor {
                 .iter()
                 .filter(|n| n.get("type").and_then(|t| t.as_str()) == Some("mention"))
                 .count() as u64;
-            
+
             Ok(mention_count)
         } else {
             Err(anyhow::anyhow!("Mastodon API error: {}", response.status()))
@@ -81,15 +80,17 @@ impl MonitorCheck for MastodonMonitor {
 
     fn check(&self) -> Result<MonitorStatus> {
         use tracing::info;
-        
-        info!("Monitor: Starting Mastodon check - ID: {}, Instance: {}, Account: {}", 
-              self.id, self.instance_url, self.account_username);
-        
+
+        info!(
+            "Monitor: Starting Mastodon check - ID: {}, Instance: {}, Account: {}",
+            self.id, self.instance_url, self.account_username
+        );
+
         match self.check_mentions() {
             Ok(mention_count) => {
                 info!("Monitor: Mastodon check successful - ID: {}, Instance: {}, Account: {}, Mentions: {}", 
                       self.id, self.instance_url, self.account_username, mention_count);
-                
+
                 Ok(MonitorStatus {
                     is_up: true,
                     response_time_ms: None,
@@ -98,8 +99,10 @@ impl MonitorCheck for MastodonMonitor {
                 })
             }
             Err(e) => {
-                info!("Monitor: Mastodon check failed - ID: {}, Instance: {}, Account: {}, Error: {}", 
-                      self.id, self.instance_url, self.account_username, e);
+                info!(
+                    "Monitor: Mastodon check failed - ID: {}, Instance: {}, Account: {}, Error: {}",
+                    self.id, self.instance_url, self.account_username, e
+                );
                 Ok(MonitorStatus {
                     is_up: false,
                     response_time_ms: None,

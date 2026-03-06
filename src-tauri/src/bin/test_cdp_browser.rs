@@ -16,12 +16,18 @@ fn main() {
     let ws_ok = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
-        .and_then(|c| c.get(format!("http://127.0.0.1:{}/json/version", port)).send())
+        .and_then(|c| {
+            c.get(format!("http://127.0.0.1:{}/json/version", port))
+                .send()
+        })
         .map(|r| r.status().is_success())
         .unwrap_or(false);
 
     let _chrome_guard = if !ws_ok {
-        tracing::info!("CDP browser test: no Chrome on port {}, attempting to launch Chrome", port);
+        tracing::info!(
+            "CDP browser test: no Chrome on port {}, attempting to launch Chrome",
+            port
+        );
         #[cfg(target_os = "macos")]
         let chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
         #[cfg(not(target_os = "macos"))]
@@ -41,7 +47,10 @@ fn main() {
             }
             Err(e) => {
                 tracing::error!("CDP browser test: failed to launch Chrome: {}", e);
-                tracing::error!("Please start Chrome manually: {} --remote-debugging-port=9222", chrome_path);
+                tracing::error!(
+                    "Please start Chrome manually: {} --remote-debugging-port=9222",
+                    chrome_path
+                );
                 std::process::exit(1);
             }
         }
@@ -62,7 +71,10 @@ fn main() {
             if phones.is_empty() {
                 tracing::warn!("CDP browser test: no telephone numbers extracted (try URL with #contact for SPA sites)");
             } else {
-                tracing::info!("CDP browser test: SUCCESS — amvara.de telephone number(s): {:?}", phones);
+                tracing::info!(
+                    "CDP browser test: SUCCESS — amvara.de telephone number(s): {:?}",
+                    phones
+                );
             }
         }
         Err(e) => {

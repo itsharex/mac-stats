@@ -44,7 +44,9 @@ struct SchedulesFile {
 /// Returns the modification time of the schedules file, if it exists.
 fn schedules_file_mtime() -> Option<std::time::SystemTime> {
     let path = Config::schedules_file_path();
-    std::fs::metadata(&path).ok().and_then(|m| m.modified().ok())
+    std::fs::metadata(&path)
+        .ok()
+        .and_then(|m| m.modified().ok())
 }
 
 fn load_schedules() -> Vec<ScheduleEntry> {
@@ -66,7 +68,10 @@ fn load_schedules() -> Vec<ScheduleEntry> {
     let file_data: SchedulesFile = match serde_json::from_str(&content) {
         Ok(d) => d,
         Err(e) => {
-            warn!("Scheduler: failed to parse schedules file {:?}: {}", path, e);
+            warn!(
+                "Scheduler: failed to parse schedules file {:?}: {}",
+                path, e
+            );
             return Vec::new();
         }
     };
@@ -74,7 +79,10 @@ fn load_schedules() -> Vec<ScheduleEntry> {
     let mut entries = Vec::new();
     for raw in file_data.schedules {
         if raw.task.is_empty() {
-            warn!("Scheduler: skipping entry with empty task (id={:?})", raw.id);
+            warn!(
+                "Scheduler: skipping entry with empty task (id={:?})",
+                raw.id
+            );
             continue;
         }
         let has_cron = raw.cron.is_some();
@@ -111,8 +119,12 @@ fn load_schedules() -> Vec<ScheduleEntry> {
                 .map(|dt| dt.with_timezone(&Local))
                 .or_else(|_| {
                     // Try without timezone as local
-                    chrono::NaiveDateTime::parse_from_str(at_str, "%Y-%m-%dT%H:%M:%S")
-                        .map(|n| Local.from_local_datetime(&n).single().unwrap_or(n.and_utc().with_timezone(&Local)))
+                    chrono::NaiveDateTime::parse_from_str(at_str, "%Y-%m-%dT%H:%M:%S").map(|n| {
+                        Local
+                            .from_local_datetime(&n)
+                            .single()
+                            .unwrap_or(n.and_utc().with_timezone(&Local))
+                    })
                 });
             match at_dt {
                 Ok(dt) => {
@@ -184,25 +196,27 @@ pub fn list_schedules_formatted() -> String {
             ));
         }
     }
-    format!("Active schedules ({}):\n{}", entries.len(), lines.join("\n"))
+    format!(
+        "Active schedules ({}):\n{}",
+        entries.len(),
+        lines.join("\n")
+    )
 }
 
 /// Compute the next run time for this entry (in local time). Returns None if one-shot already past or invalid.
 fn next_run(entry: &ScheduleEntry, after: DateTime<Local>) -> Option<DateTime<Local>> {
     if let Some(ref schedule) = entry.cron {
-        schedule
-            .after(&after)
-            .next()
-    } else { entry.at.filter(|&at| at > after) }
+        schedule.after(&after).next()
+    } else {
+        entry.at.filter(|&at| at > after)
+    }
 }
 
 /// Execute a single task: direct tool (FETCH_URL/BRAVE_SEARCH) or Ollama.
-/// Returns Some(reply_text) when the task produced a reply (Ollama path) so the caller can e.g. send to Discord; None otherwise.
-async fn execute_task(entry: &ScheduleEntry) -> Option<String> {
-    let id_info = entry
-        .id
-        .as_deref()
-        .unwrap_or("(no id)");
+/// Returns Some((reply_text, already_sent_to_discord)) when the task produced a reply; None otherwise.
+/// When already_sent_to_discord is true (e.g. task runner sent the finished summary), the caller should not send again.
+async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
+    let id_info = entry.id.as_deref().unwrap_or("(no id)");
     let task = entry.task.trim();
 
     if task.to_uppercase().starts_with("FETCH_URL:") {
@@ -215,15 +229,25 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<String> {
             }
         };
         info!("Scheduler: running FETCH_URL for {} (id={})", url, id_info);
-        match tokio::task::spawn_blocking(move || crate::commands::browser::fetch_page_content(&url)).await {
+        match tokio::task::spawn_blocking(move || {
+            crate::commands::browser::fetch_page_content(&url)
+        })
+        .await
+        {
             Ok(Ok(body)) => {
-                info!("Scheduler: FETCH_URL succeeded ({} chars)", body.chars().count());
+                info!(
+                    "Scheduler: FETCH_URL succeeded ({} chars)",
+                    body.chars().count()
+                );
             }
             Ok(Err(e)) => {
                 error!("Scheduler: FETCH_URL failed (id={}): {}", id_info, e);
             }
             Err(e) => {
-                error!("Scheduler: FETCH_URL task join error (id={}): {}", id_info, e);
+                error!(
+                    "Scheduler: FETCH_URL task join error (id={}): {}",
+                    id_info, e
+                );
             }
         }
         return None;
@@ -237,12 +261,18 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<String> {
             warn!("Scheduler: BRAVE_SEARCH with empty query (id={})", id_info);
             return None;
         }
-        info!("Scheduler: running BRAVE_SEARCH for {} (id={})", query, id_info);
+        info!(
+            "Scheduler: running BRAVE_SEARCH for {} (id={})",
+            query, id_info
+        );
         match crate::commands::brave::get_brave_api_key() {
             Some(api_key) => {
                 match crate::commands::brave::brave_web_search(query, &api_key).await {
                     Ok(results) => {
-                        info!("Scheduler: BRAVE_SEARCH succeeded ({} chars)", results.chars().count());
+                        info!(
+                            "Scheduler: BRAVE_SEARCH succeeded ({} chars)",
+                            results.chars().count()
+                        );
                     }
                     Err(e) => {
                         error!("Scheduler: BRAVE_SEARCH failed (id={}): {}", id_info, e);
@@ -250,7 +280,10 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<String> {
                 }
             }
             None => {
-                warn!("Scheduler: BRAVE_SEARCH skipped (no API key) (id={})", id_info);
+                warn!(
+                    "Scheduler: BRAVE_SEARCH skipped (no API key) (id={})",
+                    id_info
+                );
             }
         }
         return None;
@@ -267,28 +300,60 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<String> {
             warn!("Scheduler: TASK: with empty path/id (id={})", id_info);
             return None;
         }
-        info!("Scheduler: running task until finished (id={}, path_or_id={})", id_info, path_or_id);
+        info!(
+            "Scheduler: running task until finished (id={}, path_or_id={})",
+            id_info, path_or_id
+        );
         return match crate::task::resolve_task_path(path_or_id) {
             Ok(path) => {
                 let task_name = path
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or(path_or_id);
-                if let Some(ref channel_id_str) = entry.reply_to_channel_id {
-                    if let Ok(channel_id) = channel_id_str.parse::<u64>() {
-                        let schedule_prefix = entry.id.as_deref().map(|sid| format!("[Schedule: {}] ", sid)).unwrap_or_default();
-                        let msg = format!("{}Working on task '{}' now.", schedule_prefix, task_name);
-                        if let Err(e) = crate::discord::send_message_to_channel(channel_id, &msg).await {
-                            error!("Scheduler: failed to send 'working on task' to Discord channel {}: {}", channel_id_str, e);
-                        } else {
-                            info!("Scheduler: sent 'working on task' to Discord channel {}", channel_id_str);
-                        }
+                let reply_to_channel = entry
+                    .reply_to_channel_id
+                    .as_ref()
+                    .and_then(|s| s.parse::<u64>().ok());
+                if let Some(channel_id) = reply_to_channel {
+                    let schedule_prefix = entry
+                        .id
+                        .as_deref()
+                        .map(|sid| format!("[Schedule: {}] ", sid))
+                        .unwrap_or_default();
+                    let msg = format!("{}Working on task '{}' now.", schedule_prefix, task_name);
+                    if let Err(e) = crate::discord::send_message_to_channel(channel_id, &msg).await
+                    {
+                        error!(
+                            "Scheduler: failed to send 'working on task' to Discord channel {}: {}",
+                            channel_id, e
+                        );
+                    } else {
+                        info!(
+                            "Scheduler: sent 'working on task' to Discord channel {}",
+                            channel_id
+                        );
                     }
                 }
-                match crate::task::runner::run_task_until_finished(path, 10).await {
-                    Ok(reply) => {
-                        info!("Scheduler: task completed (id={}, {} chars)", id_info, reply.chars().count());
-                        Some(reply)
+                let prefix = entry
+                    .id
+                    .as_deref()
+                    .map(|sid| format!("[Schedule: {}] ", sid));
+                match crate::task::runner::run_task_until_finished(
+                    path,
+                    10,
+                    reply_to_channel,
+                    prefix,
+                )
+                .await
+                {
+                    Ok((reply, sent_to_discord)) => {
+                        info!(
+                            "Scheduler: task completed (id={}, {} chars, sent_to_discord={})",
+                            id_info,
+                            reply.chars().count(),
+                            sent_to_discord
+                        );
+                        Some((reply, sent_to_discord))
                     }
                     Err(e) => {
                         error!("Scheduler: task run failed (id={}): {}", id_info, e);
@@ -297,17 +362,33 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<String> {
                 }
             }
             Err(e) => {
-                error!("Scheduler: task path resolve failed (id={}): {}", id_info, e);
+                error!(
+                    "Scheduler: task path resolve failed (id={}): {}",
+                    id_info, e
+                );
                 None
             }
         };
     }
 
-    info!("Scheduler: running via Ollama (id={}): {}...", id_info, task.chars().take(60).collect::<String>());
-    match crate::commands::ollama::answer_with_ollama_and_fetch(task, None, None, None, None, None, None, None, None, false, None, false, true, true, None).await {
+    info!(
+        "Scheduler: running via Ollama (id={}): {}...",
+        id_info,
+        task.chars().take(60).collect::<String>()
+    );
+    match crate::commands::ollama::answer_with_ollama_and_fetch(
+        task, None, None, None, None, None, None, None, None, false, None, false, true, true, None,
+        None, false,
+    )
+    .await
+    {
         Ok(reply) => {
-            info!("Scheduler: Ollama completed (id={}, {} chars)", id_info, reply.text.chars().count());
-            Some(reply.text)
+            info!(
+                "Scheduler: Ollama completed (id={}, {} chars)",
+                id_info,
+                reply.text.chars().count()
+            );
+            Some((reply.text, false))
         }
         Err(e) => {
             error!("Scheduler: Ollama failed (id={}): {}", id_info, e);
@@ -382,18 +463,30 @@ async fn scheduler_loop() {
         let now_after_sleep = Local::now();
         if now_after_sleep >= next_time {
             let entry = &entries[idx];
-            let reply = execute_task(entry).await;
-            if let (Some(ref channel_id_str), Some(ref text)) = (&entry.reply_to_channel_id, &reply) {
-                if let Ok(channel_id) = channel_id_str.parse::<u64>() {
-                    let message = if let Some(ref sid) = entry.id {
-                        format!("[Schedule: {}]\n\n{}", sid, text)
-                    } else {
-                        text.clone()
-                    };
-                    if let Err(e) = crate::discord::send_message_to_channel(channel_id, &message).await {
-                        error!("Scheduler: failed to send result to Discord channel {}: {}", channel_id_str, e);
-                    } else {
-                        info!("Scheduler: sent result to Discord channel {}", channel_id_str);
+            let result = execute_task(entry).await;
+            if let (Some(ref channel_id_str), Some((ref text, already_sent))) =
+                (&entry.reply_to_channel_id, &result)
+            {
+                if !*already_sent {
+                    if let Ok(channel_id) = channel_id_str.parse::<u64>() {
+                        let message = if let Some(ref sid) = entry.id {
+                            format!("[Schedule: {}]\n\n{}", sid, text)
+                        } else {
+                            text.clone()
+                        };
+                        if let Err(e) =
+                            crate::discord::send_message_to_channel(channel_id, &message).await
+                        {
+                            error!(
+                                "Scheduler: failed to send result to Discord channel {}: {}",
+                                channel_id_str, e
+                            );
+                        } else {
+                            info!(
+                                "Scheduler: sent result to Discord channel {}",
+                                channel_id_str
+                            );
+                        }
                     }
                 }
             }
@@ -446,9 +539,7 @@ pub fn add_schedule(
             && task_normalized_for_dedup(&e.task) == task_norm
     });
     if is_duplicate {
-        info!(
-            "Scheduler: skipping duplicate (same cron and task already scheduled)",
-        );
+        info!("Scheduler: skipping duplicate (same cron and task already scheduled)",);
         return Ok(ScheduleAddOutcome::AlreadyExists);
     }
 
@@ -527,9 +618,10 @@ pub fn remove_schedule_by_id(id: &str) -> Result<bool, String> {
         return Ok(false);
     }
 
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read schedules file: {}", e))?;
-    let mut file_data: SchedulesFile =
-        serde_json::from_str(&content).map_err(|e| format!("Failed to parse schedules file: {}", e))?;
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read schedules file: {}", e))?;
+    let mut file_data: SchedulesFile = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse schedules file: {}", e))?;
 
     let original_len = file_data.schedules.len();
     file_data.schedules.retain(|e| e.id.as_deref() != Some(id));
@@ -538,7 +630,8 @@ pub fn remove_schedule_by_id(id: &str) -> Result<bool, String> {
     if removed {
         let json = serde_json::to_string_pretty(&file_data)
             .map_err(|e| format!("Failed to serialize schedules: {}", e))?;
-        std::fs::write(&path, json).map_err(|e| format!("Failed to write schedules file: {}", e))?;
+        std::fs::write(&path, json)
+            .map_err(|e| format!("Failed to write schedules file: {}", e))?;
         info!("Scheduler: schedule removed (id={})", id);
     }
 

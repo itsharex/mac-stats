@@ -1,13 +1,13 @@
 //! Plugin system module
-//! 
+//!
 //! Script-based plugins that output JSON.
 //! Plugins are executable scripts (bash/python) that follow a contract.
 
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context};
-use std::process::{Command, Stdio};
-use std::path::PathBuf;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
 /// Plugin configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,19 +60,28 @@ impl Plugin {
 
         // Check if script exists and is executable
         if !self.script_path.exists() {
-            return Err(anyhow::anyhow!("Plugin script not found: {:?}", self.script_path));
+            return Err(anyhow::anyhow!(
+                "Plugin script not found: {:?}",
+                self.script_path
+            ));
         }
 
         // Determine interpreter based on file extension
-        let (interpreter, _args): (&str, Vec<&str>) = if self.script_path.extension()
+        let (interpreter, _args): (&str, Vec<&str>) = if self
+            .script_path
+            .extension()
             .and_then(|s| s.to_str())
             .map(|s| s == "py")
-            .unwrap_or(false) {
+            .unwrap_or(false)
+        {
             ("python3", vec![])
-        } else if self.script_path.extension()
+        } else if self
+            .script_path
+            .extension()
             .and_then(|s| s.to_str())
             .map(|s| s == "sh" || s == "bash")
-            .unwrap_or(false) {
+            .unwrap_or(false)
+        {
             ("bash", vec![])
         } else {
             // Try to execute directly (might be a binary)
@@ -94,16 +103,14 @@ impl Plugin {
         // Execute with timeout using spawn and wait with timeout
         // Note: std::process::Command doesn't have timeout, so we'll handle it differently
         // For now, just execute without timeout (can be improved with tokio or crossbeam)
-        let output = cmd.output()
-            .context("Failed to execute plugin script")?;
+        let output = cmd.output().context("Failed to execute plugin script")?;
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
 
         // Parse JSON output
         let stdout = String::from_utf8_lossy(&output.stdout);
         let plugin_output: PluginOutput = if output.status.success() {
-            serde_json::from_str(&stdout)
-                .context("Failed to parse plugin JSON output")?
+            serde_json::from_str(&stdout).context("Failed to parse plugin JSON output")?
         } else {
             // Script failed - create error output
             let stderr = String::from_utf8_lossy(&output.stderr);

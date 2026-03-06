@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-03-06
+
+### Added
+- **Redmine specialist agent** — New default agent `agent-006-redmine` for Redmine ticket review/search/create/update via `REDMINE_API` only. The orchestrator now routes Redmine work to this agent by default.
+- **Redmine time-entry flow** — Time-entry requests are recognized explicitly and routed to `GET /time_entries.json` with current-month date ranges instead of generic search endpoints.
+- **Task finished summary to Discord** — When a task run has a reply-to Discord channel, the finished summary is sent back to that channel automatically.
+- **Session reset phrases** — New bundled `session_reset_phrases.md` supports “clear session / new topic” style resets so Discord sessions can start fresh on request.
+
+### Changed
+- **Memory and session handling** — Global and per-channel memory are loaded separately, searched for relevant lines, and injected more selectively. Session compaction, new-topic detection, and retry prompts now avoid polluting replies with unrelated prior context.
+- **Redmine review safety** — Review-only Redmine requests are handled separately from update flows so ticket summaries don’t accidentally drift into modification behavior. Redmine responses are summarized from API data only.
+- **Discord / Ollama routing** — Image-only Discord messages now use a default vision prompt, criteria/status handling is cleaner, and Discord context/session flow is more consistent across retries and topic changes.
+- **Browser and command flow** — Browser/session status, fallback handling, and command execution paths were tightened across `browser_agent`, `run_cmd`, monitors, scheduler, and task runner.
+- **Backend maintenance** — Broad cleanup/refactor across config, metrics, FFI, logging, MCP, plugins, alerts, monitors, and agent/task plumbing; release includes the tested `src-tauri` backend changes only.
+
 ## [0.1.28] - 2026-03-04
 
 ### Added

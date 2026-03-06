@@ -73,14 +73,16 @@ pub fn run_python_script(id: &str, topic: &str, script_body: &str) -> Result<Str
     let id = sanitize_filename_part(id);
     let topic = sanitize_filename_part(topic);
     if id.is_empty() || topic.is_empty() {
-        return Err("PYTHON_SCRIPT requires non-empty id and topic (after sanitization).".to_string());
+        return Err(
+            "PYTHON_SCRIPT requires non-empty id and topic (after sanitization).".to_string(),
+        );
     }
 
     crate::config::Config::ensure_scripts_directory()
         .map_err(|e| format!("Could not create scripts directory: {}", e))?;
 
-    let script_path = crate::config::Config::scripts_dir()
-        .join(format!("python-script-{}-{}.py", id, topic));
+    let script_path =
+        crate::config::Config::scripts_dir().join(format!("python-script-{}-{}.py", id, topic));
 
     std::fs::write(&script_path, script_body).map_err(|e| format!("Write script failed: {}", e))?;
     info!(

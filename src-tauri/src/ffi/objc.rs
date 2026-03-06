@@ -1,10 +1,10 @@
 //! Safe wrappers for Objective-C FFI calls
-//! 
+//!
 //! These wrappers add null checks and validation for Objective-C runtime calls
 //! to prevent foreign exceptions from crossing into Rust.
 
-use objc2::runtime::{AnyClass, AnyObject, Sel};
 use objc2::msg_send;
+use objc2::runtime::{AnyClass, AnyObject, Sel};
 use thiserror::Error;
 
 /// Objective-C FFI error types
@@ -15,16 +15,16 @@ use thiserror::Error;
 pub enum ObjCError {
     #[error("Objective-C object is null")]
     NullObject,
-    
+
     #[error("Objective-C class not found: {0}")]
     ClassNotFound(String),
-    
+
     #[error("Objective-C selector not found: {0}")]
     SelectorNotFound(String),
-    
+
     #[error("Objective-C method call failed: {0}")]
     MethodCallFailed(String),
-    
+
     #[error("Objective-C object does not respond to selector: {0}")]
     DoesNotRespondToSelector(String),
 }
@@ -51,7 +51,7 @@ pub fn check_not_null<T>(obj: Option<&T>) -> ObjCResult<&T> {
 }
 
 /// Safe wrapper for msg_send! that returns a Result
-/// 
+///
 /// Note: This is a helper for common patterns. Most msg_send! calls
 /// should still use the macro directly but with proper null checks.
 /// Currently unused - kept for future FFI migration.
@@ -59,10 +59,10 @@ pub fn check_not_null<T>(obj: Option<&T>) -> ObjCResult<&T> {
 pub fn safe_msg_send_bool(obj: &AnyObject, sel: Sel) -> ObjCResult<bool> {
     if !responds_to_selector(obj, sel) {
         return Err(ObjCError::DoesNotRespondToSelector(
-            sel.name().to_string_lossy().to_string()
+            sel.name().to_string_lossy().to_string(),
         ));
     }
-    
+
     unsafe {
         let result: bool = msg_send![obj, sel];
         Ok(result)

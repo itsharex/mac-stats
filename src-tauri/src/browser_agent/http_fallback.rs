@@ -119,10 +119,7 @@ fn parse_html(html: &str, base_url: &str) -> (Vec<HttpInteractable>, String) {
         .next()
         .map(|body| body.text().collect::<String>())
         .unwrap_or_else(|| document.root_element().text().collect::<String>());
-    let body_text = body_text
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let body_text = body_text.split_whitespace().collect::<Vec<_>>().join(" ");
     let body_text = body_text.chars().take(30_000).collect::<String>();
 
     (interactables, body_text)
@@ -167,7 +164,11 @@ fn format_http_state_for_llm(url: &str, interactables: &[HttpInteractable]) -> S
         } else {
             "(no label)"
         };
-        let label_escaped = label.replace('\n', " ").chars().take(80).collect::<String>();
+        let label_escaped = label
+            .replace('\n', " ")
+            .chars()
+            .take(80)
+            .collect::<String>();
         s.push_str(&format!("[{}] {} '{}'\n", i.index, kind, label_escaped));
     }
     if interactables.is_empty() {
@@ -194,7 +195,10 @@ pub fn navigate_http(url: &str) -> Result<String, String> {
     state.form_values.clear();
     drop(state);
     super::set_last_element_labels(
-        interactables.iter().map(|i| (i.index, http_interactable_label(i))).collect(),
+        interactables
+            .iter()
+            .map(|i| (i.index, http_interactable_label(i)))
+            .collect(),
     );
     Ok(format_http_state_for_llm(&url, &interactables))
 }
@@ -229,7 +233,10 @@ pub fn click_http(index: u32) -> Result<String, String> {
 }
 
 /// Build form action URL and submit (GET or POST) with current form_values. Reuses first form on page for simplicity.
-fn submit_http_form(_interactables: &[HttpInteractable], _current_url: &str) -> Result<String, String> {
+fn submit_http_form(
+    _interactables: &[HttpInteractable],
+    _current_url: &str,
+) -> Result<String, String> {
     let state = http_state().lock().map_err(|e| e.to_string())?;
     let form_values = state.form_values.clone();
     let base_url = state.current_url.clone();
@@ -252,7 +259,10 @@ fn submit_http_form(_interactables: &[HttpInteractable], _current_url: &str) -> 
     state.form_values.clear();
     drop(state);
     super::set_last_element_labels(
-        interactables.iter().map(|i| (i.index, http_interactable_label(i))).collect(),
+        interactables
+            .iter()
+            .map(|i| (i.index, http_interactable_label(i)))
+            .collect(),
     );
     Ok(format_http_state_for_llm(&target, &interactables))
 }
@@ -268,10 +278,12 @@ pub fn input_http(index: u32, text: &str) -> Result<String, String> {
         .iter()
         .find(|e| e.index == index)
         .ok_or_else(|| format!("BROWSER_INPUT: no element at index {}", index))?;
-    let name = el
-        .name
-        .clone()
-        .ok_or_else(|| format!("BROWSER_INPUT: element [{}] has no name (not an input)", index))?;
+    let name = el.name.clone().ok_or_else(|| {
+        format!(
+            "BROWSER_INPUT: element [{}] has no name (not an input)",
+            index
+        )
+    })?;
     if el.is_submit {
         return Err("BROWSER_INPUT: use BROWSER_CLICK to submit; element is a button".to_string());
     }

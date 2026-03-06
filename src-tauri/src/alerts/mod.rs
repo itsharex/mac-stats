@@ -1,18 +1,18 @@
 //! Alert system module
-//! 
+//!
 //! Rule-based alerting with channel-agnostic core.
 //! Supports multiple notification channels: Telegram, Slack, Signal, Mastodon.
 
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub mod rules;
 pub mod channels;
+pub mod rules;
 
-use rules::AlertRule;
 use channels::AlertChannel;
+use rules::AlertRule;
 
 /// Alert configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,7 +48,9 @@ impl Alert {
 
         // Check cooldown
         if let Some(last_triggered) = self.last_triggered {
-            let elapsed = Utc::now().signed_duration_since(last_triggered).num_seconds();
+            let elapsed = Utc::now()
+                .signed_duration_since(last_triggered)
+                .num_seconds();
             if elapsed < self.cooldown_secs as i64 {
                 return false;
             }
@@ -108,12 +110,16 @@ impl AlertManager {
             if alert.rule.evaluate(&context)? {
                 // Trigger alert
                 let message = format!("Alert triggered: {}", alert.name);
-                
+
                 // Send to all configured channels
                 for channel_id in &alert.channels {
                     if let Some(channel) = self.channels.get_mut(channel_id.as_str()) {
                         if let Err(e) = channel.send(&message, &context) {
-                            tracing::error!("Failed to send alert to channel {}: {}", channel_id, e);
+                            tracing::error!(
+                                "Failed to send alert to channel {}: {}",
+                                channel_id,
+                                e
+                            );
                         }
                     }
                 }

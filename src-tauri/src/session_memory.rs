@@ -33,7 +33,13 @@ fn topic_slug(content: &str, max_len: usize) -> String {
     let s: String = content
         .chars()
         .take(max_len)
-        .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let s = s.trim().replace(' ', "-").trim_matches('-').to_lowercase();
     if s.is_empty() {
@@ -43,16 +49,27 @@ fn topic_slug(content: &str, max_len: usize) -> String {
     }
 }
 
-/// Built-in fallback phrases when ~/.mac-stats/session_reset_phrases.md is missing or empty.
+/// Built-in fallback phrases when ~/.mac-stats/agents/session_reset_phrases.md is missing or empty.
 const SESSION_RESET_PHRASES_FALLBACK: &[&str] = &[
-    "new session", "clear session", "reset", "new topic", "start over", "fresh start",
-    "neue sitzung", "sitzung löschen", "zurücksetzen",
-    "nueva sesión", "limpiar sesión", "reiniciar",
-    "nouvelle session", "effacer la session", "recommencer",
+    "new session",
+    "clear session",
+    "reset",
+    "new topic",
+    "start over",
+    "fresh start",
+    "neue sitzung",
+    "sitzung löschen",
+    "zurücksetzen",
+    "nueva sesión",
+    "limpiar sesión",
+    "reiniciar",
+    "nouvelle session",
+    "effacer la session",
+    "recommencer",
 ];
 
 /// True if the user message asks to clear/reset the session (any language). Use before loading history.
-/// Phrases are loaded from ~/.mac-stats/session_reset_phrases.md (one per line; user-editable).
+/// Phrases are loaded from ~/.mac-stats/agents/session_reset_phrases.md (one per line; user-editable).
 /// If the file is missing or yields no phrases, a built-in list is used. Matching is case-insensitive substring.
 pub fn user_wants_session_reset(message: &str) -> bool {
     let normalized = message.trim().to_lowercase();
@@ -106,9 +123,9 @@ pub fn add_message(source: &str, session_id: u64, role: &str, content: &str) {
 fn persist_session(source: &str, session_id: u64) -> std::io::Result<()> {
     let key = format!("{}-{}", source, session_id);
     let (messages, topic_slug, created_at) = {
-        let store = session_store().lock().map_err(|_| {
-            std::io::Error::other("session store lock failed")
-        })?;
+        let store = session_store()
+            .lock()
+            .map_err(|_| std::io::Error::other("session store lock failed"))?;
         let state = store.get(&key).ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::NotFound, "session not found")
         })?;
@@ -125,9 +142,7 @@ fn persist_session(source: &str, session_id: u64) -> std::io::Result<()> {
     let timestamp = created_at.format("%Y%m%d-%H%M%S");
     let filename = format!(
         "session-memory-{}-{}-{}.md",
-        session_id,
-        timestamp,
-        topic_slug
+        session_id, timestamp, topic_slug
     );
     let path = dir.join(filename);
 
@@ -138,7 +153,11 @@ fn persist_session(source: &str, session_id: u64) -> std::io::Result<()> {
     }
 
     std::fs::write(&path, body)?;
-    debug!("Session memory: wrote {} ({} messages)", path.display(), messages.len());
+    debug!(
+        "Session memory: wrote {} ({} messages)",
+        path.display(),
+        messages.len()
+    );
     Ok(())
 }
 
@@ -190,7 +209,10 @@ pub fn replace_session(source: &str, session_id: u64, new_messages: Vec<(String,
         }
         state.last_activity = Some(now);
         state.messages = new_messages;
-        debug!("Session memory: replaced session with {} compacted messages", state.messages.len());
+        debug!(
+            "Session memory: replaced session with {} compacted messages",
+            state.messages.len()
+        );
     }
 }
 
@@ -247,7 +269,10 @@ pub fn get_messages(source: &str, session_id: u64) -> Vec<(String, String)> {
 
 /// Load messages from the most recent session file for this session (e.g. after app restart).
 /// File format: `## User\n\n...\n\n## Assistant\n\n...`. Returns (role, content) with role "user" or "assistant".
-pub fn load_messages_from_latest_session_file(_source: &str, session_id: u64) -> Vec<(String, String)> {
+pub fn load_messages_from_latest_session_file(
+    _source: &str,
+    session_id: u64,
+) -> Vec<(String, String)> {
     let dir = Config::session_dir();
     if !dir.is_dir() {
         return Vec::new();

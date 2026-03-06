@@ -6,12 +6,12 @@
 
 pub mod models;
 
+use crate::security;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use url::Url;
-use crate::security;
 
 /// Ollama configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,8 +39,7 @@ impl Default for OllamaConfig {
 
 impl OllamaConfig {
     pub fn validate(&self) -> Result<()> {
-        Url::parse(&self.endpoint)
-            .context("Invalid Ollama endpoint URL")?;
+        Url::parse(&self.endpoint).context("Invalid Ollama endpoint URL")?;
         Ok(())
     }
 
@@ -343,35 +342,38 @@ pub struct OllamaClient {
 impl OllamaClient {
     pub fn new(config: OllamaConfig) -> Result<Self> {
         use tracing::info;
-        
+
         config.validate()?;
-        info!("Ollama: Initializing client with endpoint: {}", config.endpoint);
-        
+        info!(
+            "Ollama: Initializing client with endpoint: {}",
+            config.endpoint
+        );
+
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(120)) // Long timeout for LLM
             .build()?;
 
-        Ok(Self {
-            config,
-            client,
-        })
+        Ok(Self { config, client })
     }
 
     /// Check if Ollama is available
     #[allow(dead_code)] // May be used in future or via direct client access
     pub async fn check_connection(&self) -> Result<bool> {
         use tracing::{debug, info};
-        
+
         let url = format!("{}/api/tags", self.config.endpoint);
         debug!("Ollama: Checking connection to {}", url);
-        
+
         let mut request = self.client.get(&url);
-        
+
         // Add API key if configured
         if let Ok(Some(api_key)) = self.config.get_api_key() {
             let masked = security::mask_credential(&api_key);
             request = request.header("Authorization", format!("Bearer {}", api_key));
-            debug!("Ollama: Using API key for authentication (masked: {})", masked);
+            debug!(
+                "Ollama: Using API key for authentication (masked: {})",
+                masked
+            );
         }
 
         match request.send().await {
@@ -380,10 +382,13 @@ impl OllamaClient {
                 if success {
                     info!("Ollama: Connection successful to {}", self.config.endpoint);
                 } else {
-                    debug!("Ollama: Connection failed - HTTP status: {}", response.status());
+                    debug!(
+                        "Ollama: Connection failed - HTTP status: {}",
+                        response.status()
+                    );
                 }
                 Ok(success)
-            },
+            }
             Err(e) => {
                 debug!("Ollama: Connection error: {}", e);
                 Ok(false)
@@ -394,13 +399,13 @@ impl OllamaClient {
     /// Send chat message (async, non-blocking)
     #[allow(dead_code)] // May be used in future or via direct client access
     pub async fn chat(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse> {
-        use tracing::{debug, info};
         use serde_json;
-        
+        use tracing::{debug, info};
+
         let url = format!("{}/api/chat", self.config.endpoint);
         info!("Ollama: Using endpoint: {}", url);
         info!("Ollama: Streaming is disabled (stream: false)");
-        
+
         let options = if self.config.temperature.is_some() || self.config.num_ctx.is_some() {
             Some(ChatOptions {
                 temperature: self.config.temperature,
@@ -420,15 +425,21 @@ impl OllamaClient {
         // Log raw request JSON before sending
         let request_json = serde_json::to_string_pretty(&request)
             .unwrap_or_else(|_| "Failed to serialize request".to_string());
-        info!("Ollama: Sending HTTP POST to {} with request JSON:\n{}", url, request_json);
+        info!(
+            "Ollama: Sending HTTP POST to {} with request JSON:\n{}",
+            url, request_json
+        );
 
         let mut http_request = self.client.post(&url).json(&request);
-        
+
         // Add API key if configured
         if let Ok(Some(api_key)) = self.config.get_api_key() {
             let masked = security::mask_credential(&api_key);
             http_request = http_request.header("Authorization", format!("Bearer {}", api_key));
-            debug!("Ollama: Using API key for chat request (masked: {})", masked);
+            debug!(
+                "Ollama: Using API key for chat request (masked: {})",
+                masked
+            );
         }
 
         let start_time = std::time::Instant::now();
@@ -444,7 +455,10 @@ impl OllamaClient {
         // Log raw response JSON
         let response_json = serde_json::to_string_pretty(&response)
             .unwrap_or_else(|_| "Failed to serialize response".to_string());
-        info!("Ollama: Received HTTP response in {:?} with response JSON:\n{}", duration, response_json);
+        info!(
+            "Ollama: Received HTTP response in {:?} with response JSON:\n{}",
+            duration, response_json
+        );
 
         Ok(response)
     }
@@ -473,7 +487,10 @@ impl OllamaClient {
             .json::<ListResponse>()
             .await
             .context("Failed to parse /api/tags response")?;
-        info!("Ollama: list_models_full returned {} models", response.models.len());
+        info!(
+            "Ollama: list_models_full returned {} models",
+            response.models.len()
+        );
         Ok(response)
     }
 
@@ -535,7 +552,10 @@ impl OllamaClient {
             anyhow::bail!("Pull failed: {} {}", status, text);
         }
         if stream {
-            let body = response.bytes().await.context("Failed to read pull response body")?;
+            let body = response
+                .bytes()
+                .await
+                .context("Failed to read pull response body")?;
             let last_status = parse_pull_ndjson(&body)?;
             info!("Ollama: pull finished: {}", last_status);
         }
@@ -626,7 +646,10 @@ impl OllamaClient {
     /// Load (warm) a model into memory with optional keep_alive (e.g. "5m"). Uses POST /api/generate with a minimal prompt.
     pub async fn load_model(&self, model: &str, keep_alive: Option<&str>) -> Result<()> {
         use tracing::debug;
-        let url = format!("{}/api/generate", self.config.endpoint.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/generate",
+            self.config.endpoint.trim_end_matches('/')
+        );
         let mut body = serde_json::json!({
             "model": model,
             "prompt": "",
@@ -635,7 +658,10 @@ impl OllamaClient {
         if let Some(ka) = keep_alive {
             body["keep_alive"] = serde_json::Value::String(ka.to_string());
         }
-        debug!("Ollama: POST {} load model={} keep_alive={:?}", url, model, keep_alive);
+        debug!(
+            "Ollama: POST {} load model={} keep_alive={:?}",
+            url, model, keep_alive
+        );
         let mut request = self.client.post(&url).json(&body);
         if let Ok(Some(api_key)) = self.config.get_api_key() {
             request = request.header("Authorization", format!("Bearer {}", api_key));

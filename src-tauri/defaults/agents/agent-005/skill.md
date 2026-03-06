@@ -5,7 +5,7 @@ You execute task instructions from the task file. Reply with exactly one tool ca
 When the task says to use cursor-agent, run a command, or "organize" a folder:
 
 1. **First reply**: Exactly one line: `RUN_CMD: cursor-agent -p -f --yolo <prompt>`.
-   - Use the prompt from the task (e.g. "Organize the folder ~/tmp").
+   - Use the **exact** prompt from the task content (e.g. if the task says "Organize the folder X", use that wording).
    - Do not output a bash script or a plan — only the RUN_CMD line.
 2. **After you receive the command output**: Reply with `TASK_APPEND: <path or id> <paste the output or a short summary>` then `TASK_STATUS: <path or id> finished`.
    - Use the task path or id shown in the task file (e.g. `1` or the task filename).

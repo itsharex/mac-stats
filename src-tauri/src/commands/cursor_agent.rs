@@ -62,7 +62,11 @@ fn config_env_paths() -> Vec<std::path::PathBuf> {
         paths.push(cwd.join("src-tauri").join(".config.env"));
     }
     if let Ok(home) = std::env::var("HOME") {
-        paths.push(std::path::PathBuf::from(home).join(".mac-stats").join(".config.env"));
+        paths.push(
+            std::path::PathBuf::from(home)
+                .join(".mac-stats")
+                .join(".config.env"),
+        );
     }
     paths
 }
@@ -130,7 +134,10 @@ pub fn run_cursor_agent(prompt: &str) -> Result<String, String> {
 
     let result = stdout.trim().to_string();
     if result.is_empty() && !stderr.is_empty() {
-        return Err(format!("cursor-agent produced no output. stderr: {}", stderr.trim()));
+        return Err(format!(
+            "cursor-agent produced no output. stderr: {}",
+            stderr.trim()
+        ));
     }
 
     info!("CURSOR_AGENT: completed, output {} chars", result.len());

@@ -19,10 +19,10 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use headless_chrome::Browser;
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
-use headless_chrome::LaunchOptions;
 use headless_chrome::types::Bounds;
+use headless_chrome::Browser;
+use headless_chrome::LaunchOptions;
 use regex::Regex;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -106,7 +106,10 @@ pub fn ensure_chrome_on_port(port: u16) {
         return;
     }
     if launch_chrome_on_port(port).is_ok() {
-        info!("Browser agent [CDP]: launched Chrome on port {} (caller may retry CDP)", port);
+        info!(
+            "Browser agent [CDP]: launched Chrome on port {} (caller may retry CDP)",
+            port
+        );
         std::thread::sleep(Duration::from_secs(4));
     }
 }
@@ -126,15 +129,27 @@ fn launch_chrome_on_port(port: u16) -> Result<(), String> {
     let chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
     Command::new(chrome_path)
         .arg(format!("--remote-debugging-port={}", port))
-        .arg(format!("--window-size={},{}", viewport_width(), viewport_height()))
+        .arg(format!(
+            "--window-size={},{}",
+            viewport_width(),
+            viewport_height()
+        ))
         .arg("--no-first-run")
         .arg("--no-default-browser-check")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("Launch Chrome: {} (is Chrome installed at {}?)", e, chrome_path))?;
-    info!("Browser agent [CDP]: launched Chrome on port {} (detached)", port);
+        .map_err(|e| {
+            format!(
+                "Launch Chrome: {} (is Chrome installed at {}?)",
+                e, chrome_path
+            )
+        })?;
+    info!(
+        "Browser agent [CDP]: launched Chrome on port {} (detached)",
+        port
+    );
     Ok(())
 }
 
@@ -143,15 +158,27 @@ fn launch_chrome_on_port(port: u16) -> Result<(), String> {
     let chrome_path = "google-chrome";
     Command::new(chrome_path)
         .arg(format!("--remote-debugging-port={}", port))
-        .arg(format!("--window-size={},{}", viewport_width(), viewport_height()))
+        .arg(format!(
+            "--window-size={},{}",
+            viewport_width(),
+            viewport_height()
+        ))
         .arg("--no-first-run")
         .arg("--no-default-browser-check")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("Launch Chrome: {} (start Chrome manually with --remote-debugging-port={})", e, port))?;
-    info!("Browser agent [CDP]: launched Chrome on port {} (detached)", port);
+        .map_err(|e| {
+            format!(
+                "Launch Chrome: {} (start Chrome manually with --remote-debugging-port={})",
+                e, port
+            )
+        })?;
+    info!(
+        "Browser agent [CDP]: launched Chrome on port {} (detached)",
+        port
+    );
     Ok(())
 }
 
@@ -195,7 +222,9 @@ pub fn navigate(browser: &Browser, url: &str) -> Result<Arc<headless_chrome::Tab
 /// Get visible text of the page (after JS has run) via document.body.innerText.
 pub fn get_page_text(tab: &headless_chrome::Tab) -> Result<String, String> {
     let script = "document.body ? document.body.innerText : document.documentElement.innerText";
-    let result = tab.evaluate(script, false).map_err(|e| format!("Evaluate: {}", e))?;
+    let result = tab
+        .evaluate(script, false)
+        .map_err(|e| format!("Evaluate: {}", e))?;
     let text = result
         .value
         .as_ref()
@@ -299,7 +328,11 @@ pub fn format_browser_state_for_llm(state: &BrowserState) -> String {
         } else {
             "(no label)"
         };
-        let label_escaped = label.replace('\n', " ").chars().take(80).collect::<String>();
+        let label_escaped = label
+            .replace('\n', " ")
+            .chars()
+            .take(80)
+            .collect::<String>();
         s.push_str(&format!("[{}] {} '{}'\n", i.index, kind, label_escaped));
     }
     if state.interactables.is_empty() {
@@ -316,7 +349,7 @@ pub fn extract_telephone_numbers(text: &str) -> Vec<String> {
         0049\s*[\d\s\/\-\(\)]{6,}|
         \+[1-9]\d{0,2}\s*[\d\s\/\-\(\)]{6,}|
         0\d{2,4}[\s\/\-]?\d[\d\s\/\-]{4,}
-        "#
+        "#,
     )
     .unwrap();
     re.find_iter(text)
@@ -357,18 +390,21 @@ pub fn launch_browser_and_extract_phones(url: &str) -> Result<Vec<String>, Strin
     fetch_page_and_extract_phones_with_browser(&browser, url)
 }
 
-fn fetch_page_and_extract_phones_with_browser(browser: &Browser, url: &str) -> Result<Vec<String>, String> {
+fn fetch_page_and_extract_phones_with_browser(
+    browser: &Browser,
+    url: &str,
+) -> Result<Vec<String>, String> {
     let tabs = browser.get_tabs().lock().map_err(|e| e.to_string())?;
-    let tab = tabs
-        .first()
-        .cloned()
-        .ok_or_else(|| "No tab".to_string())?;
+    let tab = tabs.first().cloned().ok_or_else(|| "No tab".to_string())?;
     drop(tabs);
     info!("Browser agent: navigating to {}", url);
     tab.navigate_to(url)
         .map_err(|e| format!("Navigate: {}", e))?;
     if let Err(e) = tab.wait_until_navigated() {
-        warn!("Browser agent: wait_until_navigated failed (SPA?): {} — continuing after delay", e);
+        warn!(
+            "Browser agent: wait_until_navigated failed (SPA?): {} — continuing after delay",
+            e
+        );
         std::thread::sleep(Duration::from_secs(2));
     }
     std::thread::sleep(Duration::from_secs(2));
@@ -421,7 +457,11 @@ fn element_label_for_status(i: &Interactable) -> String {
     } else {
         "(no label)"
     };
-    label.replace('\n', " ").chars().take(40).collect::<String>()
+    label
+        .replace('\n', " ")
+        .chars()
+        .take(40)
+        .collect::<String>()
 }
 
 /// Set the last page's element labels (called after navigate/click/input). Used so status can show "Clicking element 7 (Accept all)…".
@@ -433,10 +473,14 @@ pub(crate) fn set_last_element_labels(labels: Vec<(u32, String)>) {
 
 /// Get the label for element at 1-based index from the last cached page state. Used for status message context.
 pub fn get_last_element_label(index: u32) -> Option<String> {
-    last_element_labels()
-        .lock()
-        .ok()
-        .and_then(|g| g.as_ref().and_then(|labels| labels.iter().find(|(i, _)| *i == index).map(|(_, l)| l.clone())))
+    last_element_labels().lock().ok().and_then(|g| {
+        g.as_ref().and_then(|labels| {
+            labels
+                .iter()
+                .find(|(i, _)| *i == index)
+                .map(|(_, l)| l.clone())
+        })
+    })
 }
 
 /// User said "headless" → true (no visible window). User said "browser" or default → false (visible desktop app).
@@ -514,7 +558,9 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     let mut guard = browser_session().lock().map_err(|e| e.to_string())?;
     let now = Instant::now();
     if let Some((ref browser, last_used, was_headless)) = guard.as_ref() {
-        if now.duration_since(*last_used).as_secs() < timeout_secs && *was_headless == prefer_headless {
+        if now.duration_since(*last_used).as_secs() < timeout_secs
+            && *was_headless == prefer_headless
+        {
             let b = browser.clone();
             *guard = Some((b.clone(), now, prefer_headless));
             info!(
@@ -524,7 +570,10 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
             return Ok(b);
         }
         if *was_headless != prefer_headless {
-            info!("Browser agent [CDP]: preference changed (headless {} → {}), creating new session", was_headless, prefer_headless);
+            info!(
+                "Browser agent [CDP]: preference changed (headless {} → {}), creating new session",
+                was_headless, prefer_headless
+            );
         } else {
             info!(
                 "Browser agent [CDP]: session idle > {}s, closing browser",
@@ -538,14 +587,23 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
         info!("Browser agent [CDP]: user requested headless — launching headless Chrome (no visible window)");
         launch_via_headless_chrome()?
     } else if get_ws_url(port).is_ok() {
-        info!("Browser agent [CDP]: connecting to Chrome on port {} (visible)", port);
+        info!(
+            "Browser agent [CDP]: connecting to Chrome on port {} (visible)",
+            port
+        );
         connect_cdp(port)?
     } else {
-        info!("Browser agent [CDP]: no Chrome on port {}, launching visible Chrome on {}", port, port);
+        info!(
+            "Browser agent [CDP]: no Chrome on port {}, launching visible Chrome on {}",
+            port, port
+        );
         if launch_chrome_on_port(port).is_ok() {
             std::thread::sleep(Duration::from_secs(3));
             if get_ws_url(port).is_ok() {
-                info!("Browser agent [CDP]: connecting to Chrome on port {} (after launch, visible)", port);
+                info!(
+                    "Browser agent [CDP]: connecting to Chrome on port {} (after launch, visible)",
+                    port
+                );
                 connect_cdp(port)?
             } else {
                 warn!("Browser agent [CDP]: Chrome launch may have failed or not ready; falling back to headless_chrome launcher");
@@ -556,7 +614,8 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
             launch_via_headless_chrome()?
         }
     };
-    *browser_session().lock().map_err(|e| e.to_string())? = Some((browser.clone(), Instant::now(), prefer_headless));
+    *browser_session().lock().map_err(|e| e.to_string())? =
+        Some((browser.clone(), Instant::now(), prefer_headless));
     Ok(browser)
 }
 
@@ -592,7 +651,12 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
         height: Some(viewport_height() as f64),
     };
     if let Err(e) = tab.set_bounds(bounds) {
-        warn!("Browser agent: set_bounds {}x{} failed: {} (continuing)", viewport_width(), viewport_height(), e);
+        warn!(
+            "Browser agent: set_bounds {}x{} failed: {} (continuing)",
+            viewport_width(),
+            viewport_height(),
+            e
+        );
     }
     Ok((browser, tab))
 }
@@ -608,12 +672,11 @@ fn navigate_and_get_state_inner(url: &str) -> Result<String, String> {
     let (_, tab) = get_current_tab().inspect_err(|e| {
         clear_browser_session_on_error(e);
     })?;
-    tab.navigate_to(&url_normalized)
-        .map_err(|e| {
-            let s = format!("Navigate: {}", e);
-            clear_browser_session_on_error(&s);
-            s
-        })?;
+    tab.navigate_to(&url_normalized).map_err(|e| {
+        let s = format!("Navigate: {}", e);
+        clear_browser_session_on_error(&s);
+        s
+    })?;
     if let Err(e) = tab.wait_until_navigated() {
         warn!("Browser agent [CDP]: wait_until_navigated failed (SPA/hash?): {} — continuing after delay", e);
         std::thread::sleep(Duration::from_secs(2));
@@ -623,7 +686,11 @@ fn navigate_and_get_state_inner(url: &str) -> Result<String, String> {
         clear_browser_session_on_error(e);
     })?;
     set_last_element_labels(
-        state.interactables.iter().map(|i| (i.index, element_label_for_status(i))).collect(),
+        state
+            .interactables
+            .iter()
+            .map(|i| (i.index, element_label_for_status(i)))
+            .collect(),
     );
     Ok(format_browser_state_for_llm(&state))
 }
@@ -686,7 +753,11 @@ fn click_by_index_inner(index: u32) -> Result<String, String> {
         clear_browser_session_on_error(e);
     })?;
     set_last_element_labels(
-        state.interactables.iter().map(|i| (i.index, element_label_for_status(i))).collect(),
+        state
+            .interactables
+            .iter()
+            .map(|i| (i.index, element_label_for_status(i)))
+            .collect(),
     );
     Ok(format_browser_state_for_llm(&state))
 }
@@ -706,7 +777,10 @@ fn input_by_index_inner(index: u32, text: &str) -> Result<String, String> {
     if is_new_tab_or_blank(tab.get_url().as_str()) {
         return Err(SESSION_RESET_MSG.to_string());
     }
-    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
     let input_js = format!(
         r#"
 (function() {{
@@ -737,9 +811,7 @@ fn input_by_index_inner(index: u32, text: &str) -> Result<String, String> {
   return 'element at index is not an input or textarea';
 }})()
 "#,
-        index,
-        escaped,
-        escaped
+        index, escaped, escaped
     );
     let result = tab.evaluate(&input_js, false).map_err(|e| {
         let s = format!("Input evaluate: {}", e);
@@ -760,7 +832,11 @@ fn input_by_index_inner(index: u32, text: &str) -> Result<String, String> {
         clear_browser_session_on_error(e);
     })?;
     set_last_element_labels(
-        state.interactables.iter().map(|i| (i.index, element_label_for_status(i))).collect(),
+        state
+            .interactables
+            .iter()
+            .map(|i| (i.index, element_label_for_status(i)))
+            .collect(),
     );
     Ok(format_browser_state_for_llm(&state))
 }
@@ -875,25 +951,30 @@ fn search_page_text_inner(pattern: &str) -> Result<String, String> {
   return {{ matches: matches, total: totalFound, has_more: totalFound > {} }};
 }})()
 "#,
-        pattern_escaped,
-        MAX_RESULTS,
-        CONTEXT_CHARS,
-        CONTEXT_CHARS,
-        MAX_RESULTS
+        pattern_escaped, MAX_RESULTS, CONTEXT_CHARS, CONTEXT_CHARS, MAX_RESULTS
     );
     let result = tab.evaluate(&js, false).map_err(|e| {
         let s = format!("Search page evaluate: {}", e);
         clear_browser_session_on_error(&s);
         s
     })?;
-    let value = result.value.as_ref().ok_or("search_page returned no value")?;
-    let obj = value.as_object().ok_or("search_page did not return object")?;
+    let value = result
+        .value
+        .as_ref()
+        .ok_or("search_page returned no value")?;
+    let obj = value
+        .as_object()
+        .ok_or("search_page did not return object")?;
     if let Some(err) = obj.get("error").and_then(|v| v.as_str()) {
         return Err(format!("search_page error: {}", err));
     }
     let total = obj.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
     let empty: &[serde_json::Value] = &[];
-    let matches = obj.get("matches").and_then(|v| v.as_array()).map(|v| v.as_slice()).unwrap_or(empty);
+    let matches = obj
+        .get("matches")
+        .and_then(|v| v.as_array())
+        .map(|v| v.as_slice())
+        .unwrap_or(empty);
     if total == 0 {
         return Ok(format!("No matches found for \"{}\" on page.", pattern));
     }
@@ -905,10 +986,7 @@ fn search_page_text_inner(pattern: &str) -> Result<String, String> {
     )];
     lines.push(String::new());
     for (i, m) in matches.iter().enumerate() {
-        let ctx = m
-            .get("context")
-            .and_then(|v| v.as_str())
-            .unwrap_or("?");
+        let ctx = m.get("context").and_then(|v| v.as_str()).unwrap_or("?");
         let path = m.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let loc = if path.is_empty() {
             String::new()
@@ -917,7 +995,10 @@ fn search_page_text_inner(pattern: &str) -> Result<String, String> {
         };
         lines.push(format!("[{}] {}{}", i + 1, ctx, loc));
     }
-    let has_more = obj.get("has_more").and_then(|v| v.as_bool()).unwrap_or(false);
+    let has_more = obj
+        .get("has_more")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if has_more {
         lines.push(format!(
             "\n... showing {} of {} total matches.",
@@ -972,7 +1053,10 @@ fn take_screenshot_current_page_inner() -> Result<PathBuf, String> {
     if is_new_tab_or_blank(final_url.as_str()) {
         return Err(SESSION_RESET_MSG.to_string());
     }
-    info!("Browser agent [CDP]: screenshotting current page: {}", final_url);
+    info!(
+        "Browser agent [CDP]: screenshotting current page: {}",
+        final_url
+    );
     std::thread::sleep(Duration::from_secs(1));
     let png_data = tab
         .capture_screenshot(CaptureScreenshotFormatOption::Png, None, None, true)
@@ -1004,7 +1088,10 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     if url_trimmed.is_empty() || url_trimmed.eq_ignore_ascii_case("current") {
         return take_screenshot_current_page_inner();
     }
-    info!("Browser agent [CDP]: take_screenshot called with url (raw): {:?}", url);
+    info!(
+        "Browser agent [CDP]: take_screenshot called with url (raw): {:?}",
+        url
+    );
     let url_normalized = normalize_url_for_screenshot(url_trimmed);
     info!("Browser agent [CDP]: normalized URL: {}", url_normalized);
     let port = 9222u16;
@@ -1019,19 +1106,21 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     let tab = tabs.first().cloned().ok_or_else(|| "No tab".to_string())?;
     drop(tabs);
     info!("Browser agent [CDP]: navigating to: {}", url_normalized);
-    tab.navigate_to(&url_normalized)
-        .map_err(|e| {
-            let s = format!("Navigate: {}", e);
-            warn!("Browser agent [CDP]: navigate_to failed: {}", e);
-            clear_browser_session_on_error(&s);
-            s
-        })?;
+    tab.navigate_to(&url_normalized).map_err(|e| {
+        let s = format!("Navigate: {}", e);
+        warn!("Browser agent [CDP]: navigate_to failed: {}", e);
+        clear_browser_session_on_error(&s);
+        s
+    })?;
     if let Err(e) = tab.wait_until_navigated() {
         warn!("Browser agent [CDP]: wait_until_navigated failed (SPA/hash?): {} — continuing after delay", e);
         std::thread::sleep(Duration::from_secs(2));
     }
     let final_url = tab.get_url();
-    info!("Browser agent [CDP]: navigated; final tab URL: {}", final_url);
+    info!(
+        "Browser agent [CDP]: navigated; final tab URL: {}",
+        final_url
+    );
     if let Ok(title) = tab.evaluate("document.title", false) {
         let title_str = title
             .value
@@ -1039,7 +1128,9 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
             .and_then(|v| v.as_str())
             .unwrap_or("(none)");
         info!("Browser agent [CDP]: page title: {}", title_str);
-        if title_str.to_lowercase().contains("404") || title_str.to_lowercase().contains("not found") {
+        if title_str.to_lowercase().contains("404")
+            || title_str.to_lowercase().contains("not found")
+        {
             warn!("Browser agent [CDP]: page appears to be 404 or not found");
         }
     }

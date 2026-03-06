@@ -41,7 +41,11 @@ pub struct SearchResponse {
 
 /// Run a web search via Perplexity Search API.
 /// `api_key` must be a valid Perplexity API key (from Keychain).
-pub async fn search(api_key: &str, query: &str, max_results: Option<u32>) -> Result<SearchResponse> {
+pub async fn search(
+    api_key: &str,
+    query: &str,
+    max_results: Option<u32>,
+) -> Result<SearchResponse> {
     let body = SearchRequest {
         query: query.to_string(),
         max_results: max_results.or(Some(10)),
@@ -64,16 +68,14 @@ pub async fn search(api_key: &str, query: &str, max_results: Option<u32>) -> Res
         .context("Perplexity search request")?;
 
     let status = response.status();
-    let body_bytes = response
-        .bytes()
-        .await
-        .context("Perplexity response body")?;
+    let body_bytes = response.bytes().await.context("Perplexity response body")?;
 
     if !status.is_success() {
         let msg = String::from_utf8_lossy(&body_bytes);
         anyhow::bail!("Perplexity API error {}: {}", status, msg);
     }
 
-    let parsed: SearchResponse = serde_json::from_slice(&body_bytes).context("Perplexity response JSON")?;
+    let parsed: SearchResponse =
+        serde_json::from_slice(&body_bytes).context("Perplexity response JSON")?;
     Ok(parsed)
 }

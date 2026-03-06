@@ -1,9 +1,9 @@
 //! mac-stats Library
-//! 
+//!
 //! A macOS system monitoring application with menu bar integration.
-//! 
+//!
 //! ## Architecture
-//! 
+//!
 //! The codebase is organized into modules:
 //! - `logging`: Structured logging with tracing
 //! - `state`: Application state management
@@ -11,46 +11,46 @@
 //! - `config`: Configuration management (paths, build info)
 //! - `ffi`: Safe FFI wrappers for IOReport and Objective-C
 //! - `ui`: UI components (status bar, windows)
-//! 
+//!
 //! ## Main Entry Points
-//! 
+//!
 //! - `run()`: Start the application without CPU window
 //! - `run_with_cpu_window()`: Start the application with CPU window open
 
-mod logging;
-mod state;
-mod metrics;
-pub mod config;
-mod ffi;
-mod ui;
-pub mod security;
-mod monitors;
-mod alerts;
-mod plugins;
-mod ollama;
-mod perplexity;
-pub mod discord;
-mod scheduler;
-mod mcp;
-mod session_memory;
-mod skills;
 pub mod agents;
-pub mod task;
-mod user_info;
-pub mod redmine;
+mod alerts;
 pub mod browser_agent;
 mod commands;
+pub mod config;
+pub mod discord;
+mod ffi;
+mod logging;
+mod mcp;
+mod metrics;
+mod monitors;
+mod ollama;
+mod perplexity;
+mod plugins;
+pub mod redmine;
+mod scheduler;
+pub mod security;
+mod session_memory;
+mod skills;
+mod state;
+pub mod task;
+mod ui;
+mod user_info;
 
+use macsmc::Smc;
 use std::os::raw::c_void;
 use sysinfo::{Disks, System};
-use macsmc::Smc;
 
 // Re-export logging functions (macros are auto-exported via #[macro_export])
-pub use logging::{set_verbosity, init_tracing};
+pub use logging::{init_tracing, set_verbosity};
 // IOReport types kept for future use (extern block still references them)
 use core_foundation::base::{CFTypeRef, TCFType};
-use core_foundation::dictionary::{CFDictionaryRef, CFMutableDictionaryRef, CFMutableDictionary};
-use core_foundation::string::{CFStringRef, CFString};
+use core_foundation::dictionary::{CFDictionaryRef, CFMutableDictionary, CFMutableDictionaryRef};
+use core_foundation::string::{CFString, CFStringRef};
 
 // IOReport FFI bindings (similar to macmon)
 // Some functions are declared for future use
@@ -65,11 +65,7 @@ extern "C" {
         want_sub_groups: u64,
         want_historical: u64,
     ) -> CFDictionaryRef;
-    fn IOReportMergeChannels(
-        dest: CFMutableDictionaryRef,
-        src: CFDictionaryRef,
-        nil: CFTypeRef,
-    );
+    fn IOReportMergeChannels(dest: CFMutableDictionaryRef, src: CFDictionaryRef, nil: CFTypeRef);
     fn IOReportCreateSubscription(
         allocator: CFTypeRef,
         channels: CFMutableDictionaryRef,
@@ -109,20 +105,25 @@ extern "C" {
 use objc2::MainThreadMarker;
 use tauri::Manager;
 
-
 // Use state from state module
 use state::*;
 
 // Use metrics from metrics module (only re-export what's needed)
 
 // Re-export for Tauri commands
-pub use metrics::{SystemMetrics, CpuDetails, get_cpu_details, get_metrics, get_app_version, get_window_decorations, set_window_decorations, get_process_details, force_quit_process, get_changelog};
+pub use metrics::{
+    force_quit_process, get_app_version, get_changelog, get_cpu_details, get_metrics,
+    get_process_details, get_window_decorations, set_window_decorations, CpuDetails, SystemMetrics,
+};
 // Re-export for CLI (e.g. discord run-ollama)
-pub use commands::ollama::{answer_with_ollama_and_fetch, ensure_ollama_agent_ready_at_startup, OllamaReply};
-
+pub use commands::ollama::{
+    answer_with_ollama_and_fetch, ensure_ollama_agent_ready_at_startup, OllamaReply,
+};
 
 // UI functions are now in ui module
-use ui::status_bar::{build_status_text, setup_status_item, create_cpu_window, make_attributed_title};
+use ui::status_bar::{
+    build_status_text, create_cpu_window, make_attributed_title, setup_status_item,
+};
 
 /// Set frequency logging flag for detailed debugging
 pub fn set_frequency_logging(enabled: bool) {

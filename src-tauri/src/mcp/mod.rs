@@ -380,7 +380,10 @@ async fn run_mcp_stdio_rpc(
         .write_all(format!("{}\n", init_line).as_bytes())
         .await
         .map_err(|e| format!("MCP stdio write: {}", e))?;
-    stdin.flush().await.map_err(|e| format!("MCP stdio flush: {}", e))?;
+    stdin
+        .flush()
+        .await
+        .map_err(|e| format!("MCP stdio flush: {}", e))?;
 
     let init_response = loop {
         let line = tokio::time::timeout(Duration::from_secs(15), reader.next_line())
@@ -403,7 +406,10 @@ async fn run_mcp_stdio_rpc(
         .write_all(format!("{}\n", notif).as_bytes())
         .await
         .map_err(|e| format!("MCP stdio write: {}", e))?;
-    stdin.flush().await.map_err(|e| format!("MCP stdio flush: {}", e))?;
+    stdin
+        .flush()
+        .await
+        .map_err(|e| format!("MCP stdio flush: {}", e))?;
 
     let rpc_id = next_id();
     let req = JsonRpcRequest {
@@ -417,7 +423,10 @@ async fn run_mcp_stdio_rpc(
         .write_all(format!("{}\n", req_line).as_bytes())
         .await
         .map_err(|e| format!("MCP stdio write: {}", e))?;
-    stdin.flush().await.map_err(|e| format!("MCP stdio flush: {}", e))?;
+    stdin
+        .flush()
+        .await
+        .map_err(|e| format!("MCP stdio flush: {}", e))?;
 
     let rpc_response = loop {
         let line = tokio::time::timeout(Duration::from_secs(20), reader.next_line())
@@ -449,8 +458,8 @@ pub async fn list_tools(server_url: &str) -> Result<Vec<McpTool>, String> {
         let result = response
             .result
             .ok_or_else(|| "MCP: no result in tools/list".to_string())?;
-        let list_result: ToolsListResult =
-            serde_json::from_value(result.clone()).map_err(|e| format!("MCP tools/list result: {}", e))?;
+        let list_result: ToolsListResult = serde_json::from_value(result.clone())
+            .map_err(|e| format!("MCP tools/list result: {}", e))?;
         let tools: Vec<McpTool> = list_result
             .tools
             .into_iter()
@@ -468,15 +477,21 @@ pub async fn list_tools(server_url: &str) -> Result<Vec<McpTool>, String> {
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("MCP HTTP client: {}", e))?;
-    let response = run_mcp_rpc(server_url, "tools/list", Some(serde_json::json!({})), &client).await?;
+    let response = run_mcp_rpc(
+        server_url,
+        "tools/list",
+        Some(serde_json::json!({})),
+        &client,
+    )
+    .await?;
     if let Some(ref e) = response.error {
         return Err(format!("MCP tools/list error: {} ({})", e.message, e.code));
     }
     let result = response
         .result
         .ok_or_else(|| "MCP: no result in tools/list".to_string())?;
-    let list_result: ToolsListResult =
-        serde_json::from_value(result.clone()).map_err(|e| format!("MCP tools/list result: {}", e))?;
+    let list_result: ToolsListResult = serde_json::from_value(result.clone())
+        .map_err(|e| format!("MCP tools/list result: {}", e))?;
     let tools: Vec<McpTool> = list_result
         .tools
         .into_iter()
@@ -490,7 +505,11 @@ pub async fn list_tools(server_url: &str) -> Result<Vec<McpTool>, String> {
 }
 
 /// Call an MCP tool by name with optional JSON arguments. Returns the tool result as text.
-pub async fn call_tool(server_url: &str, tool_name: &str, arguments: Option<serde_json::Value>) -> Result<String, String> {
+pub async fn call_tool(
+    server_url: &str,
+    tool_name: &str,
+    arguments: Option<serde_json::Value>,
+) -> Result<String, String> {
     let params = Some(serde_json::json!({
         "name": tool_name,
         "arguments": arguments.unwrap_or(serde_json::json!({}))
@@ -524,8 +543,16 @@ pub async fn call_tool(server_url: &str, tool_name: &str, arguments: Option<serd
             .filter_map(|i| i.text)
             .collect::<Vec<_>>()
             .join("\n");
-        info!("MCP: tool {} completed ({} chars, stdio)", tool_name, text.len());
-        return Ok(if text.is_empty() { "(no output)".to_string() } else { text });
+        info!(
+            "MCP: tool {} completed ({} chars, stdio)",
+            tool_name,
+            text.len()
+        );
+        return Ok(if text.is_empty() {
+            "(no output)".to_string()
+        } else {
+            text
+        });
     }
 
     info!(
@@ -564,5 +591,9 @@ pub async fn call_tool(server_url: &str, tool_name: &str, arguments: Option<serd
         .collect::<Vec<_>>()
         .join("\n");
     info!("MCP: tool {} completed ({} chars)", tool_name, text.len());
-    Ok(if text.is_empty() { "(no output)".to_string() } else { text })
+    Ok(if text.is_empty() {
+        "(no output)".to_string()
+    } else {
+        text
+    })
 }

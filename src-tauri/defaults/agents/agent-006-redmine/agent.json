@@ -1,0 +1,1 @@
+{"name":"Redmine","slug":"redmine","model_role":"general","enabled":true,"description":"Redmine ticket review, search, create, and update. Use REDMINE_API only. Summarize issues with: Summary, Status & completion, Missing (e.g. docs), Final thoughts.","max_tool_iterations":10}

@@ -1,28 +1,28 @@
 //! Application state management
-//! 
+//!
 //! This module manages global application state including:
 //! - System information (CPU, RAM, Disk)
 //! - UI state (status bar, menu items)
 //! - Caches (temperature, frequency, chip info)
 //! - IOReport subscriptions
-//! 
+//!
 //! Note: Some state remains global due to:
 //! - Thread-local requirements (UI must be on main thread)
 //! - Cross-thread access patterns
 //! - Tauri's architecture requiring global handles
-//! 
+//!
 //! Future improvement: Consider consolidating into AppState struct
 //! and passing it through Tauri's state management.
 
+use crate::metrics::history::HistoryBuffer;
+use objc2::rc::Retained;
+use objc2::runtime::AnyObject;
+use objc2_app_kit::NSStatusItem;
 use std::cell::RefCell;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use sysinfo::{Disks, System};
-use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
-use objc2_app_kit::NSStatusItem;
 use tauri::AppHandle;
-use crate::metrics::history::HistoryBuffer;
 
 // System state
 pub(crate) static SYSTEM: Mutex<Option<System>> = Mutex::new(None);
@@ -63,7 +63,8 @@ pub(crate) static FREQ_CACHE: Mutex<Option<(f32, Instant)>> = Mutex::new(None);
 
 // Process list cache: (process_list, last_update_timestamp)
 // Cache processes for 30 seconds to avoid expensive refresh on every call
-pub(crate) static PROCESS_CACHE: Mutex<Option<(Vec<crate::metrics::ProcessUsage>, Instant)>> = Mutex::new(None);
+pub(crate) static PROCESS_CACHE: Mutex<Option<(Vec<crate::metrics::ProcessUsage>, Instant)>> =
+    Mutex::new(None);
 // P-core and E-core frequency caches: (frequency_value_ghz, last_update_timestamp)
 pub(crate) static P_CORE_FREQ_CACHE: Mutex<Option<(f32, Instant)>> = Mutex::new(None);
 pub(crate) static E_CORE_FREQ_CACHE: Mutex<Option<(f32, Instant)>> = Mutex::new(None);
@@ -122,11 +123,11 @@ pub(crate) static LAST_BATTERY_READ: Mutex<Option<Instant>> = Mutex::new(None);
 pub(crate) static METRICS_HISTORY: Mutex<Option<HistoryBuffer>> = Mutex::new(None);
 
 /// Application state structure (future refactoring target)
-/// 
+///
 /// This struct represents the ideal state organization.
 /// Currently, state is stored in global statics for compatibility
 /// with existing code and Tauri's architecture.
-/// 
+///
 /// Future work: Migrate global statics to this struct and pass
 /// it through Tauri's state management system.
 #[allow(dead_code)]
@@ -135,14 +136,14 @@ pub struct AppState {
     pub system: Option<System>,
     pub disks: Option<Disks>,
     pub last_system_refresh: Option<Instant>,
-    
+
     // Caches
     pub chip_info: Option<String>,
     pub access_flags: Option<(bool, bool, bool, bool)>, // temp, freq, cpu_power, gpu_power
     pub temp_cache: Option<(f32, Instant)>,
     pub freq_cache: Option<(f32, Instant)>,
     pub nominal_freq: Option<f32>,
-    
+
     // IOReport
     pub ioreport_subscription: Option<usize>,
     pub ioreport_channels: Option<usize>,

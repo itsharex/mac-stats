@@ -1,4 +1,4 @@
-//! Skills: Markdown files in ~/.mac-stats/skills/skill-<number>-<topic>.md
+//! Skills: Markdown files in ~/.mac-stats/agents/skills/skill-<number>-<topic>.md
 //! Used as system-prompt overlays so different agents can respond differently.
 //! Load and parse results are written to the app log (~/.mac-stats/debug.log when verbosity >= -vv).
 //! Any future code that creates or modifies skill files should also log and consider notifying the user (e.g. status or Tauri event).
@@ -59,7 +59,7 @@ fn ensure_default_skills() {
     }
 }
 
-/// Load all skills from ~/.mac-stats/skills/. Files must match skill-<number>-<topic>.md.
+/// Load all skills from ~/.mac-stats/agents/skills/. Files must match skill-<number>-<topic>.md.
 /// On error (unreadable file) log and skip that file. Results are logged (available list or failures).
 /// If the directory is empty, the two default skills (summarize, code) are created first.
 pub fn load_skills() -> Vec<Skill> {
@@ -120,12 +120,7 @@ pub fn load_skills() -> Vec<Skill> {
             .map(|s| format!("{}-{}", s.number, s.topic))
             .collect::<Vec<_>>()
             .join(", ");
-        info!(
-            "Skills: loaded {} from {:?}: {}",
-            skills.len(),
-            dir,
-            list
-        );
+        info!("Skills: loaded {} from {:?}: {}", skills.len(), dir, list);
     }
 
     skills
@@ -150,9 +145,9 @@ pub fn find_skill_by_number_or_topic<'a>(skills: &'a [Skill], selector: &str) ->
         return skills.iter().find(|s| s.number == n);
     }
     let lower = selector.to_lowercase();
-    skills
-        .iter()
-        .find(|s| s.topic.to_lowercase() == lower || s.topic.to_lowercase().replace(' ', "-") == lower)
+    skills.iter().find(|s| {
+        s.topic.to_lowercase() == lower || s.topic.to_lowercase().replace(' ', "-") == lower
+    })
 }
 
 #[cfg(test)]

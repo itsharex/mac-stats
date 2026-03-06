@@ -1,6 +1,6 @@
 //! Alert Tauri commands
 
-use crate::alerts::{Alert, AlertManager, AlertContext};
+use crate::alerts::{Alert, AlertContext, AlertManager};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
@@ -13,7 +13,8 @@ fn get_alert_manager() -> &'static Mutex<AlertManager> {
 /// Add an alert
 #[tauri::command]
 pub fn add_alert(alert: Alert) -> Result<(), String> {
-    get_alert_manager().lock()
+    get_alert_manager()
+        .lock()
         .map_err(|e| e.to_string())?
         .add_alert(alert);
 
@@ -23,7 +24,8 @@ pub fn add_alert(alert: Alert) -> Result<(), String> {
 /// Remove an alert
 #[tauri::command]
 pub fn remove_alert(alert_id: String) -> Result<(), String> {
-    get_alert_manager().lock()
+    get_alert_manager()
+        .lock()
         .map_err(|e| e.to_string())?
         .remove_alert(&alert_id);
 
@@ -33,7 +35,8 @@ pub fn remove_alert(alert_id: String) -> Result<(), String> {
 /// Evaluate alerts (called periodically or on events)
 #[tauri::command]
 pub fn evaluate_alerts(context: AlertContext) -> Result<Vec<String>, String> {
-    get_alert_manager().lock()
+    get_alert_manager()
+        .lock()
         .map_err(|e| e.to_string())?
         .evaluate(context)
         .map_err(|e| e.to_string())

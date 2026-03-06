@@ -2,9 +2,9 @@
 
 use crate::plugins::{Plugin, PluginManager, PluginResult};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::OnceLock;
-use std::path::PathBuf;
 
 // Global plugin manager (in production, use proper state management)
 fn get_plugin_manager() -> &'static Mutex<PluginManager> {
@@ -37,12 +37,12 @@ pub fn add_plugin(request: AddPluginRequest) -> Result<Plugin, String> {
         plugin.timeout_secs = timeout;
     }
 
-    plugin.validate()
-        .map_err(|e| e.to_string())?;
+    plugin.validate().map_err(|e| e.to_string())?;
 
     let plugin_clone = plugin.clone();
-    
-    get_plugin_manager().lock()
+
+    get_plugin_manager()
+        .lock()
         .map_err(|e| e.to_string())?
         .add_plugin(plugin);
 
@@ -52,7 +52,8 @@ pub fn add_plugin(request: AddPluginRequest) -> Result<Plugin, String> {
 /// Remove a plugin
 #[tauri::command]
 pub fn remove_plugin(plugin_id: String) -> Result<(), String> {
-    get_plugin_manager().lock()
+    get_plugin_manager()
+        .lock()
         .map_err(|e| e.to_string())?
         .remove_plugin(&plugin_id);
 
@@ -62,22 +63,20 @@ pub fn remove_plugin(plugin_id: String) -> Result<(), String> {
 /// Execute a plugin
 #[tauri::command]
 pub fn execute_plugin(plugin_id: String) -> Result<PluginResult, String> {
-    let manager = get_plugin_manager().lock()
-        .map_err(|e| e.to_string())?;
+    let manager = get_plugin_manager().lock().map_err(|e| e.to_string())?;
 
-    let plugin = manager.get_plugin(&plugin_id)
+    let plugin = manager
+        .get_plugin(&plugin_id)
         .ok_or_else(|| format!("Plugin not found: {}", plugin_id))?
         .clone();
 
-    plugin.execute()
-        .map_err(|e| e.to_string())
+    plugin.execute().map_err(|e| e.to_string())
 }
 
 /// List all plugins
 #[tauri::command]
 pub fn list_plugins() -> Result<Vec<Plugin>, String> {
-    let manager = get_plugin_manager().lock()
-        .map_err(|e| e.to_string())?;
+    let manager = get_plugin_manager().lock().map_err(|e| e.to_string())?;
 
     Ok(manager.list_plugins().into_iter().cloned().collect())
 }
@@ -85,11 +84,10 @@ pub fn list_plugins() -> Result<Vec<Plugin>, String> {
 /// Run all due plugins
 #[tauri::command]
 pub fn run_due_plugins() -> Result<Vec<PluginResult>, String> {
-    let mut manager = get_plugin_manager().lock()
-        .map_err(|e| e.to_string())?;
+    let mut manager = get_plugin_manager().lock().map_err(|e| e.to_string())?;
 
     let results = manager.run_due_plugins();
-    
+
     // Convert Results to Vec, filtering out errors
     let mut successful_results = Vec::new();
     for plugin_result in results.into_iter().flatten() {

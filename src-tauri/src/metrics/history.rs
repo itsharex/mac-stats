@@ -17,25 +17,25 @@
 //! - Downsampling uses rolling averages of all metrics for smooth transitions
 //! - Frontend can query any time range and specify max_points for display
 
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
-use serde::{Serialize, Deserialize};
 
 /// A single point in metrics history
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricPoint {
-    pub timestamp: i64,           // Unix timestamp (seconds)
-    pub cpu: f32,                 // CPU usage percentage (0-100)
-    pub gpu: f32,                 // GPU usage percentage (0-100)
-    pub ram: f32,                 // RAM usage percentage (0-100)
-    pub disk: f32,                // Disk usage percentage (0-100)
-    pub temperature: f32,         // Temperature in Celsius
-    pub frequency: f32,           // CPU frequency in GHz
-    pub p_core_frequency: f32,    // P-core frequency in GHz
-    pub e_core_frequency: f32,    // E-core frequency in GHz
-    pub cpu_power: f32,           // CPU power consumption in Watts
-    pub gpu_power: f32,           // GPU power consumption in Watts
-    pub battery_level: f32,       // Battery level (0-100), or -1.0 if N/A
+    pub timestamp: i64,        // Unix timestamp (seconds)
+    pub cpu: f32,              // CPU usage percentage (0-100)
+    pub gpu: f32,              // GPU usage percentage (0-100)
+    pub ram: f32,              // RAM usage percentage (0-100)
+    pub disk: f32,             // Disk usage percentage (0-100)
+    pub temperature: f32,      // Temperature in Celsius
+    pub frequency: f32,        // CPU frequency in GHz
+    pub p_core_frequency: f32, // P-core frequency in GHz
+    pub e_core_frequency: f32, // E-core frequency in GHz
+    pub cpu_power: f32,        // CPU power consumption in Watts
+    pub gpu_power: f32,        // GPU power consumption in Watts
+    pub battery_level: f32,    // Battery level (0-100), or -1.0 if N/A
 }
 
 impl MetricPoint {
@@ -136,10 +136,10 @@ impl HistoryBuffer {
     /// Create a new history buffer with empty tiers
     pub fn new() -> Self {
         Self {
-            tier1_1s: VecDeque::with_capacity(301),     // 300 + 1 for overflow
-            tier2_1m: VecDeque::with_capacity(61),      // 60 + 1 for overflow
-            tier3_5m: VecDeque::with_capacity(73),      // 72 + 1 for overflow
-            tier4_1h: VecDeque::with_capacity(169),     // 168 + 1 for overflow
+            tier1_1s: VecDeque::with_capacity(301), // 300 + 1 for overflow
+            tier2_1m: VecDeque::with_capacity(61),  // 60 + 1 for overflow
+            tier3_5m: VecDeque::with_capacity(73),  // 72 + 1 for overflow
+            tier4_1h: VecDeque::with_capacity(169), // 168 + 1 for overflow
             last_tier2_downsample: 0,
             last_tier3_downsample: 0,
             last_tier4_downsample: 0,
@@ -260,7 +260,11 @@ impl HistoryBuffer {
     }
 
     /// Query history for a given time range with optional downsampling for display
-    pub fn query(&self, time_range_seconds: u64, max_display_points: Option<usize>) -> Vec<MetricPoint> {
+    pub fn query(
+        &self,
+        time_range_seconds: u64,
+        max_display_points: Option<usize>,
+    ) -> Vec<MetricPoint> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -339,7 +343,11 @@ impl HistoryBuffer {
     }
 
     /// Downsample points for screen display (every nth point)
-    fn downsample_for_display(&self, points: &[MetricPoint], target_count: usize) -> Vec<MetricPoint> {
+    fn downsample_for_display(
+        &self,
+        points: &[MetricPoint],
+        target_count: usize,
+    ) -> Vec<MetricPoint> {
         if points.is_empty() {
             return Vec::new();
         }
@@ -372,7 +380,8 @@ impl HistoryBuffer {
     /// Saves to ~/.mac-stats/history.json
     #[allow(dead_code)] // Reserved for future persistence feature
     pub fn save_to_disk(&self) -> Result<(), String> {
-        let home = std::env::var("HOME").map_err(|_| "Could not determine HOME directory".to_string())?;
+        let home =
+            std::env::var("HOME").map_err(|_| "Could not determine HOME directory".to_string())?;
         let history_dir = std::path::Path::new(&home).join(".mac-stats");
         let history_file = history_dir.join("history.json");
 
@@ -398,7 +407,8 @@ impl HistoryBuffer {
     /// Loads from ~/.mac-stats/history.json if it exists
     #[allow(dead_code)] // Reserved for future persistence feature
     pub fn load_from_disk() -> Result<Self, String> {
-        let home = std::env::var("HOME").map_err(|_| "Could not determine HOME directory".to_string())?;
+        let home =
+            std::env::var("HOME").map_err(|_| "Could not determine HOME directory".to_string())?;
         let history_dir = std::path::Path::new(&home).join(".mac-stats");
         let history_file = history_dir.join("history.json");
 
@@ -478,7 +488,8 @@ mod tests {
     #[test]
     fn test_history_buffer_push() {
         let mut buffer = HistoryBuffer::new();
-        let point = MetricPoint::from_metrics(50.0, 30.0, 60.0, 70.0, 65.0, 2.5, 2.5, 1.8, 8.0, 6.0, 100.0);
+        let point =
+            MetricPoint::from_metrics(50.0, 30.0, 60.0, 70.0, 65.0, 2.5, 2.5, 1.8, 8.0, 6.0, 100.0);
         buffer.push(point);
         assert_eq!(buffer.tier1_1s.len(), 1);
     }

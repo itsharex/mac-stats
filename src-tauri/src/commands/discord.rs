@@ -17,7 +17,10 @@ enum ConfigureOutcome {
 /// Keychain runs on the command thread so all logs appear in order.
 #[tauri::command]
 pub async fn configure_discord(token: Option<String>) -> Result<(), String> {
-    let has_token = token.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let has_token = token
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
     info!(
         "Discord: configure_discord invoked (has_token={}, len={})",
         has_token,

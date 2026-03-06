@@ -7,7 +7,7 @@ use chrono::TimeZone;
 use tracing::{error, info, warn};
 
 const REVIEW_INTERVAL_SECS: u64 = 60; // 1 minute (tasks looked at at least once per minute)
-const WIP_TIMEOUT_SECS: u64 = 30 * 60;     // 30 minutes
+const WIP_TIMEOUT_SECS: u64 = 30 * 60; // 30 minutes
 const MAX_ITERATIONS_PER_TASK: u32 = 20;
 const MAX_TASKS_PER_CYCLE: u32 = 3;
 
@@ -39,7 +39,10 @@ fn close_stale_wips() {
         );
         match crate::task::set_task_status(&path, "unsuccessful") {
             Ok(new_path) => {
-                if let Err(e) = crate::task::append_to_task(&new_path, "Closed as unsuccessful (30 min timeout).") {
+                if let Err(e) = crate::task::append_to_task(
+                    &new_path,
+                    "Closed as unsuccessful (30 min timeout).",
+                ) {
                     warn!("Task review: append note failed: {}", e);
                 }
             }
@@ -117,13 +120,19 @@ fn resume_paused_tasks() {
             .ok()
             .map(|dt| dt.with_timezone(&chrono::Local))
             .or_else(|| {
-                chrono::NaiveDateTime::parse_from_str(&until_str, "%Y-%m-%dT%H:%M:%S").ok()
+                chrono::NaiveDateTime::parse_from_str(&until_str, "%Y-%m-%dT%H:%M:%S")
+                    .ok()
                     .and_then(|n| chrono::Local.from_local_datetime(&n).single())
             });
-        let Some(until_local) = until_local else { continue };
+        let Some(until_local) = until_local else {
+            continue;
+        };
         if now >= until_local {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-            info!("Task review: resuming paused task '{}' (paused until {} passed)", name, until_str);
+            info!(
+                "Task review: resuming paused task '{}' (paused until {} passed)",
+                name, until_str
+            );
             if let Ok(new_path) = crate::task::set_task_status(&path, "open") {
                 let _ = crate::task::set_paused_until(&new_path, None);
             }
@@ -155,14 +164,30 @@ async fn run_review_once() {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("task");
         info!(
             "Task review: starting work on open task '{}' ({}/{} this cycle)",
-            name, count + 1, MAX_TASKS_PER_CYCLE
+            name,
+            count + 1,
+            MAX_TASKS_PER_CYCLE
         );
-        match crate::task::runner::run_task_until_finished(path.clone(), MAX_ITERATIONS_PER_TASK).await {
-            Ok(reply) => {
-                info!("Task review: task '{}' completed ({} chars)", name, reply.chars().count());
+        match crate::task::runner::run_task_until_finished(
+            path.clone(),
+            MAX_ITERATIONS_PER_TASK,
+            None,
+            None,
+        )
+        .await
+        {
+            Ok((reply, _sent)) => {
+                info!(
+                    "Task review: task '{}' completed ({} chars)",
+                    name,
+                    reply.chars().count()
+                );
             }
             Err(e) => {
-                error!("Task review: run_task_until_finished failed for '{}': {}", name, e);
+                error!(
+                    "Task review: run_task_until_finished failed for '{}': {}",
+                    name, e
+                );
             }
         }
         count += 1;
@@ -187,7 +212,11 @@ pub fn spawn_review_thread() {
                 return;
             }
         };
-        info!("Task review: thread spawned (every {} min, WIP timeout {} min)", REVIEW_INTERVAL_SECS / 60, WIP_TIMEOUT_SECS / 60);
+        info!(
+            "Task review: thread spawned (every {} min, WIP timeout {} min)",
+            REVIEW_INTERVAL_SECS / 60,
+            WIP_TIMEOUT_SECS / 60
+        );
         rt.block_on(review_loop());
     });
 }

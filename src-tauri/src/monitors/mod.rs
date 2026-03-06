@@ -1,16 +1,16 @@
 //! External monitoring module
-//! 
+//!
 //! Monitors external resources:
 //! - Websites (HTTP/HTTPS uptime, response times, SSL errors)
 //! - Social media (Mastodon/X mentions)
 //! - APIs (custom endpoints)
 
-pub mod website;
 pub mod social;
+pub mod website;
 
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Monitor type enumeration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

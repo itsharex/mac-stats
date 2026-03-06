@@ -1,13 +1,13 @@
-//! Watch ~/.mac-stats/agents/ and ~/.mac-stats/skills/ for file changes and emit Tauri events
+//! Watch ~/.mac-stats/agents/ and ~/.mac-stats/agents/skills/ for file changes and emit Tauri events
 //! so the frontend (and next load_agents/load_skills) see updates without restart.
 
 use crate::config::Config;
 use crate::state::APP_HANDLE;
-use tauri::Manager;
 use notify::{RecursiveMode, Watcher};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
+use tauri::Manager;
 use tracing::{debug, info, warn};
 
 /// Debounce interval: wait this long after the last filesystem event before emitting.
@@ -30,36 +30,49 @@ pub fn spawn_agents_and_skills_watcher() {
         let skills_dir = Config::skills_dir();
 
         let (tx, rx) = mpsc::channel();
-        let mut watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if tx.send(res).is_err() {
-                // Receiver dropped, watcher shutting down
-            }
-        }) {
-            Ok(w) => w,
-            Err(e) => {
-                warn!("Agents watch: failed to create watcher: {}", e);
-                return;
-            }
-        };
+        let mut watcher =
+            match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                if tx.send(res).is_err() {
+                    // Receiver dropped, watcher shutting down
+                }
+            }) {
+                Ok(w) => w,
+                Err(e) => {
+                    warn!("Agents watch: failed to create watcher: {}", e);
+                    return;
+                }
+            };
 
         if agents_dir.exists() {
-            if watcher.watch(&agents_dir, RecursiveMode::Recursive).is_err() {
+            if watcher
+                .watch(&agents_dir, RecursiveMode::Recursive)
+                .is_err()
+            {
                 warn!("Agents watch: failed to watch agents dir {:?}", agents_dir);
             } else {
                 info!("Agents watch: watching {:?}", agents_dir);
             }
         } else {
-            debug!("Agents watch: agents dir does not exist yet {:?}", agents_dir);
+            debug!(
+                "Agents watch: agents dir does not exist yet {:?}",
+                agents_dir
+            );
         }
 
         if skills_dir.exists() {
-            if watcher.watch(&skills_dir, RecursiveMode::Recursive).is_err() {
+            if watcher
+                .watch(&skills_dir, RecursiveMode::Recursive)
+                .is_err()
+            {
                 warn!("Agents watch: failed to watch skills dir {:?}", skills_dir);
             } else {
                 info!("Agents watch: watching {:?}", skills_dir);
             }
         } else {
-            debug!("Agents watch: skills dir does not exist yet {:?}", skills_dir);
+            debug!(
+                "Agents watch: skills dir does not exist yet {:?}",
+                skills_dir
+            );
         }
 
         let mut last_event = Instant::now();

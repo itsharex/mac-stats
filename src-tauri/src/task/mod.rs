@@ -7,8 +7,8 @@ pub mod review;
 pub mod runner;
 
 use crate::config::Config;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::info;
 
@@ -43,10 +43,16 @@ pub fn status_from_path(path: &Path) -> Option<String> {
 /// Rename task file to new status; return the new path.
 pub fn set_task_status(path: &Path, new_status: &str) -> Result<PathBuf, String> {
     if !is_valid_status(new_status) {
-        return Err(format!("Invalid status: {} (allowed: open, wip, finished, unsuccessful)", new_status));
+        return Err(format!(
+            "Invalid status: {} (allowed: open, wip, finished, unsuccessful)",
+            new_status
+        ));
     }
     let parent = path.parent().ok_or("No parent dir")?;
-    let name = path.file_name().and_then(|n| n.to_str()).ok_or("Invalid filename")?;
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid filename")?;
     let stem = name.strip_suffix(".md").ok_or("Not a .md file")?;
     if !stem.starts_with("task-") {
         return Err("Not a task file (must start with task-)".to_string());
@@ -93,11 +99,13 @@ fn existing_task_with_topic_id(topic_slug: &str, id: &str) -> Option<PathBuf> {
 /// Create a new task file with status "open". Returns the path.
 /// If a task with the same topic and id already exists, returns an error (avoids duplicate task explosion).
 /// Topic and id are sanitized for safe filenames; topic/id that look like existing task filenames are rejected.
+/// When the request came from Discord, pass `reply_to_discord_channel` so we can send the finished task summary back to that channel.
 pub fn create_task(
     topic: &str,
     id: &str,
     initial_content: &str,
     assigned_to: Option<&str>,
+    reply_to_discord_channel: Option<u64>,
 ) -> Result<PathBuf, String> {
     let _ = Config::ensure_task_directory();
     if topic.contains(".md") || (topic.starts_with("task-") && topic.matches('-').count() >= 4) {
@@ -116,14 +124,18 @@ pub fn create_task(
     let datetime = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
     let path = task_path(&datetime, "open");
     let agent = assigned_to.unwrap_or("default").trim();
+    let reply_to_line = reply_to_discord_channel
+        .map(|cid| format!("\n{} discord {}", REPLY_TO_HEADER, cid))
+        .unwrap_or_default();
     let header = format!(
-        "{} {}\n{} {}\n{} {}\n\n",
+        "{} {}\n{} {}\n{} {}{}\n\n",
         ASSIGNED_HEADER,
         if agent.is_empty() { "default" } else { agent },
         TOPIC_HEADER,
         topic.trim(),
         ID_HEADER,
-        id_safe
+        id_safe,
+        reply_to_line
     );
     let content = format!("{}{}", header, initial_content.trim());
     fs::write(&path, content).map_err(|e| format!("Write task file: {}", e))?;
@@ -144,7 +156,11 @@ pub fn append_to_task(path: &Path, block: &str) -> Result<(), String> {
 
 /// Append a conversation turn to the task file (## Conversation <timestamp> with User and Assistant).
 /// Use to log the full exchange so the task file is the single record of what was asked and answered.
-pub fn append_conversation_block(path: &Path, user_message: &str, assistant_reply: &str) -> Result<(), String> {
+pub fn append_conversation_block(
+    path: &Path,
+    user_message: &str,
+    assistant_reply: &str,
+) -> Result<(), String> {
     let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let block = format!(
         "\n\n## Conversation {}\n\n**User:**\n{}\n\n**Assistant:**\n{}\n",
@@ -168,6 +184,8 @@ const ASSIGNED_HEADER: &str = "## Assigned:";
 const TOPIC_HEADER: &str = "## Topic:";
 /// In-file header for id (task-[date]-[status].md does not contain id in filename).
 const ID_HEADER: &str = "## Id:";
+/// Reply-to channel when task was created from a channel (e.g. Discord). Format: "## Reply-to: discord 123456" (extensible: whatsapp, slack, etc.).
+const REPLY_TO_HEADER: &str = "## Reply-to:";
 
 /// Get assignee from task file (first line matching ## Assigned: ...). Default "default".
 pub fn get_assignee(path: &Path) -> Result<String, String> {
@@ -193,7 +211,11 @@ pub fn get_topic_from_file(path: &Path) -> Result<Option<String>, String> {
         let line = line.trim();
         if line.starts_with(TOPIC_HEADER) {
             let t = line[TOPIC_HEADER.len()..].trim();
-            return Ok(Some(if t.is_empty() { "task".to_string() } else { t.to_string() }));
+            return Ok(Some(if t.is_empty() {
+                "task".to_string()
+            } else {
+                t.to_string()
+            }));
         }
     }
     Ok(None)
@@ -206,10 +228,33 @@ pub fn get_id_from_file(path: &Path) -> Result<Option<String>, String> {
         let line = line.trim();
         if line.starts_with(ID_HEADER) {
             let id = line[ID_HEADER.len()..].trim();
-            return Ok(Some(if id.is_empty() { "1".to_string() } else { id.to_string() }));
+            return Ok(Some(if id.is_empty() {
+                "1".to_string()
+            } else {
+                id.to_string()
+            }));
         }
     }
     Ok(None)
+}
+
+/// Get Discord channel id from task file (## Reply-to: discord 123456). Used to send finished task summary back to the channel that requested the task.
+pub fn get_reply_to_discord_channel(path: &Path) -> Option<u64> {
+    let content = fs::read_to_string(path).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with(REPLY_TO_HEADER) {
+            let rest = line[REPLY_TO_HEADER.len()..].trim();
+            if let Some(suffix) = rest.strip_prefix("discord") {
+                let id = suffix.trim();
+                if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) {
+                    return id.parse::<u64>().ok();
+                }
+            }
+            return None;
+        }
+    }
+    None
 }
 
 /// Set assignee in task file (add or replace ## Assigned: line).
@@ -229,7 +274,12 @@ pub fn set_assignee(path: &Path, agent_id: &str) -> Result<(), String> {
         }
     }
     if !found {
-        out = format!("{}{}\n{}", new_line, if out.is_empty() { "" } else { "\n" }, out);
+        out = format!(
+            "{}{}\n{}",
+            new_line,
+            if out.is_empty() { "" } else { "\n" },
+            out
+        );
     }
     fs::write(path, out.trim_end()).map_err(|e| format!("Write task file: {}", e))?;
     info!("Task: assignee set to {} for {:?}", agent_id, path);
@@ -254,7 +304,11 @@ pub fn get_paused_until(path: &Path) -> Result<Option<String>, String> {
         let line = line.trim();
         if line.starts_with(PAUSED_UNTIL_HEADER) {
             let s = line[PAUSED_UNTIL_HEADER.len()..].trim();
-            return Ok(if s.is_empty() { None } else { Some(s.to_string()) });
+            return Ok(if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            });
         }
     }
     Ok(None)
@@ -270,7 +324,11 @@ pub fn get_depends_on(path: &Path) -> Result<Vec<String>, String> {
         let line = line.trim();
         if line.starts_with(DEPENDS_HEADER) {
             let rest = line[DEPENDS_HEADER.len()..].trim();
-            let ids: Vec<String> = rest.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let ids: Vec<String> = rest
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
             return Ok(ids);
         }
     }
@@ -287,7 +345,11 @@ pub fn get_sub_tasks(path: &Path) -> Result<Vec<String>, String> {
         let line = line.trim();
         if line.starts_with(SUB_TASKS_HEADER) {
             let rest = line[SUB_TASKS_HEADER.len()..].trim();
-            let ids: Vec<String> = rest.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let ids: Vec<String> = rest
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
             return Ok(ids);
         }
     }
@@ -355,7 +417,12 @@ pub fn set_paused_until(path: &Path, until_iso: Option<&str>) -> Result<(), Stri
         out.push('\n');
     }
     if let Some(until) = until_iso {
-        out = format!("{} {}\n\n{}", PAUSED_UNTIL_HEADER, until.trim(), out.trim_start());
+        out = format!(
+            "{} {}\n\n{}",
+            PAUSED_UNTIL_HEADER,
+            until.trim(),
+            out.trim_start()
+        );
     }
     fs::write(path, out.trim_end()).map_err(|e| format!("Write task file: {}", e))?;
     Ok(())
@@ -366,7 +433,13 @@ fn slug(topic: &str) -> String {
     let s: String = topic
         .chars()
         .take(60)
-        .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let s = s.trim().replace(' ', "-").trim_matches('-').to_lowercase();
     if s.is_empty() {
@@ -382,7 +455,13 @@ fn sanitize_id(id: &str) -> String {
         .chars()
         .take(80)
         .filter(|c| !matches!(c, '"' | '\'' | '/' | '\\' | '\n' | '\r'))
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let s = s.trim().trim_matches('_');
     if s.is_empty() {
@@ -424,7 +503,9 @@ pub fn resolve_task_path(path_or_id: &str) -> Result<PathBuf, String> {
     if path_or_id.contains('/') || path_or_id.starts_with('~') {
         let expanded = expand_tilde(path_or_id);
         let path = Path::new(&expanded);
-        let canonical = path.canonicalize().map_err(|e| format!("Path not found: {}", e))?;
+        let canonical = path
+            .canonicalize()
+            .map_err(|e| format!("Path not found: {}", e))?;
         if !canonical.starts_with(&task_base_canon) {
             return Err("Path must be under ~/.mac-stats/task".to_string());
         }
@@ -529,7 +610,10 @@ const STATUS_SUFFIXES: &[&str] = &["open", "wip", "finished", "unsuccessful", "p
 pub fn delete_task(path_or_id: &str) -> Result<usize, String> {
     let path = resolve_task_path(path_or_id)?;
     let parent = path.parent().ok_or("No parent dir")?;
-    let stem = path.file_stem().and_then(|n| n.to_str()).ok_or("Invalid filename")?;
+    let stem = path
+        .file_stem()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid filename")?;
     let base = stem
         .strip_suffix("-open")
         .or_else(|| stem.strip_suffix("-wip"))
@@ -683,7 +767,8 @@ pub fn format_list_all_tasks() -> Result<String, String> {
         "paused" => 4,
         _ => 5,
     };
-    let mut by_status: std::collections::BTreeMap<u8, Vec<String>> = std::collections::BTreeMap::new();
+    let mut by_status: std::collections::BTreeMap<u8, Vec<String>> =
+        std::collections::BTreeMap::new();
     for (path, status, _mtime) in list {
         let name = path
             .file_name()
@@ -692,10 +777,7 @@ pub fn format_list_all_tasks() -> Result<String, String> {
             .to_string();
         let assignee = get_assignee(&path).unwrap_or_else(|_| "default".to_string());
         let line = format!("{} (assigned: {})", name, assignee);
-        by_status
-            .entry(order(&status))
-            .or_default()
-            .push(line);
+        by_status.entry(order(&status)).or_default().push(line);
     }
     let headers = ["Open", "WIP", "Finished", "Unsuccessful", "Paused"];
     let keys = [0u8, 1, 2, 3, 4];
@@ -772,7 +854,10 @@ mod tests {
     #[test]
     fn test_id_from_path_no_file() {
         assert_eq!(id_from_path(Path::new("other.md")), None);
-        assert_eq!(id_from_path(Path::new("task-20260222-140215-open.md")), None);
+        assert_eq!(
+            id_from_path(Path::new("task-20260222-140215-open.md")),
+            None
+        );
     }
 
     #[test]

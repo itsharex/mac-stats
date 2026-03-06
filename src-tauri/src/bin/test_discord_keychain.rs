@@ -47,7 +47,10 @@ fn main() {
 
 fn run_store_and_read(token: &str) {
     const ACCOUNT: &str = "discord_bot_token";
-    println!("Keychain test: storing credential for account '{}' (service 'com.raro42.mac-stats')", ACCOUNT);
+    println!(
+        "Keychain test: storing credential for account '{}' (service 'com.raro42.mac-stats')",
+        ACCOUNT
+    );
     println!("Token length: {} chars", token.len());
     println!("(If this hangs, Keychain may be blocking - unlock Keychain Access and try again.)");
 
@@ -65,7 +68,11 @@ fn run_store_and_read(token: &str) {
             if read_back == token {
                 println!("Verify: token matches.");
             } else {
-                eprintln!("Verify: token MISMATCH (stored {} vs read {})", token.len(), read_back.len());
+                eprintln!(
+                    "Verify: token MISMATCH (stored {} vs read {})",
+                    token.len(),
+                    read_back.len()
+                );
             }
         }
         Ok(None) => eprintln!("get_credential: not found (keychain read returned None)"),

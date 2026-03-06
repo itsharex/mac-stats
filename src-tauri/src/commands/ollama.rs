@@ -4,8 +4,8 @@ use tauri::Manager;
 
 use crate::config::Config;
 use crate::ollama::{
-    ChatMessage, EmbedInput, EmbedResponse, ListResponse, OllamaClient, OllamaConfig,
-    PsResponse, VersionResponse,
+    ChatMessage, EmbedInput, EmbedResponse, ListResponse, OllamaClient, OllamaConfig, PsResponse,
+    VersionResponse,
 };
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,10 @@ fn load_global_memory_block() -> String {
     if content.is_empty() {
         return String::new();
     }
-    format!("\n\n## Memory (lessons learned — follow these)\n\n{}\n\n", content)
+    format!(
+        "\n\n## Memory (lessons learned — follow these)\n\n{}\n\n",
+        content
+    )
 }
 
 /// Load per-channel Discord memory (~/.mac-stats/agents/memory-discord-{id}.md). Returns empty if missing.
@@ -51,14 +54,19 @@ fn load_channel_memory_block(channel_id: u64) -> String {
     if content.is_empty() {
         return String::new();
     }
-    format!("\n\n## Memory (this channel — follow these)\n\n{}\n\n", content)
+    format!(
+        "\n\n## Memory (this channel — follow these)\n\n{}\n\n",
+        content
+    )
 }
 
 /// Load memory for the current request: global + per-channel when replying in a Discord channel.
 /// Keeps channel conversations from mixing; DMs and each server channel have their own lesson file.
 fn load_memory_block_for_request(discord_channel_id: Option<u64>) -> String {
     let global = load_global_memory_block();
-    let channel = discord_channel_id.map(load_channel_memory_block).unwrap_or_default();
+    let channel = discord_channel_id
+        .map(load_channel_memory_block)
+        .unwrap_or_default();
     if channel.is_empty() {
         global
     } else {
@@ -85,11 +93,17 @@ fn search_memory_for_request(
     reason: Option<&str>,
     discord_channel_id: Option<u64>,
 ) -> Option<String> {
-    let global = std::fs::read_to_string(Config::memory_file_path()).ok().unwrap_or_default();
-    let channel = discord_channel_id
-        .and_then(|id| std::fs::read_to_string(Config::memory_file_path_for_discord_channel(id)).ok())
+    let global = std::fs::read_to_string(Config::memory_file_path())
+        .ok()
         .unwrap_or_default();
-    let content = format!("{}\n{}", global.trim(), channel.trim()).trim().to_string();
+    let channel = discord_channel_id
+        .and_then(|id| {
+            std::fs::read_to_string(Config::memory_file_path_for_discord_channel(id)).ok()
+        })
+        .unwrap_or_default();
+    let content = format!("{}\n{}", global.trim(), channel.trim())
+        .trim()
+        .to_string();
     if content.is_empty() {
         return None;
     }
@@ -102,16 +116,21 @@ fn search_memory_for_request(
     if query_words.is_empty() {
         return None;
     }
+    // Require at least 2 query words to match so we don't inject memory that only matched one generic word (e.g. "the", "request").
+    const MIN_MEMORY_MATCH_WORDS: usize = 2;
     let mut scored: Vec<(usize, String)> = content
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(|line| {
             let line_lower = line.to_lowercase();
-            let score = query_words.iter().filter(|w| line_lower.contains(w.as_str())).count();
+            let score = query_words
+                .iter()
+                .filter(|w| line_lower.contains(w.as_str()))
+                .count();
             (score, line.to_string())
         })
-        .filter(|(score, _)| *score > 0)
+        .filter(|(score, _)| *score >= MIN_MEMORY_MATCH_WORDS)
         .collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0));
     let top: Vec<String> = scored.into_iter().take(5).map(|(_, line)| line).collect();
@@ -167,14 +186,14 @@ pub struct ChatRequest {
 /// Configure Ollama connection
 #[tauri::command]
 pub fn configure_ollama(config: OllamaConfigRequest) -> Result<(), String> {
-    use tracing::{debug, info};
     use serde_json;
-    
+    use tracing::{debug, info};
+
     // Log raw config JSON
     let config_json = serde_json::to_string_pretty(&config)
         .unwrap_or_else(|_| "Failed to serialize config".to_string());
     info!("Ollama: Configuration request JSON:\n{}", config_json);
-    
+
     let ollama_config = OllamaConfig {
         endpoint: config.endpoint.clone(),
         model: config.model.clone(),
@@ -183,25 +202,25 @@ pub fn configure_ollama(config: OllamaConfigRequest) -> Result<(), String> {
         num_ctx: config.num_ctx,
     };
 
-    ollama_config.validate()
-        .map_err(|e| {
-            debug!("Ollama: Configuration validation failed: {}", e);
-            e.to_string()
-        })?;
+    ollama_config.validate().map_err(|e| {
+        debug!("Ollama: Configuration validation failed: {}", e);
+        e.to_string()
+    })?;
 
     let endpoint = config.endpoint.clone();
     info!("Ollama: Using endpoint: {}", endpoint);
-    
-    let client = OllamaClient::new(ollama_config)
-        .map_err(|e| {
-            debug!("Ollama: Failed to create client: {}", e);
-            e.to_string()
-        })?;
 
-    *get_ollama_client().lock()
-        .map_err(|e| e.to_string())? = Some(client);
+    let client = OllamaClient::new(ollama_config).map_err(|e| {
+        debug!("Ollama: Failed to create client: {}", e);
+        e.to_string()
+    })?;
 
-    info!("Ollama: Configuration successful with endpoint: {}", endpoint);
+    *get_ollama_client().lock().map_err(|e| e.to_string())? = Some(client);
+
+    info!(
+        "Ollama: Configuration successful with endpoint: {}",
+        endpoint
+    );
     Ok(())
 }
 
@@ -209,29 +228,32 @@ pub fn configure_ollama(config: OllamaConfigRequest) -> Result<(), String> {
 #[tauri::command]
 pub async fn check_ollama_connection() -> Result<bool, String> {
     use tracing::{debug, info};
-    
+
     // Clone the client config to avoid holding the lock across await
     let client_config = {
-        let client_guard = get_ollama_client().lock()
-            .map_err(|e| e.to_string())?;
-        
+        let client_guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
+
         if let Some(ref client) = *client_guard {
-            Some((client.config.endpoint.clone(), client.config.model.clone(), client.config.api_key.clone()))
+            Some((
+                client.config.endpoint.clone(),
+                client.config.model.clone(),
+                client.config.api_key.clone(),
+            ))
         } else {
             debug!("Ollama: Client not configured");
             return Ok(false);
         }
     };
-    
+
     if let Some((endpoint, _model, api_key)) = client_config {
         info!("Ollama: Checking connection to endpoint: {}", endpoint);
-        
+
         // Create a temporary client for this check
         let temp_client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-        
+
         let url = format!("{}/api/tags", endpoint);
         let mut request = temp_client.get(&url);
         // Do not log request/response headers or bodies that may contain credentials.
@@ -241,11 +263,13 @@ pub async fn check_ollama_connection() -> Result<bool, String> {
                 request = request.header("Authorization", format!("Bearer {}", api_key_value));
             }
         }
-        
-        let result = request.send().await
+
+        let result = request
+            .send()
+            .await
             .map(|resp| resp.status().is_success())
             .unwrap_or(false);
-            
+
         if result {
             info!("Ollama: Connection successful");
         } else {
@@ -275,7 +299,10 @@ pub async fn ensure_ollama_agent_ready_at_startup() {
     };
 
     if !already_configured {
-        info!("Ollama agent: not configured at startup, detecting models from {}", DEFAULT_ENDPOINT);
+        info!(
+            "Ollama agent: not configured at startup, detecting models from {}",
+            DEFAULT_ENDPOINT
+        );
         let model = detect_first_model(DEFAULT_ENDPOINT, None).await;
         info!("Ollama agent: using model '{}'", model);
         let default = OllamaConfigRequest {
@@ -286,7 +313,10 @@ pub async fn ensure_ollama_agent_ready_at_startup() {
             num_ctx: None,
         };
         if let Err(e) = configure_ollama(default) {
-            debug!("Ollama agent: default config failed (endpoint may be down): {}", e);
+            debug!(
+                "Ollama agent: default config failed (endpoint may be down): {}",
+                e
+            );
             return;
         }
     }
@@ -323,7 +353,9 @@ pub async fn ensure_ollama_agent_ready_at_startup() {
             // Build model catalog from full model list and cache it for agent model resolution
             build_and_cache_model_catalog(&endpoint, api_key.as_deref()).await;
         }
-        Ok(false) => debug!("Ollama agent: endpoint not reachable at startup (will retry when used)"),
+        Ok(false) => {
+            debug!("Ollama agent: endpoint not reachable at startup (will retry when used)")
+        }
         Err(e) => debug!("Ollama agent: startup check failed: {}", e),
     }
 }
@@ -418,7 +450,11 @@ async fn detect_first_model(endpoint: &str, api_key: Option<&str>) -> String {
             tracing::info!(
                 "Ollama agent: {} model(s) available: {}",
                 list.models.len(),
-                list.models.iter().map(|m| m.name.as_str()).collect::<Vec<_>>().join(", ")
+                list.models
+                    .iter()
+                    .map(|m| m.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
             // Prefer local models; use cloud only as fallback (cloud models require ollama.com auth).
             let local = list
@@ -451,8 +487,14 @@ fn read_ollama_api_key_from_env_or_config() -> Option<String> {
     }
     let paths = [
         std::env::current_dir().ok().map(|d| d.join(".config.env")),
-        std::env::current_dir().ok().map(|d| d.join("src-tauri").join(".config.env")),
-        std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".mac-stats").join(".config.env")),
+        std::env::current_dir()
+            .ok()
+            .map(|d| d.join("src-tauri").join(".config.env")),
+        std::env::var("HOME").ok().map(|h| {
+            std::path::PathBuf::from(h)
+                .join(".mac-stats")
+                .join(".config.env")
+        }),
     ];
     for maybe_path in paths.iter().flatten() {
         if let Ok(content) = std::fs::read_to_string(maybe_path) {
@@ -483,8 +525,14 @@ fn read_ollama_fast_model_from_env_or_config() -> Option<String> {
     }
     let paths = [
         std::env::current_dir().ok().map(|d| d.join(".config.env")),
-        std::env::current_dir().ok().map(|d| d.join("src-tauri").join(".config.env")),
-        std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".mac-stats").join(".config.env")),
+        std::env::current_dir()
+            .ok()
+            .map(|d| d.join("src-tauri").join(".config.env")),
+        std::env::var("HOME").ok().map(|h| {
+            std::path::PathBuf::from(h)
+                .join(".mac-stats")
+                .join(".config.env")
+        }),
     ];
     for maybe_path in paths.iter().flatten() {
         if let Ok(content) = std::fs::read_to_string(maybe_path) {
@@ -514,8 +562,14 @@ fn read_ollama_model_override() -> Option<String> {
     }
     let paths = [
         std::env::current_dir().ok().map(|d| d.join(".config.env")),
-        std::env::current_dir().ok().map(|d| d.join("src-tauri").join(".config.env")),
-        std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".mac-stats").join(".config.env")),
+        std::env::current_dir()
+            .ok()
+            .map(|d| d.join("src-tauri").join(".config.env")),
+        std::env::var("HOME").ok().map(|h| {
+            std::path::PathBuf::from(h)
+                .join(".mac-stats")
+                .join(".config.env")
+        }),
     ];
     for maybe_path in paths.iter().flatten() {
         // Do not log file content or path; file may contain secrets.
@@ -546,14 +600,19 @@ fn merge_chat_options(
     let temperature = o.temperature.or(config_temp);
     let num_ctx = o.num_ctx.or(config_num_ctx);
     if temperature.is_some() || num_ctx.is_some() {
-        Some(crate::ollama::ChatOptions { temperature, num_ctx })
+        Some(crate::ollama::ChatOptions {
+            temperature,
+            num_ctx,
+        })
     } else {
         None
     }
 }
 
 /// Remove consecutive duplicate messages (same role and content) to avoid wasting tokens and confusing the model.
-fn deduplicate_consecutive_messages(messages: Vec<crate::ollama::ChatMessage>) -> Vec<crate::ollama::ChatMessage> {
+fn deduplicate_consecutive_messages(
+    messages: Vec<crate::ollama::ChatMessage>,
+) -> Vec<crate::ollama::ChatMessage> {
     let mut out: Vec<crate::ollama::ChatMessage> = Vec::with_capacity(messages.len());
     for msg in messages {
         let is_dup = out
@@ -580,9 +639,7 @@ pub async fn send_ollama_chat_messages(
     let messages = deduplicate_consecutive_messages(messages);
 
     let (endpoint, model, api_key, config_temp, config_num_ctx) = {
-        let client_guard = get_ollama_client()
-            .lock()
-            .map_err(|e| e.to_string())?;
+        let client_guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
         let client = client_guard
             .as_ref()
             .ok_or_else(|| "Ollama not configured".to_string())?;
@@ -623,7 +680,11 @@ pub async fn send_ollama_chat_messages(
         info!("Ollama → Request (POST /api/chat):\n{}", request_json);
     } else {
         let ellipsed = crate::logging::ellipse(&request_json, REQUEST_LOG_MAX);
-        info!("Ollama → Request (POST /api/chat) ({} chars total):\n{}", request_json.len(), ellipsed);
+        info!(
+            "Ollama → Request (POST /api/chat) ({} chars total):\n{}",
+            request_json.len(),
+            ellipsed
+        );
     }
 
     let api_key_value = api_key
@@ -651,24 +712,37 @@ pub async fn send_ollama_chat_messages(
                     .await
                     .map_err(|e| format!("Failed to read response body: {}", e))?;
                 if status.as_u16() == 503 && attempt < 1 {
-                    info!("Ollama returned 503, retrying in {}s (attempt {})", RETRY_DELAY_SECS, attempt + 1);
+                    info!(
+                        "Ollama returned 503, retrying in {}s (attempt {})",
+                        RETRY_DELAY_SECS,
+                        attempt + 1
+                    );
                     continue;
                 }
                 let response: crate::ollama::ChatResponse = match serde_json::from_str(&body) {
                     Ok(r) => r,
                     Err(_) => {
-                        if let Ok(err_payload) = serde_json::from_str::<crate::ollama::OllamaErrorResponse>(&body) {
+                        if let Ok(err_payload) =
+                            serde_json::from_str::<crate::ollama::OllamaErrorResponse>(&body)
+                        {
                             return Err(format!("Ollama error: {}", err_payload.error));
                         }
                         if !status.is_success() {
                             return Err(format!("Ollama HTTP {}: {}", status, body.trim()));
                         }
-                        return Err(format!("Ollama returned invalid response (missing message): {}", body.trim()));
+                        return Err(format!(
+                            "Ollama returned invalid response (missing message): {}",
+                            body.trim()
+                        ));
                     }
                 };
                 if !status.is_success() {
                     let msg = response.message.content.trim();
-                    return Err(format!("Ollama HTTP {}: {}", status, if msg.is_empty() { body.as_str() } else { msg }));
+                    return Err(format!(
+                        "Ollama HTTP {}: {}",
+                        status,
+                        if msg.is_empty() { body.as_str() } else { msg }
+                    ));
                 }
                 // Success: log and return
                 let content = &response.message.content;
@@ -687,7 +761,11 @@ pub async fn send_ollama_chat_messages(
                 last_send_err = Some(err_str.clone());
                 let is_timeout = e.is_timeout() || err_str.to_lowercase().contains("timed out");
                 if is_timeout && attempt < 1 {
-                    info!("Ollama request timed out, retrying in {}s (attempt {})", RETRY_DELAY_SECS, attempt + 1);
+                    info!(
+                        "Ollama request timed out, retrying in {}s (attempt {})",
+                        RETRY_DELAY_SECS,
+                        attempt + 1
+                    );
                     continue;
                 }
                 if is_timeout {
@@ -794,7 +872,8 @@ Guild/channel data: GET /users/@me/guilds (bot's servers), GET /guilds/{guild_id
 
 /// Build agent descriptions string: base, optional SKILL (when skills exist), optional RUN_CMD, then MCP when configured.
 /// When from_discord is true and Discord is configured, appends DISCORD_API agent and endpoint list.
-async fn build_agent_descriptions(from_discord: bool) -> String {
+/// When question is provided and Redmine is configured, create-context (projects, trackers, etc.) is only appended if the question suggests create/update.
+async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) -> String {
     use tracing::info;
     let skills = crate::skills::load_skills();
     let mut base = AGENT_DESCRIPTIONS_BASE.to_string();
@@ -849,13 +928,29 @@ async fn build_agent_descriptions(from_discord: bool) -> String {
         num += 1;
     }
     if crate::redmine::is_configured() {
+        // Short descriptor: when + one-line formats. Full endpoint docs not in prompt; pre-route handles "review ticket N".
+        // Time entries: use /time_entries.json with from/to (not /search.json) for spent time / hours this month.
         base.push_str(&format!(
-            "\n\n{}. **REDMINE_API** (Redmine project management): Access Redmine issues, projects, and time entries via REST API. Use when the user asks to review a ticket, list issues, check project status, or look up issue details. To invoke: reply with exactly one line: REDMINE_API: GET /issues/1234.json?include=journals,attachments (fetch issue with full history). Key endpoints:\n- GET /issues/{{id}}.json?include=journals,attachments — full issue with comments and files\n- GET /issues.json?assigned_to_id=me&status_id=open — my open issues\n- GET /issues.json?project_id=ID&status_id=open&limit=25 — project issues\n- GET /projects.json — list projects\n- GET /search.json?q=<keyword>&issues=1&limit=100 — search issues by keyword (subject, description, journals). Use when the user asks to search or list tickets by topic (e.g. \"datadog\", \"monitoring\"); always call this for keyword search. Do not use GET /issues.json with a search param (issues list has no full-text search).\n- POST /issues.json — create issue: use project_id, tracker_id, status_id, priority_id, is_private false, subject, description (optional assigned_to_id). Match project by name or identifier from context below (e.g. \"Create in AMVARA\" → use that project's id). Example: REDMINE_API: POST /issues.json {{\"issue\":{{\"project_id\":2,\"tracker_id\":1,\"status_id\":1,\"priority_id\":2,\"is_private\":false,\"subject\":\"Title\",\"description\":\"\"}}}}.\n- PUT /issues/{{id}}.json — update issue (add notes: {{\"issue\":{{\"notes\":\"comment\"}}}})\nFor issues.json filters use updated_on=YYYY-MM-DD or updated_on=YYYY-MM-DD..YYYY-MM-DD (not 'last_week'). Always use .json suffix. When reviewing a ticket, fetch with include=journals,attachments to get the full picture.",
+            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, create or update issue. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?user_id=me&from=YYYY-MM-DD&to=YYYY-MM-DD (optional project_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time or hours this month use /time_entries.json with current-month from/to; do not use /search.json. Always .json suffix.",
             num
         ));
-        if let Some(ctx) = crate::redmine::get_redmine_create_context().await {
-            base.push_str("\n\n");
-            base.push_str(&ctx);
+        // Create context (projects, trackers, statuses) only when user might create/update — avoids polluting prompt for simple "review ticket N".
+        let wants_create_or_update = question
+            .map(|q| {
+                let q_lower = q.to_lowercase();
+                q_lower.contains("create")
+                    || q_lower.contains("new issue")
+                    || q_lower.contains("update")
+                    || q_lower.contains("add comment")
+                    || q_lower.contains("post a comment")
+                    || q_lower.contains("write ")
+            })
+            .unwrap_or(true);
+        if wants_create_or_update {
+            if let Some(ctx) = crate::redmine::get_redmine_create_context().await {
+                base.push_str("\n\n");
+                base.push_str(&ctx);
+            }
         }
         num += 1;
     }
@@ -894,7 +989,10 @@ async fn build_agent_descriptions(from_discord: bool) -> String {
             base + &mcp_section
         }
         Err(e) => {
-            info!("Agent router: MCP list_tools failed ({}), omitting MCP from agent list", e);
+            info!(
+                "Agent router: MCP list_tools failed ({}), omitting MCP from agent list",
+                e
+            );
             base
         }
     }
@@ -949,12 +1047,7 @@ async fn reduce_fetched_content_to_fit(
         },
     ];
 
-    match send_ollama_chat_messages(
-        summarization_messages,
-        model_override,
-        options_override,
-    )
-    .await
+    match send_ollama_chat_messages(summarization_messages, model_override, options_override).await
     {
         Ok(resp) => {
             let summary = resp.message.content.trim().to_string();
@@ -1041,17 +1134,24 @@ pub(crate) async fn run_agent_ollama_session(
     let max_iters = agent.max_tool_iterations;
     let mut iteration = 0u32;
     loop {
-        let response = send_ollama_chat_messages(messages.clone(), agent.model.clone(), None).await?;
+        let response =
+            send_ollama_chat_messages(messages.clone(), agent.model.clone(), None).await?;
         let out = response.message.content.trim().to_string();
         info!(
             "Agent: {} ({}) iter {} returned ({} chars)",
-            agent.name, agent.id, iteration, out.chars().count()
+            agent.name,
+            agent.id,
+            iteration,
+            out.chars().count()
         );
 
         if let Some(tool_result) = execute_agent_tool_call(&out, status_tx).await {
             iteration += 1;
             if iteration >= max_iters {
-                info!("Agent: {} ({}) hit max tool iterations ({})", agent.name, agent.id, max_iters);
+                info!(
+                    "Agent: {} ({}) hit max tool iterations ({})",
+                    agent.name, agent.id, max_iters
+                );
                 return Ok(out);
             }
             messages.push(crate::ollama::ChatMessage {
@@ -1083,7 +1183,7 @@ fn normalize_discord_api_path(path_and_commentary: &str) -> String {
     path_only.to_string()
 }
 
-/// Execute a tool call found in an agent's response. Currently supports DISCORD_API.
+/// Execute a tool call found in an agent's response. Supports agent-safe APIs like DISCORD_API and REDMINE_API.
 /// Returns Some(result_text) if a tool was executed, None if no tool call was found.
 async fn execute_agent_tool_call(
     content: &str,
@@ -1106,7 +1206,10 @@ async fn execute_agent_tool_call(
             };
             let path = normalize_discord_api_path(&path_raw);
             if path.is_empty() {
-                return Some("DISCORD_API requires a path (e.g. GET /users/@me/guilds). Try again.".to_string());
+                return Some(
+                    "DISCORD_API requires a path (e.g. GET /users/@me/guilds). Try again."
+                        .to_string(),
+                );
             }
             if let Some(tx) = status_tx {
                 let _ = tx.send(format!("Discord API: {} {}", &method, &path));
@@ -1126,13 +1229,46 @@ async fn execute_agent_tool_call(
                 }
             }
         }
+        "REDMINE_API" => {
+            let arg = arg.trim();
+            let (method, rest) = match arg.find(' ') {
+                Some(i) => (arg[..i].trim().to_string(), arg[i..].trim()),
+                None => ("GET".to_string(), arg),
+            };
+            let (path, body) = if let Some(idx) = rest.find(" {") {
+                let (p, b) = rest.split_at(idx);
+                (p.trim().to_string(), Some(b.trim().to_string()))
+            } else {
+                (rest.trim().to_string(), None)
+            };
+            if path.is_empty() {
+                return Some(
+                    "REDMINE_API requires a path (for example: GET /issues/1234.json?include=journals,attachments). Try again."
+                        .to_string(),
+                );
+            }
+            if let Some(tx) = status_tx {
+                let _ = tx.send(format!("Querying Redmine: {} {}", &method, &path));
+            }
+            info!("Agent tool: REDMINE_API {} {}", &method, &path);
+            match crate::redmine::redmine_api_request(&method, &path, body.as_deref()).await {
+                Ok(result) => Some(format!(
+                    "REDMINE_API result ({} {}):\n\n{}\n\nUse only this Redmine data to continue or answer the user's question. If this is a ticket review, reply with Summary, Status & completion, Missing, and Final thoughts. If you need more Redmine data, make another REDMINE_API call.",
+                    &method, &path, result
+                )),
+                Err(e) => Some(format!(
+                    "REDMINE_API failed ({} {}): {}. Explain the failure clearly and do not invent any Redmine data.",
+                    &method, &path, e
+                )),
+            }
+        }
         _ => None,
     }
 }
 
-/// Parse DISCORD_API: tool calls from an agent's response content.
+/// Parse agent tool calls from an agent's response content.
 fn parse_agent_tool_from_response(content: &str) -> Option<(String, String)> {
-    let prefixes = ["DISCORD_API:"];
+    let prefixes = ["DISCORD_API:", "REDMINE_API:"];
     for line in content.lines() {
         let line = line.trim();
         let mut search = line;
@@ -1287,10 +1423,15 @@ pub async fn run_periodic_session_compaction() {
         if entry.message_count < PERIODIC_COMPACTION_MIN_MESSAGES {
             continue;
         }
-        let messages: Vec<crate::ollama::ChatMessage> = crate::session_memory::get_messages(&entry.source, entry.session_id)
-            .into_iter()
-            .map(|(role, content)| crate::ollama::ChatMessage { role, content, images: None })
-            .collect();
+        let messages: Vec<crate::ollama::ChatMessage> =
+            crate::session_memory::get_messages(&entry.source, entry.session_id)
+                .into_iter()
+                .map(|(role, content)| crate::ollama::ChatMessage {
+                    role,
+                    content,
+                    images: None,
+                })
+                .collect();
         if messages.len() < PERIODIC_COMPACTION_MIN_MESSAGES {
             continue;
         }
@@ -1309,12 +1450,17 @@ pub async fn run_periodic_session_compaction() {
                 break;
             }
         }
-        
+
         let compact_result = compact_conversation_history(&messages, &actual_question).await;
         let compact_result = match compact_result {
             Ok(ok) => Ok(ok),
             Err(e) => {
-                tracing::warn!("Periodic session compaction failed for {} {}: {}, retrying once in 3s", entry.source, entry.session_id, e);
+                tracing::warn!(
+                    "Periodic session compaction failed for {} {}: {}, retrying once in 3s",
+                    entry.source,
+                    entry.session_id,
+                    e
+                );
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                 compact_conversation_history(&messages, &actual_question).await
             }
@@ -1323,7 +1469,9 @@ pub async fn run_periodic_session_compaction() {
             Ok((context, lessons)) => {
                 if let Some(ref lesson_text) = lessons {
                     let memory_path = if entry.source == "discord" {
-                        crate::config::Config::memory_file_path_for_discord_channel(entry.session_id)
+                        crate::config::Config::memory_file_path_for_discord_channel(
+                            entry.session_id,
+                        )
                     } else {
                         crate::config::Config::memory_file_path()
                     };
@@ -1334,20 +1482,38 @@ pub async fn run_periodic_session_compaction() {
                             let _ = append_to_file(&memory_path, &entry_line);
                         }
                     }
-                    info!("Periodic session compaction: wrote lessons to {:?}", memory_path);
+                    info!(
+                        "Periodic session compaction: wrote lessons to {:?}",
+                        memory_path
+                    );
                 }
                 let inactive = entry.last_activity < inactive_cutoff;
                 if inactive {
                     crate::session_memory::clear_session(&entry.source, entry.session_id);
-                    info!("Periodic session compaction: cleared inactive session {} {}", entry.source, entry.session_id);
+                    info!(
+                        "Periodic session compaction: cleared inactive session {} {}",
+                        entry.source, entry.session_id
+                    );
                 } else {
                     let compacted = vec![("system".to_string(), context)];
-                    crate::session_memory::replace_session(&entry.source, entry.session_id, compacted);
-                    info!("Periodic session compaction: replaced active session {} {} with summary", entry.source, entry.session_id);
+                    crate::session_memory::replace_session(
+                        &entry.source,
+                        entry.session_id,
+                        compacted,
+                    );
+                    info!(
+                        "Periodic session compaction: replaced active session {} {} with summary",
+                        entry.source, entry.session_id
+                    );
                 }
             }
             Err(e) => {
-                tracing::warn!("Periodic session compaction failed for {} {}: {}", entry.source, entry.session_id, e);
+                tracing::warn!(
+                    "Periodic session compaction failed for {} {}: {}",
+                    entry.source,
+                    entry.session_id,
+                    e
+                );
             }
         }
     }
@@ -1360,29 +1526,52 @@ fn get_mastodon_config() -> Option<(String, String)> {
     let resolve = |env_key: &str, file_key: &str, keychain_key: &str| -> Option<String> {
         if let Ok(v) = std::env::var(env_key) {
             let v = v.trim().to_string();
-            if !v.is_empty() { return Some(v); }
+            if !v.is_empty() {
+                return Some(v);
+            }
         }
-        for base in [std::env::current_dir().ok(), std::env::var("HOME").ok().map(std::path::PathBuf::from)].into_iter().flatten() {
-            let paths = [base.join(".config.env"), base.join(".mac-stats").join(".config.env")];
+        for base in [
+            std::env::current_dir().ok(),
+            std::env::var("HOME").ok().map(std::path::PathBuf::from),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let paths = [
+                base.join(".config.env"),
+                base.join(".mac-stats").join(".config.env"),
+            ];
             for p in &paths {
                 // Do not log file content or path; file may contain secrets.
                 if let Ok(content) = std::fs::read_to_string(p) {
                     for line in content.lines() {
                         if let Some(val) = line.strip_prefix(file_key) {
                             let val = val.trim().trim_matches('"').trim().to_string();
-                            if !val.is_empty() { return Some(val); }
+                            if !val.is_empty() {
+                                return Some(val);
+                            }
                         }
                     }
                 }
             }
         }
         if let Ok(Some(v)) = crate::security::get_credential(keychain_key) {
-            if !v.is_empty() { return Some(v); }
+            if !v.is_empty() {
+                return Some(v);
+            }
         }
         None
     };
-    let instance = resolve("MASTODON_INSTANCE_URL", "MASTODON_INSTANCE_URL=", "mastodon_instance_url")?;
-    let token = resolve("MASTODON_ACCESS_TOKEN", "MASTODON_ACCESS_TOKEN=", "mastodon_access_token")?;
+    let instance = resolve(
+        "MASTODON_INSTANCE_URL",
+        "MASTODON_INSTANCE_URL=",
+        "mastodon_instance_url",
+    )?;
+    let token = resolve(
+        "MASTODON_ACCESS_TOKEN",
+        "MASTODON_ACCESS_TOKEN=",
+        "mastodon_access_token",
+    )?;
     Some((instance.trim_end_matches('/').to_string(), token))
 }
 
@@ -1442,7 +1631,9 @@ fn append_to_file(path: &std::path::Path, content: &str) -> Result<std::path::Pa
 fn looks_like_discord_401_confusion(content: &str) -> bool {
     let lower = content.to_lowercase();
     (lower.contains("401") || lower.contains("unauthorized"))
-        && (lower.contains("token") || lower.contains("credential") || lower.contains("authentication"))
+        && (lower.contains("token")
+            || lower.contains("credential")
+            || lower.contains("authentication"))
         && (lower.contains("discord") || lower.contains("guild") || lower.contains("channel"))
 }
 
@@ -1459,11 +1650,23 @@ fn extract_url_from_question(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
     for prefix in ["https://", "http://"] {
         if let Some(pos) = lower.find(prefix) {
-            let start = text[pos..].char_indices().next().map(|(o, _)| pos + o).unwrap_or(pos);
+            let start = text[pos..]
+                .char_indices()
+                .next()
+                .map(|(o, _)| pos + o)
+                .unwrap_or(pos);
             let after = &text[start + prefix.len()..];
             let end = after
                 .char_indices()
-                .find(|(_, c)| *c == ' ' || *c == '\n' || *c == '\t' || *c == ')' || *c == ']' || *c == '"' || *c == '>')
+                .find(|(_, c)| {
+                    *c == ' '
+                        || *c == '\n'
+                        || *c == '\t'
+                        || *c == ')'
+                        || *c == ']'
+                        || *c == '"'
+                        || *c == '>'
+                })
                 .map(|(i, _)| i)
                 .unwrap_or(after.len());
             let url = format!("{}{}", &text[start..start + prefix.len()], &after[..end]);
@@ -1478,12 +1681,24 @@ fn extract_url_from_question(text: &str) -> Option<String> {
         let after = &text[pos..];
         let end = after
             .char_indices()
-            .find(|(_, c)| *c == ' ' || *c == '\n' || *c == '\t' || *c == ')' || *c == ']' || *c == '"' || *c == '>')
+            .find(|(_, c)| {
+                *c == ' '
+                    || *c == '\n'
+                    || *c == '\t'
+                    || *c == ')'
+                    || *c == ']'
+                    || *c == '"'
+                    || *c == '>'
+            })
             .map(|(i, _)| i)
             .unwrap_or(after.len());
         let url = after[..end].trim_end_matches(['.', ',', ';', '!', '?']);
         if url.len() > 4 {
-            let full = if url.starts_with("http") { url.to_string() } else { format!("https://{}", url) };
+            let full = if url.starts_with("http") {
+                url.to_string()
+            } else {
+                format!("https://{}", url)
+            };
             return Some(full);
         }
     }
@@ -1493,21 +1708,39 @@ fn extract_url_from_question(text: &str) -> Option<String> {
 /// If the question clearly asks for a screenshot of a URL, return RECOMMEND string for pre-routing.
 /// Browser-use style: screenshot only works on current page. Pre-route to NAVIGATE + SCREENSHOT: current.
 /// Skip pre-route when user wants multi-step (navigate all, find X) — let planner handle it.
+/// Skip pre-route when user asks to remove/dismiss cookie consent — planner must add BROWSER_CLICK before SCREENSHOT.
 fn extract_screenshot_recommendation(question: &str) -> Option<String> {
     let q = question.trim();
     let q_lower = q.to_lowercase();
-    let has_multi_step = q_lower.contains("navigate all") || q_lower.contains("find ")
-        || q_lower.contains("when you found") || q_lower.contains("when found")
-        || (q_lower.contains("click on") || q_lower.contains("and click") || q_lower.contains("then click"));
-    if has_multi_step {
+    let has_multi_step = q_lower.contains("navigate all")
+        || q_lower.contains("find ")
+        || q_lower.contains("when you found")
+        || q_lower.contains("when found")
+        || (q_lower.contains("click on")
+            || q_lower.contains("and click")
+            || q_lower.contains("then click"));
+    let asks_cookie_consent = q_lower.contains("cookie")
+        && (q_lower.contains("remove")
+            || q_lower.contains("dismiss")
+            || q_lower.contains("banner")
+            || q_lower.contains("consent"));
+    if has_multi_step || asks_cookie_consent {
         return None;
     }
-    let has_screenshot_intent = q_lower.contains("screenshot") || q_lower.contains("take a screenshot")
-        || q_lower.contains("create a screenshot") || q_lower.contains("capture the page")
-        || (q_lower.contains("capture") && (q_lower.contains("page") || q_lower.contains("browser")));
-    let has_browser_or_url_context = q_lower.contains("browser") || q_lower.contains("chrome") || q_lower.contains("goto")
-        || q_lower.contains("go to") || q_lower.contains("visit") || q_lower.contains("navigate")
-        || q_lower.contains("http") || q_lower.contains("www.");
+    let has_screenshot_intent = q_lower.contains("screenshot")
+        || q_lower.contains("take a screenshot")
+        || q_lower.contains("create a screenshot")
+        || q_lower.contains("capture the page")
+        || (q_lower.contains("capture")
+            && (q_lower.contains("page") || q_lower.contains("browser")));
+    let has_browser_or_url_context = q_lower.contains("browser")
+        || q_lower.contains("chrome")
+        || q_lower.contains("goto")
+        || q_lower.contains("go to")
+        || q_lower.contains("visit")
+        || q_lower.contains("navigate")
+        || q_lower.contains("http")
+        || q_lower.contains("www.");
     if has_screenshot_intent && has_browser_or_url_context {
         if let Some(url) = extract_url_from_question(q) {
             let rec = format!("BROWSER_NAVIGATE: {}\nBROWSER_SCREENSHOT: current", url);
@@ -1541,6 +1774,137 @@ fn extract_ticket_id(text: &str) -> Option<u64> {
     None
 }
 
+/// Extract the trimmed argument after the last literal tool prefix in the user's message.
+/// Example: "Run this command: RUN_CMD: cat /etc/hosts" -> "cat /etc/hosts".
+fn extract_last_prefixed_argument(text: &str, prefix: &str) -> Option<String> {
+    if prefix.is_empty() || text.len() < prefix.len() {
+        return None;
+    }
+    let mut last_match = None;
+    for (idx, _) in text.char_indices() {
+        if let Some(candidate) = text.get(idx..idx + prefix.len()) {
+            if candidate.eq_ignore_ascii_case(prefix) {
+                last_match = Some(idx);
+            }
+        }
+    }
+    let start = last_match?;
+    let arg = text.get(start + prefix.len()..)?.trim();
+    if arg.is_empty() {
+        None
+    } else {
+        Some(arg.to_string())
+    }
+}
+
+/// True when the planner's recommendation is only "DONE: no" or "DONE: success" with no actual tool steps.
+fn is_bare_done_plan(s: &str) -> bool {
+    let t = s.trim().trim_matches('*').trim();
+    t.eq_ignore_ascii_case("DONE: no") || t.eq_ignore_ascii_case("DONE: success")
+}
+
+/// Normalize reply text for comparison: strip DONE line and trim.
+fn normalize_reply_for_compare(s: &str) -> String {
+    let mut out = s.trim().to_string();
+    // Remove trailing "DONE: success" / "DONE: no" line
+    for suffix in [
+        "\n\nDONE: success",
+        "\n\nDONE: no",
+        "\nDONE: success",
+        "\nDONE: no",
+    ] {
+        if out.ends_with(suffix) {
+            out = out.strip_suffix(suffix).unwrap_or(&out).trim().to_string();
+            break;
+        }
+    }
+    out
+}
+
+/// True when the final reply is effectively the same as the intermediate (so we show "Final answer is the same as intermediate.").
+fn is_final_same_as_intermediate(intermediate: &str, final_answer: &str) -> bool {
+    let a = normalize_reply_for_compare(intermediate);
+    let b = normalize_reply_for_compare(final_answer);
+    if a == b {
+        return true;
+    }
+    // Final is a short confirmation (retry only added "Confirmed." / "Done." etc.)
+    if b.len() < 120 && !b.contains('\n') && a.len() > 150 {
+        let b_lower = b.to_lowercase();
+        if b_lower.contains("same as intermediate")
+            || b_lower.contains("confirmed")
+            || (b_lower.contains("done") && !b_lower.contains("error"))
+            || b_lower == "done."
+            || b_lower == "confirmed."
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// True when the user asked only to review or summarize a Redmine ticket (no update, add comment, or close).
+/// Used to avoid injecting PUT hint and to narrow success criteria so verification does not require ticket changes.
+fn is_redmine_review_or_summarize_only(question: &str) -> bool {
+    let q = question.trim().to_lowercase();
+    let has_redmine_ticket = (q.contains("redmine") || q.contains("ticket") || q.contains("issue"))
+        && extract_ticket_id(question).is_some();
+    let review_or_summarize =
+        q.contains("review") || q.contains("summarize") || q.contains("summarise");
+    let no_mutate = !q.contains("update")
+        && !q.contains("add comment")
+        && !q.contains("post a comment")
+        && !q.contains("close")
+        && !q.contains("resolve")
+        && !q.contains("write ");
+    has_redmine_ticket && review_or_summarize && no_mutate
+}
+
+fn is_redmine_time_entries_request(question: &str) -> bool {
+    let q = question.trim().to_lowercase();
+    let mentions_redmine = q.contains("redmine");
+    let mentions_time_entries = q.contains("time entries")
+        || q.contains("spent time")
+        || q.contains("hours this month")
+        || q.contains("hours worked")
+        || q.contains("time logs")
+        || q.contains("tickets worked")
+        || q.contains("worked tickets")
+        || (q.contains("worked on") && q.contains("month"));
+    mentions_redmine && mentions_time_entries
+}
+
+fn current_month_redmine_range() -> (String, String) {
+    use chrono::Datelike;
+
+    let today = chrono::Local::now().date_naive();
+    let from = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        .unwrap_or(today)
+        .format("%Y-%m-%d")
+        .to_string();
+    let (next_year, next_month) = if today.month() == 12 {
+        (today.year() + 1, 1)
+    } else {
+        (today.year(), today.month() + 1)
+    };
+    let next_month_start =
+        chrono::NaiveDate::from_ymd_opt(next_year, next_month, 1).unwrap_or(today);
+    let to = next_month_start
+        .pred_opt()
+        .unwrap_or(today)
+        .format("%Y-%m-%d")
+        .to_string();
+    (from, to)
+}
+
+fn user_explicitly_asked_for_screenshot(question: &str) -> bool {
+    let q = question.to_lowercase();
+    q.contains("screenshot")
+        || q.contains("take a screenshot")
+        || q.contains("create a screenshot")
+        || (q.contains("capture") && (q.contains("page") || q.contains("browser")))
+}
+
 /// Reply from the agent: text plus optional attachment paths (e.g. screenshots) for Discord.
 #[derive(Debug, Clone)]
 pub struct OllamaReply {
@@ -1562,10 +1926,19 @@ async fn extract_success_criteria(
         q
     );
     let messages = vec![
-        crate::ollama::ChatMessage { role: "system".to_string(), content: system.to_string(), images: None },
-        crate::ollama::ChatMessage { role: "user".to_string(), content: user, images: None },
+        crate::ollama::ChatMessage {
+            role: "system".to_string(),
+            content: system.to_string(),
+            images: None,
+        },
+        crate::ollama::ChatMessage {
+            role: "user".to_string(),
+            content: user,
+            images: None,
+        },
     ];
-    let response = match send_ollama_chat_messages(messages, model_override, options_override).await {
+    let response = match send_ollama_chat_messages(messages, model_override, options_override).await
+    {
         Ok(r) => r,
         Err(e) => {
             tracing::debug!("Agent router: success criteria extraction failed: {}", e);
@@ -1581,7 +1954,9 @@ async fn extract_success_criteria(
         .map(String::from)
         .collect();
     if criteria.is_empty() {
-        tracing::debug!("Agent router: success criteria extraction returned no criteria (empty or parse)");
+        tracing::debug!(
+            "Agent router: success criteria extraction returned no criteria (empty or parse)"
+        );
         None
     } else {
         Some(criteria)
@@ -1598,7 +1973,11 @@ fn summarize_last_turns(messages: &[crate::ollama::ChatMessage], max_turns: usiz
         .iter()
         .map(|m| {
             let c: String = m.content.chars().take(PER_MSG).collect();
-            let suffix = if m.content.chars().count() > PER_MSG { "…" } else { "" };
+            let suffix = if m.content.chars().count() > PER_MSG {
+                "…"
+            } else {
+                ""
+            };
             format!("{}: {}{}", m.role, c, suffix)
         })
         .collect::<Vec<_>>()
@@ -1638,7 +2017,10 @@ async fn detect_new_topic(
     } else if text.contains("SAME_TOPIC") {
         Ok(false)
     } else {
-        Err(format!("Unexpected response (expected NEW_TOPIC or SAME_TOPIC): {}…", text.chars().take(80).collect::<String>()))
+        Err(format!(
+            "Unexpected response (expected NEW_TOPIC or SAME_TOPIC): {}…",
+            text.chars().take(80).collect::<String>()
+        ))
     }
 }
 
@@ -1675,12 +2057,25 @@ async fn verify_completion(
 ) -> Result<(bool, Option<String>), String> {
     use crate::ollama::models::{get_vision_model_for_verification, is_vision_capable};
 
-    let response_summary: String = response_content.chars().take(1500).collect();
     let has_attachments = !attachment_paths.is_empty();
+    // When executor only said DONE: success (empty reply) but we have attachments, give verifier
+    // a concrete summary so it can answer YES instead of "Screenshots are missing."
+    // Use generic wording so we don't assume attachment type (e.g. could be other files in future).
+    let response_summary: String = if response_content.trim().is_empty() && has_attachments {
+        let n = attachment_paths.len();
+        format!("{} attachment(s) were sent to the user.", n)
+    } else {
+        response_content.chars().take(1500).collect()
+    };
     let system = "You are a completion checker. Answer only with YES or NO, and if NO add one short sentence after a newline explaining what's missing.";
     let criteria_block = success_criteria
         .filter(|c| !c.is_empty())
-        .map(|c| format!("Success criteria (from user request):\n{}\n\n", c.join("\n")))
+        .map(|c| {
+            format!(
+                "Success criteria (from user request):\n{}\n\n",
+                c.join("\n")
+            )
+        })
         .unwrap_or_default();
     let browser_content_block = page_content_from_browser
         .filter(|s| !s.trim().is_empty())
@@ -1756,7 +2151,10 @@ async fn verify_completion(
         Err(e) => {
             // If we tried vision and it failed, fall back to text-only once.
             if tried_vision {
-                tracing::debug!("Agent router: vision verification failed ({}), falling back to text-only", e);
+                tracing::debug!(
+                    "Agent router: vision verification failed ({}), falling back to text-only",
+                    e
+                );
                 let messages_text = vec![
                     crate::ollama::ChatMessage {
                         role: "system".to_string(),
@@ -1774,7 +2172,13 @@ async fn verify_completion(
                         images: None,
                     },
                 ];
-                match send_ollama_chat_messages(messages_text, model_override, options_override.clone()).await {
+                match send_ollama_chat_messages(
+                    messages_text,
+                    model_override,
+                    options_override.clone(),
+                )
+                .await
+                {
                     Ok(r) => r.message.content,
                     Err(e2) => {
                         tracing::warn!("Completion verification (text fallback) failed: {}", e2);
@@ -1799,18 +2203,23 @@ async fn verify_completion(
         let rest = response
             .lines()
             .skip(1)
-            .map(str::trim).find(|s| !s.is_empty())
+            .map(str::trim)
+            .find(|s| !s.is_empty())
             .or_else(|| response.lines().nth(1).map(str::trim))
             .filter(|s| !s.is_empty());
-        rest.or(if first_line.len() > 3 { Some(first_line) } else { None })
-            .map(|s| s.to_string())
+        rest.or(if first_line.len() > 3 {
+            Some(first_line)
+        } else {
+            None
+        })
+        .map(|s| s.to_string())
     } else {
         None
     };
     Ok((satisfied, reason))
 }
 
-/// When set, `skill_content` is prepended to system prompts (from ~/.mac-stats/skills/skill-<n>-<topic>.md).
+/// When set, `skill_content` is prepended to system prompts (from ~/.mac-stats/agents/skills/skill-<n>-<topic>.md).
 /// When set, `agent_override` uses that agent's model and combined_prompt (soul+mood+skill) for the main run (e.g. Discord "agent: 001").
 /// When `allow_schedule` is false (e.g. when running from the scheduler), the SCHEDULE tool is disabled so a scheduled task cannot create more schedules.
 /// When `conversation_history` is set (e.g. from Discord session memory), it is prepended so the model sees prior turns and can resolve "there", "it", etc.
@@ -1835,227 +2244,302 @@ pub fn answer_with_ollama_and_fetch(
     from_remote: bool,
     // When set (e.g. from Discord message attachments), the first user message is sent with these base64-encoded images for vision models.
     attachment_images_base64: Option<Vec<String>>,
+    // When set (retry path from Discord), we format the reply as "--- Intermediate answer:\n\n{this}\n\n---" + final or "Final answer is the same as intermediate."
+    discord_intermediate: Option<String>,
+    // When true (verification retry path), we keep conversation history and skip NEW_TOPIC check so the model retains context.
+    is_verification_retry: bool,
 ) -> Pin<Box<dyn Future<Output = Result<OllamaReply, String>> + Send>> {
     let question = question.to_string();
     let mut conversation_history = conversation_history.map(|v| v.to_vec());
     let attachment_images_base64 = attachment_images_base64.map(|v| v.to_vec());
+    let discord_intermediate = discord_intermediate.map(|s| s.to_string());
+    let is_verification_retry = is_verification_retry;
     Box::pin(async move {
-    use tracing::info;
-    let question = question.as_str();
+        use tracing::info;
+        let question = question.as_str();
+        let request_id: String = format!(
+            "{:08x}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64
+                & 0xFFFF_FFFF
+        );
 
-    // When Discord user asks for screenshots to be sent here, focus on current task only (no prior chat).
-    if discord_reply_channel_id.is_some() {
-        let q = question.to_lowercase();
-        if q.contains("screenshot") && (q.contains("send") || q.contains("here") || q.contains("discord")) {
-            if conversation_history.as_ref().map_or(false, |h| !h.is_empty()) {
-                info!("Agent router: clearing history for Discord screenshot-send request (focus on current task)");
-                conversation_history = Some(vec![]);
+        info!(
+            "Agent router [{}]: session start — {}",
+            request_id,
+            crate::config::Config::version_display()
+        );
+
+        // When Discord user asks for screenshots to be sent here, focus on current task only (no prior chat).
+        // Skip clearing on verification retry so the model keeps context (e.g. original request, cookie consent retry).
+        if !is_verification_retry && discord_reply_channel_id.is_some() {
+            let q = question.to_lowercase();
+            if q.contains("screenshot")
+                && (q.contains("send") || q.contains("here") || q.contains("discord"))
+            {
+                if conversation_history
+                    .as_ref()
+                    .map_or(false, |h| !h.is_empty())
+                {
+                    info!("Agent router: clearing history for Discord screenshot-send request (focus on current task)");
+                    conversation_history = Some(vec![]);
+                }
             }
         }
-    }
 
-    let (model_override, skill_content, mut max_tool_iterations) = if let Some(ref a) = agent_override {
-        (
-            a.model.clone().or(model_override),
-            Some(a.combined_prompt.clone()),
-            a.max_tool_iterations,
-        )
-    } else {
-        (
-            model_override,
-            skill_content,
-            15u32, // default when no agent override
-        )
-    };
-    if escalation {
-        max_tool_iterations = max_tool_iterations.saturating_add(10);
-        info!("Agent router: escalation mode — max_tool_iterations raised to {}", max_tool_iterations);
-    }
-
-    if let Some(ref model) = model_override {
-        let available = list_ollama_models().await.map_err(|e| format!("Could not list models: {}", e))?;
-        let found = available.iter().any(|m| m == model || m.starts_with(&format!("{}:", model)));
-        if !found {
-            return Err(format!("Model '{}' not found. Available: {}", model, available.join(", ")));
+        let (model_override, skill_content, mut max_tool_iterations) =
+            if let Some(ref a) = agent_override {
+                (
+                    a.model.clone().or(model_override),
+                    Some(a.combined_prompt.clone()),
+                    a.max_tool_iterations,
+                )
+            } else {
+                (
+                    model_override,
+                    skill_content,
+                    15u32, // default when no agent override
+                )
+            };
+        if escalation {
+            max_tool_iterations = max_tool_iterations.saturating_add(10);
+            info!(
+                "Agent router: escalation mode — max_tool_iterations raised to {}",
+                max_tool_iterations
+            );
         }
-    }
 
-    let (endpoint, effective_model, api_key) = {
-        let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
-        let effective = model_override.clone().unwrap_or_else(|| {
-            read_ollama_fast_model_from_env_or_config()
-                .unwrap_or_else(|| client.config.model.clone())
-        });
-        // Prefer local model: if the chosen model is cloud (e.g. qwen3.5:cloud) and we have no
-        // explicit override, use first local model so Discord/scheduler work without ollama.com auth.
-        let effective = if model_override.is_some() {
-            effective
-        } else if crate::ollama::models::is_cloud_model(&effective) {
-            crate::ollama::models::get_first_local_model_name().unwrap_or(effective)
-        } else {
-            effective
+        if let Some(ref model) = model_override {
+            let available = list_ollama_models()
+                .await
+                .map_err(|e| format!("Could not list models: {}", e))?;
+            let found = available
+                .iter()
+                .any(|m| m == model || m.starts_with(&format!("{}:", model)));
+            if !found {
+                return Err(format!(
+                    "Model '{}' not found. Available: {}",
+                    model,
+                    available.join(", ")
+                ));
+            }
+        }
+
+        let (endpoint, effective_model, api_key) = {
+            let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
+            let client = guard
+                .as_ref()
+                .ok_or_else(|| "Ollama not configured".to_string())?;
+            let effective = model_override.clone().unwrap_or_else(|| {
+                read_ollama_fast_model_from_env_or_config()
+                    .unwrap_or_else(|| client.config.model.clone())
+            });
+            // Prefer local model: if the chosen model is cloud (e.g. qwen3.5:cloud) and we have no
+            // explicit override, use first local model so Discord/scheduler work without ollama.com auth.
+            let effective = if model_override.is_some() {
+                effective
+            } else if crate::ollama::models::is_cloud_model(&effective) {
+                crate::ollama::models::get_first_local_model_name().unwrap_or(effective)
+            } else {
+                effective
+            };
+            let api_key = client
+                .config
+                .api_key
+                .as_ref()
+                .and_then(|acc| crate::security::get_credential(acc).ok().flatten())
+                .or_else(read_ollama_api_key_from_env_or_config);
+            (client.config.endpoint.clone(), effective, api_key)
         };
-        let api_key = client
-            .config
-            .api_key
-            .as_ref()
-            .and_then(|acc| crate::security::get_credential(acc).ok().flatten())
-            .or_else(read_ollama_api_key_from_env_or_config);
-        (
-            client.config.endpoint.clone(),
-            effective,
-            api_key,
-        )
-    };
-    // Use resolved model (local when default was cloud) for all chat calls in this request.
-    let model_override = Some(effective_model.clone());
-    let model_info = crate::ollama::get_model_info(&endpoint, &effective_model, api_key.as_deref())
-        .await
-        .unwrap_or_else(|_| crate::ollama::ModelInfo::default());
+        // Use resolved model (local when default was cloud) for all chat calls in this request.
+        let model_override = Some(effective_model.clone());
+        let model_info =
+            crate::ollama::get_model_info(&endpoint, &effective_model, api_key.as_deref())
+                .await
+                .unwrap_or_else(|_| crate::ollama::ModelInfo::default());
 
-    let send_status = |msg: &str| {
-        if let Some(ref tx) = status_tx {
-            let _ = tx.send(msg.to_string());
-        }
-    };
+        let send_status = |msg: &str| {
+            if let Some(ref tx) = status_tx {
+                let _ = tx.send(msg.to_string());
+            }
+        };
 
-    let question_for_plan_and_exec = if escalation {
-        format!(
+        let question_for_plan_and_exec = if escalation {
+            format!(
             "[The user is not satisfied and wants the task actually completed. You MUST use tools to fulfill the request; do not reply with only text.]\n\n{}",
             question
         )
-    } else {
-        question.to_string()
-    };
-
-    let q_preview: String = question.chars().take(120).collect();
-    if question.len() > 120 {
-        info!("Agent router: starting (question: {}... [{} chars])", q_preview, question.len());
-    } else {
-        info!("Agent router: starting (question: {})", q_preview);
-    }
-    // Discord message limit 2000; wrapper ~50 chars → leave room for full question
-    const DISCORD_STATUS_QUESTION_MAX: usize = 1940;
-    let truncate_status = |s: &str, max: usize| {
-        let taken: String = s.chars().take(max).collect();
-        if s.chars().count() > max {
-            format!("{}…", taken)
         } else {
-            taken
-        }
-    };
-    send_status(&format!(
-        "Asking Ollama for a plan (sending your question: \"{}\")…",
-        truncate_status(question, DISCORD_STATUS_QUESTION_MAX)
-    ));
+            question.to_string()
+        };
 
-    // Criteria at start: extract 1–3 success criteria to feed into end verification
-    send_status("Extracting success criteria…");
-    let success_criteria = extract_success_criteria(
-        question,
-        model_override.clone(),
-        options_override.clone(),
-    )
-    .await;
-    let criteria_status = match &success_criteria {
-        Some(c) if !c.is_empty() => {
-            info!("Agent router: extracted {} success criteria", c.len());
-            truncate_status(&c.join("; "), 200)
+        let q_preview: String = question.chars().take(120).collect();
+        if question.len() > 120 {
+            info!(
+                "Agent router [{}]: starting (question: {}... [{} chars])",
+                request_id,
+                q_preview,
+                question.len()
+            );
+        } else {
+            info!(
+                "Agent router [{}]: starting (question: {})",
+                request_id, q_preview
+            );
         }
-        _ => {
-            tracing::debug!("Agent router: no success criteria extracted (verification will use request summary only)");
-            "(none)".to_string()
-        }
-    };
-    send_status(&format!("EDIT:Extracted success criteria: {}", criteria_status));
-
-    let mut is_new_topic = false;
-    // 6.A New-topic check: one short LLM call when we have history and use a local model.
-    // Skip when using a cloud model to minimize cost (only when cloud do we care about extra calls).
-    if !crate::ollama::models::is_cloud_model(&effective_model) {
-        if let Some(ref hist) = conversation_history {
-            const NEW_TOPIC_MIN_HISTORY: usize = 2;
-            if hist.len() >= NEW_TOPIC_MIN_HISTORY {
-                send_status("Checking if new topic…");
-                let summary = summarize_last_turns(hist, 3);
-                match detect_new_topic(question, &summary, &effective_model).await {
-                    Ok(true) => {
-                        info!("Agent router: new-topic check returned NEW_TOPIC, using no prior context");
-                        is_new_topic = true;
-                    }
-                    Ok(false) => {}
-                    Err(e) => {
-                        tracing::debug!("Agent router: new-topic check failed (keeping history): {}", e);
-                    }
-                }
+        // Discord message limit 2000; wrapper ~50 chars → leave room for full question
+        const DISCORD_STATUS_QUESTION_MAX: usize = 1940;
+        let truncate_status = |s: &str, max: usize| {
+            let taken: String = s.chars().take(max).collect();
+            if s.chars().count() > max {
+                format!("{}…", taken)
+            } else {
+                taken
             }
-        }
-    }
+        };
+        send_status(&format!(
+            "Asking Ollama for a plan (sending your question: \"{}\")…",
+            truncate_status(question, DISCORD_STATUS_QUESTION_MAX)
+        ));
 
-    const CONVERSATION_HISTORY_CAP: usize = 20;
-    let raw_history: Vec<crate::ollama::ChatMessage> = conversation_history
-        .unwrap_or_default()
-        .into_iter()
-        .rev()
-        .take(CONVERSATION_HISTORY_CAP)
-        .rev()
-        .collect();
+        // Criteria at start: extract 1–3 success criteria to feed into end verification
+        send_status("Extracting success criteria…");
+        let success_criteria = if is_redmine_review_or_summarize_only(question) {
+            info!("Agent router: review/summarize-only Redmine request — overriding success criteria to summary-only");
+            Some(vec![
+                "Summary of ticket content provided to the user.".to_string()
+            ])
+        } else if is_redmine_time_entries_request(question) {
+            info!("Agent router: Redmine time-entries request — overriding success criteria to Redmine data-only");
+            Some(vec![
+                "Actual Redmine time entries for the requested period were fetched.".to_string(),
+                "A clear summary of hours or worked tickets was provided from that Redmine data."
+                    .to_string(),
+            ])
+        } else {
+            extract_success_criteria(question, model_override.clone(), options_override.clone())
+                .await
+        };
+        let criteria_status = match &success_criteria {
+            Some(c) if !c.is_empty() => {
+                info!("Agent router: extracted {} success criteria", c.len());
+                truncate_status(&c.join("; "), 200)
+            }
+            _ => {
+                tracing::debug!("Agent router: no success criteria extracted (verification will use request summary only)");
+                "(none)".to_string()
+            }
+        };
+        send_status(&format!(
+            "EDIT:Extracted success criteria: {}",
+            criteria_status
+        ));
 
-    let conversation_history: Vec<crate::ollama::ChatMessage> = if raw_history.len() >= COMPACTION_THRESHOLD {
-        send_status("Compacting session memory…");
-        info!(
-            "Session compaction: {} messages exceed threshold ({}), compacting",
-            raw_history.len(), COMPACTION_THRESHOLD
-        );
-        match compact_conversation_history(&raw_history, question).await {
-            Ok((context, lessons)) => {
-                if let Some(ref lesson_text) = lessons {
-                    let memory_path = discord_reply_channel_id
-                        .map(crate::config::Config::memory_file_path_for_discord_channel)
-                        .unwrap_or_else(crate::config::Config::memory_file_path);
-                    for line in lesson_text.lines() {
-                        let line = line.trim().trim_start_matches("- ").trim();
-                        if !line.is_empty() && line.len() > 5 {
-                            let entry = format!("- {}\n", line);
-                            let _ = append_to_file(&memory_path, &entry);
+        let mut is_new_topic = false;
+        // 6.A New-topic check: one short LLM call when we have history and use a local model.
+        // Skip when using a cloud model to minimize cost (only when cloud do we care about extra calls).
+        // Skip on verification retry so the model keeps context (original request, cookie consent, etc.).
+        if !is_verification_retry && !crate::ollama::models::is_cloud_model(&effective_model) {
+            if let Some(ref hist) = conversation_history {
+                const NEW_TOPIC_MIN_HISTORY: usize = 2;
+                if hist.len() >= NEW_TOPIC_MIN_HISTORY {
+                    send_status("Checking if new topic…");
+                    let summary = summarize_last_turns(hist, 3);
+                    match detect_new_topic(question, &summary, &effective_model).await {
+                        Ok(true) => {
+                            info!("Agent router: new-topic check returned NEW_TOPIC, using no prior context");
+                            is_new_topic = true;
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            tracing::debug!(
+                                "Agent router: new-topic check failed (keeping history): {}",
+                                e
+                            );
                         }
                     }
-                    info!("Session compaction: wrote lessons to {:?}", memory_path);
-                }
-                let context_lower = context.to_lowercase();
-                let not_needed = context_lower.contains("not needed for this request")
-                    || context_lower.contains("covered different topics");
-                if let Some(channel_id) = discord_reply_channel_id {
-                    let compacted = vec![
-                        ("system".to_string(), context.clone()),
-                        ("user".to_string(), question.to_string()),
-                    ];
-                    crate::session_memory::replace_session("discord", channel_id, compacted);
-                }
-                if is_new_topic || not_needed {
-                    info!(
-                        "Session compaction: prior context not relevant to current question (new topic), using no prior context"
-                    );
-                    vec![]
-                } else {
-                    info!("Session compaction: replaced {} messages with summary ({} chars)", raw_history.len(), context.len());
-                    vec![crate::ollama::ChatMessage {
-                        role: "system".to_string(),
-                        content: format!("Previous session context (compacted from {} messages):\n\n{}", raw_history.len(), context),
-                        images: None,
-                    }]
                 }
             }
-            Err(e) => {
-                let n = raw_history.len();
-                let msg = if e.to_string().to_lowercase().contains("unauthorized") || e.to_string().contains("401") {
-                    format!("Session compaction failed: {} (use a local model for compaction; cloud models may require auth). Keeping full history ({} messages) for this request.", e, n)
-                } else {
-                    format!("Session compaction failed: {}; keeping full history ({} messages) for this request.", e, n)
-                };
-                tracing::warn!("{}", msg);
-                raw_history
+        }
+
+        const CONVERSATION_HISTORY_CAP: usize = 20;
+        let raw_history: Vec<crate::ollama::ChatMessage> = conversation_history
+            .unwrap_or_default()
+            .into_iter()
+            .rev()
+            .take(CONVERSATION_HISTORY_CAP)
+            .rev()
+            .collect();
+
+        let conversation_history: Vec<crate::ollama::ChatMessage> = if raw_history.len()
+            >= COMPACTION_THRESHOLD
+        {
+            send_status("Compacting session memory…");
+            info!(
+                "Session compaction: {} messages exceed threshold ({}), compacting",
+                raw_history.len(),
+                COMPACTION_THRESHOLD
+            );
+            match compact_conversation_history(&raw_history, question).await {
+                Ok((context, lessons)) => {
+                    if let Some(ref lesson_text) = lessons {
+                        let memory_path = discord_reply_channel_id
+                            .map(crate::config::Config::memory_file_path_for_discord_channel)
+                            .unwrap_or_else(crate::config::Config::memory_file_path);
+                        for line in lesson_text.lines() {
+                            let line = line.trim().trim_start_matches("- ").trim();
+                            if !line.is_empty() && line.len() > 5 {
+                                let entry = format!("- {}\n", line);
+                                let _ = append_to_file(&memory_path, &entry);
+                            }
+                        }
+                        info!("Session compaction: wrote lessons to {:?}", memory_path);
+                    }
+                    let context_lower = context.to_lowercase();
+                    let not_needed = context_lower.contains("not needed for this request")
+                        || context_lower.contains("covered different topics");
+                    if let Some(channel_id) = discord_reply_channel_id {
+                        let compacted = vec![
+                            ("system".to_string(), context.clone()),
+                            ("user".to_string(), question.to_string()),
+                        ];
+                        crate::session_memory::replace_session("discord", channel_id, compacted);
+                    }
+                    if is_new_topic || not_needed {
+                        info!(
+                        "Session compaction: prior context not relevant to current question (new topic), using no prior context"
+                    );
+                        vec![]
+                    } else {
+                        info!(
+                            "Session compaction: replaced {} messages with summary ({} chars)",
+                            raw_history.len(),
+                            context.len()
+                        );
+                        vec![crate::ollama::ChatMessage {
+                            role: "system".to_string(),
+                            content: format!(
+                                "Previous session context (compacted from {} messages):\n\n{}",
+                                raw_history.len(),
+                                context
+                            ),
+                            images: None,
+                        }]
+                    }
+                }
+                Err(e) => {
+                    let n = raw_history.len();
+                    let msg = if e.to_string().to_lowercase().contains("unauthorized")
+                        || e.to_string().contains("401")
+                    {
+                        format!("Session compaction failed: {} (use a local model for compaction; cloud models may require auth). Keeping full history ({} messages) for this request.", e, n)
+                    } else {
+                        format!("Session compaction failed: {}; keeping full history ({} messages) for this request.", e, n)
+                    };
+                    tracing::warn!("{}", msg);
+                    raw_history
                     .into_iter()
                     .map(|mut msg| {
                         if msg.role == "assistant" && looks_like_discord_401_confusion(&msg.content) {
@@ -2064,12 +2548,12 @@ pub fn answer_with_ollama_and_fetch(
                         msg
                     })
                     .collect()
+                }
             }
-        }
-    } else if is_new_topic {
-        vec![]
-    } else {
-        raw_history
+        } else if is_new_topic {
+            vec![]
+        } else {
+            raw_history
             .into_iter()
             .map(|mut msg| {
                 if msg.role == "assistant" && looks_like_discord_401_confusion(&msg.content) {
@@ -2078,505 +2562,689 @@ pub fn answer_with_ollama_and_fetch(
                 msg
             })
             .collect()
-    };
-    if !conversation_history.is_empty() {
+        };
+        if !conversation_history.is_empty() {
+            info!(
+                "Agent router: using {} prior messages as context",
+                conversation_history.len()
+            );
+        }
+
+        let from_discord = discord_reply_channel_id.is_some();
+        let agent_descriptions = build_agent_descriptions(from_discord, Some(question)).await;
         info!(
-            "Agent router: using {} prior messages as context",
-            conversation_history.len()
+            "Agent router: agent list built ({} chars)",
+            agent_descriptions.len()
         );
-    }
 
-    let from_discord = discord_reply_channel_id.is_some();
-    let agent_descriptions = build_agent_descriptions(from_discord).await;
-    info!("Agent router: agent list built ({} chars)", agent_descriptions.len());
+        // When no agent/skill override, prepend soul (~/.mac-stats/agents/soul.md) so Ollama gets personality/vibe in context.
+        let router_soul = skill_content.as_ref().map_or_else(
+            || {
+                let s = load_soul_content();
+                if s.is_empty() {
+                    format!(
+                        "You are mac-stats v{}.\n\n",
+                        crate::config::Config::version()
+                    )
+                } else {
+                    format!(
+                        "{}\n\nYou are mac-stats v{}.\n\n",
+                        s,
+                        crate::config::Config::version()
+                    )
+                }
+            },
+            |_| String::new(),
+        );
 
-    // When no agent/skill override, prepend soul (~/.mac-stats/agents/soul.md) so Ollama gets personality/vibe in context.
-    let router_soul = skill_content.as_ref().map_or_else(
-        || {
-            let s = load_soul_content();
-            if s.is_empty() {
-                format!("You are mac-stats v{}.\n\n", crate::config::Config::version())
-            } else {
-                format!("{}\n\nYou are mac-stats v{}.\n\n", s, crate::config::Config::version())
-            }
-        },
-        |_| String::new(),
-    );
-
-    let discord_user_context = match (discord_user_id, &discord_user_name) {
-        (Some(id), name_opt) => {
-            let name = name_opt.as_deref().unwrap_or("").to_string();
-            let stored = crate::user_info::get_user_details(id);
-            let display_name = stored
-                .as_ref()
-                .and_then(|d| d.display_name.as_deref())
-                .filter(|s| !s.is_empty())
-                .unwrap_or(name.as_str());
-            let mut ctx = if !display_name.is_empty() {
-                format!(
+        let discord_user_context = match (discord_user_id, &discord_user_name) {
+            (Some(id), name_opt) => {
+                let name = name_opt.as_deref().unwrap_or("").to_string();
+                let stored = crate::user_info::get_user_details(id);
+                let display_name = stored
+                    .as_ref()
+                    .and_then(|d| d.display_name.as_deref())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(name.as_str());
+                let mut ctx = if !display_name.is_empty() {
+                    format!(
                     "You are talking to Discord user **{}** (user id: {}). Use this when addressing the user or when calling Discord API with this user.",
                     display_name, id
                 )
-            } else {
-                format!(
+                } else {
+                    format!(
                     "You are talking to Discord user (user id: {}). Use this when calling Discord API with this user.",
                     id
                 )
-            };
-            if let Some(ref details) = stored {
-                let extra = crate::user_info::format_user_details_for_context(details);
-                if !extra.is_empty() {
-                    ctx.push_str(&format!("\nUser details: {}.", extra));
+                };
+                if let Some(ref details) = stored {
+                    let extra = crate::user_info::format_user_details_for_context(details);
+                    if !extra.is_empty() {
+                        ctx.push_str(&format!("\nUser details: {}.", extra));
+                    }
                 }
+                ctx.push_str("\n\n");
+                ctx
             }
-            ctx.push_str("\n\n");
-            ctx
-        }
-        _ => String::new(),
-    };
-
-    // --- Pre-routing: deterministic tool dispatch for unambiguous patterns ---
-    // Screenshot + URL → BROWSER_SCREENSHOT; "run <command>" → RUN_CMD; ticket → REDMINE_API.
-    let pre_routed_recommendation = extract_screenshot_recommendation(question).or_else(|| if crate::commands::run_cmd::is_local_cmd_allowed() {
-        let q = question.trim();
-        let q_lower = q.to_lowercase();
-        let cmd_rest = if q_lower.starts_with("run command:") {
-            q[12..].trim() // "run command:".len() == 12
-        } else if q_lower.starts_with("run ") {
-            q[4..].trim() // "run ".len() == 4
-        } else {
-            ""
+            _ => String::new(),
         };
-        if !cmd_rest.is_empty() {
-            let rec = format!("RUN_CMD: {}", cmd_rest);
-            info!("Agent router: pre-routed to RUN_CMD (run command): {}", crate::logging::ellipse(cmd_rest, 60));
-            Some(rec)
-        } else if crate::redmine::is_configured() {
-            let ticket_id = extract_ticket_id(&q_lower);
-            let wants_update = q_lower.contains("update") || q_lower.contains("add comment")
-                || q_lower.contains("with the next steps") || q_lower.contains("post a comment")
-                || q_lower.contains("write ") || q_lower.contains("put ");
-            if ticket_id.is_some() && (q_lower.contains("ticket") || q_lower.contains("issue") || q_lower.contains("redmine")) && !wants_update {
-                let id = ticket_id.unwrap();
-                let rec = format!("REDMINE_API: GET /issues/{}.json?include=journals,attachments", id);
-                info!("Agent router: pre-routed to REDMINE_API for ticket #{}", id);
-                Some(rec)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    } else if crate::redmine::is_configured() {
-        let q_lower = question.to_lowercase();
-        let ticket_id = extract_ticket_id(&q_lower);
-        let wants_update = q_lower.contains("update") || q_lower.contains("add comment")
-            || q_lower.contains("with the next steps") || q_lower.contains("post a comment")
-            || q_lower.contains("write ") || q_lower.contains("put ");
-        if ticket_id.is_some() && (q_lower.contains("ticket") || q_lower.contains("issue") || q_lower.contains("redmine")) && !wants_update {
-            let id = ticket_id.unwrap();
-            let rec = format!("REDMINE_API: GET /issues/{}.json?include=journals,attachments", id);
-            info!("Agent router: pre-routed to REDMINE_API for ticket #{}", id);
-            Some(rec)
-        } else {
-            None
-        }
-    } else {
-        None
-    });
 
-    // --- Planning step: ask Ollama how it would solve the question (skip if pre-routed) ---
-    let recommendation = if let Some(pre_routed) = pre_routed_recommendation {
-        info!("Agent router: skipping LLM planning (pre-routed)");
-        pre_routed
-    } else {
-        info!("Agent router: planning step — asking Ollama for RECOMMEND");
-        let planning_prompt = crate::config::Config::load_planning_prompt();
-        let planning_system_content = match &skill_content {
-            Some(skill) => format!(
-                "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}\n\n{}",
-                discord_user_context, skill, planning_prompt, agent_descriptions
-            ),
-            None => format!(
-                "{}{}{}\n\n{}",
-                router_soul, discord_user_context, planning_prompt, agent_descriptions
-            ),
-        };
-        let mut planning_messages: Vec<crate::ollama::ChatMessage> = vec![
-            crate::ollama::ChatMessage {
-                role: "system".to_string(),
-                content: planning_system_content,
-                images: None,
-            },
-        ];
-        for msg in &conversation_history {
-            planning_messages.push(msg.clone());
-        }
-        let model_hint = model_override.as_ref().map(|m| format!("\n\nFor this request the user selected Ollama model: {}. The app will use that model for the reply; recommend answering the question (or using an agent) with that in mind.", m)).unwrap_or_default();
-        planning_messages.push(crate::ollama::ChatMessage {
-            role: "user".to_string(),
-            content: format!(
-                "Current user question: {}{}\n\nReply with RECOMMEND: your plan.",
-                question_for_plan_and_exec, model_hint
-            ),
-            images: attachment_images_base64.clone(),
-        });
-        let plan_response = send_ollama_chat_messages(planning_messages, model_override.clone(), options_override.clone()).await?;
-        let mut rec = plan_response.message.content.trim().to_string();
-        while rec.to_uppercase().starts_with("RECOMMEND: ") || rec.to_uppercase().starts_with("RECOMMEND:") {
-            let prefix_len = if rec.len() >= 11 && rec[..11].to_uppercase() == "RECOMMEND: " {
-                11
-            } else {
-                10
-            };
-            rec = rec[prefix_len..].trim().to_string();
-        }
-        rec
-    };
-    info!("Agent router: understood plan — {}", recommendation.chars().take(200).collect::<String>());
-    send_status(&format!(
-        "Executing plan: {}…",
-        truncate_status(&recommendation, 72)
-    ));
-
-    // Tools that benefit from a clean session (no stale conversation context).
-    // Redmine reviews must not be polluted by prior turns — the model hallucinates.
-    let fresh_session_tools = ["REDMINE_API"];
-    let rec_upper = recommendation.to_uppercase();
-    let needs_fresh_session = fresh_session_tools.iter().any(|t| rec_upper.contains(t));
-    let conversation_history = if needs_fresh_session && !conversation_history.is_empty() {
-        info!("Agent router: clearing conversation history for fresh-session tool");
-        Vec::new()
-    } else {
-        conversation_history
-    };
-
-    // --- Execution: system prompt with agents + plan, then tool loop ---
-    let execution_prompt_raw = crate::config::Config::load_execution_prompt();
-    let execution_prompt = execution_prompt_raw.replace("{{AGENTS}}", &agent_descriptions);
-
-    /// Log content in full if ≤500 chars (or always in -vv), else ellipse (first half + "..." + last half).
-    const LOG_CONTENT_MAX: usize = 500;
-    let log_verbosity = crate::logging::VERBOSITY.load(Ordering::Relaxed);
-    let log_content = |content: &str| {
-        let n = content.chars().count();
-        if log_verbosity >= 2 || n <= LOG_CONTENT_MAX {
-            content.to_string()
-        } else {
-            crate::logging::ellipse(content, LOG_CONTENT_MAX)
-        }
-    };
-
-    // Include current system metrics so the model can answer accurately when the user asks about CPU, RAM, disk, etc.
-    let metrics_block = crate::metrics::format_metrics_for_ai_context();
-    let metrics_for_system = format!("\n\n{}", metrics_block);
-    let model_identity = format!(
-        "\n\nYou are replying as the Ollama model: **{}**. If the user asks which model you are (or what model you run on), name this model.",
-        effective_model
-    );
-    // When Discord user asked for screenshots to be sent here, remind executor to actually run BROWSER_NAVIGATE + BROWSER_SCREENSHOT per URL.
-    let discord_screenshot_reminder = if discord_reply_channel_id.is_some() {
-        let q = question.to_lowercase();
-        if q.contains("screenshot") && (q.contains("send") || q.contains("here") || q.contains("discord")) {
-            "\n\n**Discord:** The user asked for screenshot(s) to be sent here. You MUST call BROWSER_NAVIGATE then BROWSER_SCREENSHOT: current for each URL; the app will attach the images to the reply."
-        } else {
-            ""
-        }
-    } else {
-        ""
-    };
-
-    // Fast path: if the recommendation already contains a parseable tool call, execute it
-    // directly instead of asking Ollama a second time to regurgitate the same tool line.
-    let direct_tool = parse_tool_from_response(&recommendation);
-    let (mut messages, mut response_content) = if let Some((ref tool, ref arg)) = direct_tool {
-        info!("Agent router: plan contains direct tool call {}:{} — skipping execution Ollama call", tool, crate::logging::ellipse(arg, 60));
-        let memory_block = load_memory_block_for_request(discord_reply_channel_id);
-        let execution_system_content = match &skill_content {
-            Some(skill) => format!(
-                "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}",
-                discord_user_context, skill, execution_prompt, metrics_for_system, discord_screenshot_reminder, model_identity
-            ),
-            None => format!(
-                "{}{}{}{}{}{}{}",
-                router_soul, memory_block, discord_user_context, execution_prompt, metrics_for_system, discord_screenshot_reminder, model_identity
-            ),
-        };
-        let mut msgs: Vec<crate::ollama::ChatMessage> = vec![
-            crate::ollama::ChatMessage { role: "system".to_string(), content: execution_system_content, images: None },
-        ];
-        for msg in &conversation_history {
-            msgs.push(msg.clone());
-        }
-        msgs.push(crate::ollama::ChatMessage { role: "user".to_string(), content: question_for_plan_and_exec.clone(), images: attachment_images_base64.clone() });
-        // Use full recommendation when it contains multiple tools (e.g. BROWSER_NAVIGATE + BROWSER_SCREENSHOT)
-        let synthetic = if recommendation.contains('\n') {
-            recommendation.clone()
-        } else {
-            format!("{}: {}", tool, arg)
-        };
-        (msgs, synthetic)
-    } else {
-        info!("Agent router: execution step — sending plan + question, starting tool loop (max {} tools)", max_tool_iterations);
-        let memory_block = load_memory_block_for_request(discord_reply_channel_id);
-        let execution_system_content = match &skill_content {
-            Some(skill) => format!(
-                "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}\n\nYour plan: {}{}",
-                discord_user_context, skill, execution_prompt, metrics_for_system, discord_screenshot_reminder, recommendation, model_identity
-            ),
-            None => format!(
-                "{}{}{}{}{}{}\n\nYour plan: {}{}",
-                router_soul, memory_block, discord_user_context, execution_prompt, metrics_for_system, discord_screenshot_reminder, recommendation, model_identity
-            ),
-        };
-        let mut msgs: Vec<crate::ollama::ChatMessage> = vec![
-            crate::ollama::ChatMessage { role: "system".to_string(), content: execution_system_content, images: None },
-        ];
-        for msg in &conversation_history {
-            msgs.push(msg.clone());
-        }
-        msgs.push(crate::ollama::ChatMessage { role: "user".to_string(), content: question_for_plan_and_exec.clone(), images: attachment_images_base64.clone() });
-        let response = send_ollama_chat_messages(msgs.clone(), model_override.clone(), options_override.clone()).await?;
-        let content = response.message.content.clone();
-        let n = content.chars().count();
-        info!("Agent router: first response received ({} chars): {}", n, log_content(&content));
-        // Fallback: if Ollama returned empty but the recommendation contains a parseable tool,
-        // synthesize the tool call so the tool loop can execute it.
-        if n == 0 {
-            if let Some((tool, arg)) = parse_tool_from_response(&recommendation) {
-                let synthetic = format!("{}: {}", tool, arg);
-                info!("Agent router: empty response — falling back to tool from recommendation: {}", crate::logging::ellipse(&synthetic, 80));
-                (msgs, synthetic)
-            } else {
-                (msgs, content)
-            }
-        } else {
-            (msgs, content)
-        }
-    };
-
-    let mut tool_count: u32 = 0;
-    // Browser mode: "headless" in question → no visible window. From Discord/scheduler/task (from_remote) → headless unless user explicitly asks to see the browser (so retries stay headless).
-    let prefer_headless = if from_remote {
-        !wants_visible_browser(question)
-    } else {
-        question.to_lowercase().contains("headless")
-    };
-    crate::browser_agent::set_prefer_headless_for_run(prefer_headless);
-    // Paths to attach when replying on Discord (e.g. BROWSER_SCREENSHOT); only under ~/.mac-stats/screenshots/.
-    let mut attachment_paths: Vec<PathBuf> = Vec::new();
-    // Collect (agent_name, reply) for each AGENT call so we can append a conversation transcript when multiple agents participated.
-    let mut agent_conversation: Vec<(String, String)> = Vec::new();
-    // Dedupe repeated identical DISCORD_API calls so the model can't loop on the same request.
-    let mut last_successful_discord_call: Option<(String, String)> = None;
-    // Dedupe repeated identical RUN_CMD so the model can't loop (e.g. task says run once then TASK_APPEND/TASK_STATUS).
-    let mut last_run_cmd_arg: Option<String> = None;
-    // When the model does TASK_APPEND right after RUN_CMD, use this so the task file gets the full command output (not a summary).
-    let mut last_run_cmd_raw_output: Option<String> = None;
-    // Track the task file we're working on so we can append the full conversation at the end.
-    let mut current_task_path: Option<std::path::PathBuf> = None;
-    // When the model calls DONE we break the tool loop; strip the DONE line from the final reply.
-    let mut exited_via_done: bool = false;
-    // Last BROWSER_EXTRACT result (JS-rendered page text) for completion verification so we check against real content, not FETCH_URL HTML.
-    let mut last_browser_extract: Option<String> = None;
-    // Cap browser tools per run to prevent runaway NAVIGATE/CLICK loops (see docs/032_browser_loop_and_status_fix_plan.md).
-    let mut browser_tool_count: u32 = 0;
-
-    while tool_count < max_tool_iterations {
-        let tools = parse_all_tools_from_response(&response_content);
-        if tools.is_empty() {
-            info!("Agent router: no tool call in response ({} chars), treating as final answer: {}", response_content.chars().count(), log_content(&response_content));
-            break;
-        }
-        if tools.len() > 1 {
-            info!("Agent router: running {} tools in one turn: {}", tools.len(), tools.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join(", "));
-        }
-        let mut done_claimed: Option<bool> = None;
-        let mut tool_results: Vec<String> = Vec::with_capacity(tools.len());
-        for (tool, arg) in tools {
-            if tool_count >= max_tool_iterations {
-                break;
-            }
-            tool_count += 1;
-            // When the plan puts the whole chain in one line (e.g. PERPLEXITY_SEARCH: spanish newspapers then BROWSER_NAVIGATE...), pass only the search query to PERPLEXITY/BRAVE.
-            let arg = if tool == "PERPLEXITY_SEARCH" || tool == "BRAVE_SEARCH" {
-                truncate_search_query_arg(&arg)
-            } else {
-                arg
-            };
-            let arg_preview: String = arg.chars().take(80).collect();
-            if arg.chars().count() > 80 {
-                info!("Agent router: running tool {}/{} — {} (arg: {}...)", tool_count, max_tool_iterations, tool, arg_preview);
-            } else {
-                info!("Agent router: running tool {}/{} — {} (arg: {})", tool_count, max_tool_iterations, tool, arg_preview);
-            }
-
-            // Cap browser tools per run to prevent runaway loops (032_browser_loop_and_status_fix_plan).
-            let is_browser_tool = matches!(
-                tool.as_str(),
-                "BROWSER_NAVIGATE" | "BROWSER_CLICK" | "BROWSER_INPUT" | "BROWSER_SCROLL"
-                    | "BROWSER_EXTRACT" | "BROWSER_SEARCH_PAGE" | "BROWSER_SCREENSHOT"
-            );
-            if is_browser_tool {
-                if browser_tool_count >= MAX_BROWSER_TOOLS_PER_RUN {
-                    let msg = format!(
-                        "Maximum browser actions per run reached ({}). Reply with your answer or DONE: success / DONE: no.",
-                        MAX_BROWSER_TOOLS_PER_RUN
-                    );
-                    tool_results.push(msg);
-                    info!(
-                        "Agent router: browser tool cap reached ({}), skipping {}",
-                        MAX_BROWSER_TOOLS_PER_RUN, tool
-                    );
-                    continue;
-                }
-                browser_tool_count += 1;
-                info!(
-                    "Agent router: browser tool #{}/{} this run",
-                    browser_tool_count, MAX_BROWSER_TOOLS_PER_RUN
-                );
-            }
-
-            let user_message = match tool.as_str() {
-            "DONE" => {
-                let arg_lower = arg.trim().to_lowercase();
-                let claimed_success = arg_lower.is_empty()
-                    || arg_lower.contains("success")
-                    || arg_lower.contains("yes")
-                    || arg_lower.contains("true");
-                done_claimed = Some(claimed_success);
-                send_status(if claimed_success {
-                    "✅ Task marked done (success)."
-                } else {
-                    "⏹️ Task marked done (could not complete)."
-                });
-                info!(
-                    "Agent router: model called DONE (success={}), exiting tool loop",
-                    claimed_success
-                );
-                String::new()
-            }
-            "FETCH_URL" if arg.contains("discord.com") => {
-                let path = if let Some(pos) = arg.find("/api/v10") {
-                    arg[pos + "/api/v10".len()..].to_string()
-                } else if let Some(pos) = arg.find("/api/") {
-                    arg[pos + "/api".len()..].to_string()
+        // --- Pre-routing: deterministic tool dispatch for unambiguous patterns ---
+        // Screenshot + URL → BROWSER_SCREENSHOT; "run <command>" → RUN_CMD; ticket → REDMINE_API.
+        let pre_routed_recommendation = extract_screenshot_recommendation(question).or_else(|| {
+            if crate::commands::run_cmd::is_local_cmd_allowed() {
+                let q = question.trim();
+                let q_lower = q.to_lowercase();
+                let cmd_rest = if let Some(cmd) = extract_last_prefixed_argument(q, "RUN_CMD:") {
+                    cmd
+                } else if q_lower.starts_with("run command:") {
+                    q[12..].trim().to_string() // "run command:".len() == 12
+                } else if q_lower.starts_with("run ") {
+                    q[4..].trim().to_string() // "run ".len() == 4
                 } else {
                     String::new()
                 };
-                if !path.is_empty() {
-                    info!("Agent router: redirecting FETCH_URL discord.com -> DISCORD_API GET {}", path);
-                    send_status(&format!("Discord API: GET {}", path));
-                    match crate::discord::api::discord_api_request("GET", &path, None).await {
+                if !cmd_rest.is_empty() {
+                    let rec = format!("RUN_CMD: {}", cmd_rest);
+                    info!(
+                        "Agent router: pre-routed to RUN_CMD (run command): {}",
+                        crate::logging::ellipse(&cmd_rest, 60)
+                    );
+                    Some(rec)
+                } else if crate::redmine::is_configured() {
+                    if is_redmine_time_entries_request(q) {
+                        let (from, to) = current_month_redmine_range();
+                        let rec = format!(
+                            "REDMINE_API: GET /time_entries.json?user_id=me&from={}&to={}",
+                            from, to
+                        );
+                        info!(
+                            "Agent router: pre-routed to REDMINE_API for current-month time entries ({}..{})",
+                            from, to
+                        );
+                        Some(rec)
+                    } else {
+                    let ticket_id = extract_ticket_id(&q_lower);
+                    let wants_update = q_lower.contains("update")
+                        || q_lower.contains("add comment")
+                        || q_lower.contains("with the next steps")
+                        || q_lower.contains("post a comment")
+                        || q_lower.contains("write ")
+                        || q_lower.contains("put ");
+                    if ticket_id.is_some()
+                        && (q_lower.contains("ticket")
+                            || q_lower.contains("issue")
+                            || q_lower.contains("redmine"))
+                        && !wants_update
+                    {
+                        let id = ticket_id.unwrap();
+                        let rec = format!(
+                            "REDMINE_API: GET /issues/{}.json?include=journals,attachments",
+                            id
+                        );
+                        info!("Agent router: pre-routed to REDMINE_API for ticket #{}", id);
+                        Some(rec)
+                    } else {
+                        None
+                    }
+                    }
+                } else {
+                    None
+                }
+            } else if crate::redmine::is_configured() {
+                let q_lower = question.to_lowercase();
+                if is_redmine_time_entries_request(question) {
+                    let (from, to) = current_month_redmine_range();
+                    let rec = format!(
+                        "REDMINE_API: GET /time_entries.json?user_id=me&from={}&to={}",
+                        from, to
+                    );
+                    info!(
+                        "Agent router: pre-routed to REDMINE_API for current-month time entries ({}..{})",
+                        from, to
+                    );
+                    Some(rec)
+                } else {
+                    let ticket_id = extract_ticket_id(&q_lower);
+                    let wants_update = q_lower.contains("update")
+                        || q_lower.contains("add comment")
+                        || q_lower.contains("with the next steps")
+                        || q_lower.contains("post a comment")
+                        || q_lower.contains("write ")
+                        || q_lower.contains("put ");
+                    if ticket_id.is_some()
+                        && (q_lower.contains("ticket")
+                            || q_lower.contains("issue")
+                            || q_lower.contains("redmine"))
+                        && !wants_update
+                    {
+                        let id = ticket_id.unwrap();
+                    let rec = format!(
+                        "REDMINE_API: GET /issues/{}.json?include=journals,attachments",
+                        id
+                    );
+                    info!("Agent router: pre-routed to REDMINE_API for ticket #{}", id);
+                    Some(rec)
+                    } else {
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        });
+
+        // --- Planning step: ask Ollama how it would solve the question (skip if pre-routed) ---
+        let mut recommendation = if let Some(pre_routed) = pre_routed_recommendation {
+            info!("Agent router: skipping LLM planning (pre-routed)");
+            pre_routed
+        } else {
+            info!(
+                "Agent router [{}]: planning step — asking Ollama for RECOMMEND",
+                request_id
+            );
+            let planning_prompt = crate::config::Config::load_planning_prompt();
+            let planning_system_content = match &skill_content {
+                Some(skill) => format!(
+                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}\n\n{}",
+                    discord_user_context, skill, planning_prompt, agent_descriptions
+                ),
+                None => format!(
+                    "{}{}{}\n\n{}",
+                    router_soul, discord_user_context, planning_prompt, agent_descriptions
+                ),
+            };
+            let mut planning_messages: Vec<crate::ollama::ChatMessage> =
+                vec![crate::ollama::ChatMessage {
+                    role: "system".to_string(),
+                    content: planning_system_content,
+                    images: None,
+                }];
+            for msg in &conversation_history {
+                planning_messages.push(msg.clone());
+            }
+            let model_hint = model_override.as_ref().map(|m| format!("\n\nFor this request the user selected Ollama model: {}. The app will use that model for the reply; recommend answering the question (or using an agent) with that in mind.", m)).unwrap_or_default();
+            planning_messages.push(crate::ollama::ChatMessage {
+                role: "user".to_string(),
+                content: format!(
+                    "Current user question: {}{}\n\nReply with RECOMMEND: your plan.",
+                    question_for_plan_and_exec, model_hint
+                ),
+                images: attachment_images_base64.clone(),
+            });
+            let plan_response = send_ollama_chat_messages(
+                planning_messages,
+                model_override.clone(),
+                options_override.clone(),
+            )
+            .await?;
+            let mut rec = plan_response.message.content.trim().to_string();
+            while rec.to_uppercase().starts_with("RECOMMEND: ")
+                || rec.to_uppercase().starts_with("RECOMMEND:")
+            {
+                let prefix_len = if rec.len() >= 11 && rec[..11].to_uppercase() == "RECOMMEND: " {
+                    11
+                } else {
+                    10
+                };
+                rec = rec[prefix_len..].trim().to_string();
+            }
+            rec
+        };
+        // When planner returned only "DONE: no" or "DONE: success" and the question indicates attachment failure, use a synthetic reply-only instruction so the user gets a proper summary (task: avoid bare DONE as execution plan).
+        if is_bare_done_plan(&recommendation) {
+            let q = question.to_lowercase();
+            if q.contains("could not be attached") || q.contains("could not attach") {
+                info!("Agent router [{}]: planner returned bare DONE plan but question indicates attachment failure; using synthetic summary instruction", request_id);
+                recommendation = "Reply with a brief summary of what was done and that the app could not attach the file(s) to Discord, then end with **DONE: no**. Do not run further tools.".to_string();
+            }
+        }
+        info!(
+            "Agent router [{}]: understood plan — {}",
+            request_id,
+            recommendation.chars().take(200).collect::<String>()
+        );
+        send_status(&format!(
+            "Executing plan: {}…",
+            truncate_status(&recommendation, 72)
+        ));
+
+        // Tools that benefit from a clean session (no stale conversation context).
+        // Redmine reviews must not be polluted by prior turns — the model hallucinates.
+        let fresh_session_tools = ["REDMINE_API"];
+        let rec_upper = recommendation.to_uppercase();
+        let needs_fresh_session = fresh_session_tools.iter().any(|t| rec_upper.contains(t));
+        let conversation_history = if needs_fresh_session && !conversation_history.is_empty() {
+            info!("Agent router: clearing conversation history for fresh-session tool");
+            Vec::new()
+        } else {
+            conversation_history
+        };
+
+        // --- Execution: system prompt with agents + plan, then tool loop ---
+        let execution_prompt_raw = crate::config::Config::load_execution_prompt();
+        let execution_prompt = execution_prompt_raw.replace("{{AGENTS}}", &agent_descriptions);
+
+        /// Log content in full if ≤500 chars (or always in -vv), else ellipse (first half + "..." + last half).
+        const LOG_CONTENT_MAX: usize = 500;
+        let log_verbosity = crate::logging::VERBOSITY.load(Ordering::Relaxed);
+        let log_content = |content: &str| {
+            let n = content.chars().count();
+            if log_verbosity >= 2 || n <= LOG_CONTENT_MAX {
+                content.to_string()
+            } else {
+                crate::logging::ellipse(content, LOG_CONTENT_MAX)
+            }
+        };
+
+        // Include current system metrics so the model can answer accurately when the user asks about CPU, RAM, disk, etc.
+        let metrics_block = crate::metrics::format_metrics_for_ai_context();
+        let metrics_for_system = format!("\n\n{}", metrics_block);
+        let model_identity = format!(
+        "\n\nYou are replying as the Ollama model: **{}**. If the user asks which model you are (or what model you run on), name this model.",
+        effective_model
+    );
+        // When Discord user asked for screenshots to be sent here, remind executor to actually run BROWSER_NAVIGATE + BROWSER_SCREENSHOT per URL.
+        let discord_screenshot_reminder = if discord_reply_channel_id.is_some() {
+            let q = question.to_lowercase();
+            if q.contains("screenshot")
+                && (q.contains("send") || q.contains("here") || q.contains("discord"))
+            {
+                "\n\n**Discord:** The user asked for screenshot(s) to be sent here. You MUST call BROWSER_NAVIGATE then BROWSER_SCREENSHOT: current for each URL; the app will attach the images to the reply."
+            } else {
+                ""
+            }
+        } else {
+            ""
+        };
+        // When user asks "how to query Redmine API" for time/hours, executor should run at least one REDMINE_API call (e.g. GET /time_entries.json with current month) so the reply includes a real example.
+        let redmine_howto_reminder = {
+            let q = question.to_lowercase();
+            if (q.contains("how to") || q.contains("how do"))
+                && (q.contains("redmine")
+                    || q.contains("time entries")
+                    || q.contains("spent time")
+                    || q.contains("hours"))
+            {
+                "\n\n**Redmine:** For \"how to query\" time entries or spent hours, run at least one REDMINE_API: GET /time_entries.json with from= and to= for the current month so your reply includes a real example (not only placeholder IDs or wrong year)."
+            } else {
+                ""
+            }
+        };
+
+        // Fast path: if the recommendation already contains a parseable tool call, execute it
+        // directly instead of asking Ollama a second time to regurgitate the same tool line.
+        let direct_tool = parse_tool_from_response(&recommendation);
+        let (mut messages, mut response_content) = if let Some((ref tool, ref arg)) = direct_tool {
+            info!("Agent router: plan contains direct tool call {}:{} — skipping execution Ollama call", tool, crate::logging::ellipse(arg, 60));
+            let memory_block = load_memory_block_for_request(discord_reply_channel_id);
+            let execution_system_content = match &skill_content {
+                Some(skill) => format!(
+                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}{}",
+                    discord_user_context,
+                    skill,
+                    execution_prompt,
+                    metrics_for_system,
+                    discord_screenshot_reminder,
+                    redmine_howto_reminder,
+                    model_identity
+                ),
+                None => format!(
+                    "{}{}{}{}{}{}{}{}",
+                    router_soul,
+                    memory_block,
+                    discord_user_context,
+                    execution_prompt,
+                    metrics_for_system,
+                    discord_screenshot_reminder,
+                    redmine_howto_reminder,
+                    model_identity
+                ),
+            };
+            let mut msgs: Vec<crate::ollama::ChatMessage> = vec![crate::ollama::ChatMessage {
+                role: "system".to_string(),
+                content: execution_system_content,
+                images: None,
+            }];
+            for msg in &conversation_history {
+                msgs.push(msg.clone());
+            }
+            msgs.push(crate::ollama::ChatMessage {
+                role: "user".to_string(),
+                content: question_for_plan_and_exec.clone(),
+                images: attachment_images_base64.clone(),
+            });
+            // Use full recommendation when it contains multiple tools (e.g. BROWSER_NAVIGATE + BROWSER_SCREENSHOT)
+            let synthetic = if recommendation.contains('\n') {
+                recommendation.clone()
+            } else {
+                format!("{}: {}", tool, arg)
+            };
+            (msgs, synthetic)
+        } else {
+            info!("Agent router: execution step — sending plan + question, starting tool loop (max {} tools)", max_tool_iterations);
+            let memory_block = load_memory_block_for_request(discord_reply_channel_id);
+            let execution_system_content = match &skill_content {
+            Some(skill) => format!(
+                "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}\n\nYour plan: {}{}",
+                discord_user_context, skill, execution_prompt, metrics_for_system, discord_screenshot_reminder, redmine_howto_reminder, recommendation, model_identity
+            ),
+            None => format!(
+                "{}{}{}{}{}{}{}\n\nYour plan: {}{}",
+                router_soul, memory_block, discord_user_context, execution_prompt, metrics_for_system, discord_screenshot_reminder, redmine_howto_reminder, recommendation, model_identity
+            ),
+        };
+            let mut msgs: Vec<crate::ollama::ChatMessage> = vec![crate::ollama::ChatMessage {
+                role: "system".to_string(),
+                content: execution_system_content,
+                images: None,
+            }];
+            for msg in &conversation_history {
+                msgs.push(msg.clone());
+            }
+            msgs.push(crate::ollama::ChatMessage {
+                role: "user".to_string(),
+                content: question_for_plan_and_exec.clone(),
+                images: attachment_images_base64.clone(),
+            });
+            let response = send_ollama_chat_messages(
+                msgs.clone(),
+                model_override.clone(),
+                options_override.clone(),
+            )
+            .await?;
+            let content = response.message.content.clone();
+            let n = content.chars().count();
+            info!(
+                "Agent router: first response received ({} chars): {}",
+                n,
+                log_content(&content)
+            );
+            // Fallback: if Ollama returned empty but the recommendation contains a parseable tool,
+            // synthesize the tool call so the tool loop can execute it.
+            if n == 0 {
+                if let Some((tool, arg)) = parse_tool_from_response(&recommendation) {
+                    let synthetic = format!("{}: {}", tool, arg);
+                    info!("Agent router: empty response — falling back to tool from recommendation: {}", crate::logging::ellipse(&synthetic, 80));
+                    (msgs, synthetic)
+                } else {
+                    (msgs, content)
+                }
+            } else {
+                (msgs, content)
+            }
+        };
+
+        let mut tool_count: u32 = 0;
+        // Browser mode: "headless" in question → no visible window. From Discord/scheduler/task (from_remote) → headless unless user explicitly asks to see the browser (so retries stay headless).
+        let prefer_headless = if from_remote {
+            !wants_visible_browser(question)
+        } else {
+            question.to_lowercase().contains("headless")
+        };
+        crate::browser_agent::set_prefer_headless_for_run(prefer_headless);
+        // Paths to attach when replying on Discord (e.g. BROWSER_SCREENSHOT); only under ~/.mac-stats/screenshots/.
+        let mut attachment_paths: Vec<PathBuf> = Vec::new();
+        // Collect (agent_name, reply) for each AGENT call so we can append a conversation transcript when multiple agents participated.
+        let mut agent_conversation: Vec<(String, String)> = Vec::new();
+        // Dedupe repeated identical DISCORD_API calls so the model can't loop on the same request.
+        let mut last_successful_discord_call: Option<(String, String)> = None;
+        // Dedupe repeated identical RUN_CMD so the model can't loop (e.g. task says run once then TASK_APPEND/TASK_STATUS).
+        let mut last_run_cmd_arg: Option<String> = None;
+        // When the model does TASK_APPEND right after RUN_CMD, use this so the task file gets the full command output (not a summary).
+        let mut last_run_cmd_raw_output: Option<String> = None;
+        // Track the task file we're working on so we can append the full conversation at the end.
+        let mut current_task_path: Option<std::path::PathBuf> = None;
+        // When the model calls DONE we break the tool loop; strip the DONE line from the final reply.
+        let mut exited_via_done: bool = false;
+        // Last BROWSER_EXTRACT result (JS-rendered page text) for completion verification so we check against real content, not FETCH_URL HTML.
+        let mut last_browser_extract: Option<String> = None;
+        // Cap browser tools per run to prevent runaway NAVIGATE/CLICK loops (see docs/032_browser_loop_and_status_fix_plan.md).
+        let mut browser_tool_count: u32 = 0;
+
+        while tool_count < max_tool_iterations {
+            let tools = parse_all_tools_from_response(&response_content);
+            if tools.is_empty() {
+                info!("Agent router: no tool call in response ({} chars), treating as final answer: {}", response_content.chars().count(), log_content(&response_content));
+                break;
+            }
+            if tools.len() > 1 {
+                info!(
+                    "Agent router: running {} tools in one turn: {}",
+                    tools.len(),
+                    tools
+                        .iter()
+                        .map(|(t, _)| t.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            let mut done_claimed: Option<bool> = None;
+            let mut tool_results: Vec<String> = Vec::with_capacity(tools.len());
+            for (tool, arg) in tools {
+                if tool_count >= max_tool_iterations {
+                    break;
+                }
+                tool_count += 1;
+                // When the plan puts the whole chain in one line (e.g. PERPLEXITY_SEARCH: spanish newspapers then BROWSER_NAVIGATE...), pass only the search query to PERPLEXITY/BRAVE.
+                let arg = if tool == "PERPLEXITY_SEARCH" || tool == "BRAVE_SEARCH" {
+                    truncate_search_query_arg(&arg)
+                } else {
+                    arg
+                };
+                let arg_preview: String = arg.chars().take(80).collect();
+                if arg.chars().count() > 80 {
+                    info!(
+                        "Agent router: running tool {}/{} — {} (arg: {}...)",
+                        tool_count, max_tool_iterations, tool, arg_preview
+                    );
+                } else {
+                    info!(
+                        "Agent router: running tool {}/{} — {} (arg: {})",
+                        tool_count, max_tool_iterations, tool, arg_preview
+                    );
+                }
+
+                // Cap browser tools per run to prevent runaway loops (032_browser_loop_and_status_fix_plan).
+                let is_browser_tool = matches!(
+                    tool.as_str(),
+                    "BROWSER_NAVIGATE"
+                        | "BROWSER_CLICK"
+                        | "BROWSER_INPUT"
+                        | "BROWSER_SCROLL"
+                        | "BROWSER_EXTRACT"
+                        | "BROWSER_SEARCH_PAGE"
+                        | "BROWSER_SCREENSHOT"
+                );
+                if is_browser_tool {
+                    if browser_tool_count >= MAX_BROWSER_TOOLS_PER_RUN {
+                        let msg = format!(
+                        "Maximum browser actions per run reached ({}). Reply with your answer or DONE: success / DONE: no.",
+                        MAX_BROWSER_TOOLS_PER_RUN
+                    );
+                        tool_results.push(msg);
+                        info!(
+                            "Agent router: browser tool cap reached ({}), skipping {}",
+                            MAX_BROWSER_TOOLS_PER_RUN, tool
+                        );
+                        continue;
+                    }
+                    browser_tool_count += 1;
+                    info!(
+                        "Agent router: browser tool #{}/{} this run",
+                        browser_tool_count, MAX_BROWSER_TOOLS_PER_RUN
+                    );
+                }
+
+                let user_message = match tool.as_str() {
+                    "DONE" => {
+                        let arg_lower = arg.trim().to_lowercase();
+                        let claimed_success = arg_lower.is_empty()
+                            || arg_lower.contains("success")
+                            || arg_lower.contains("yes")
+                            || arg_lower.contains("true");
+                        done_claimed = Some(claimed_success);
+                        send_status(if claimed_success {
+                            "✅ Task marked done (success)."
+                        } else {
+                            "⏹️ Task marked done (could not complete)."
+                        });
+                        info!(
+                            "Agent router: model called DONE (success={}), exiting tool loop",
+                            claimed_success
+                        );
+                        String::new()
+                    }
+                    "FETCH_URL" if arg.contains("discord.com") => {
+                        let path = if let Some(pos) = arg.find("/api/v10") {
+                            arg[pos + "/api/v10".len()..].to_string()
+                        } else if let Some(pos) = arg.find("/api/") {
+                            arg[pos + "/api".len()..].to_string()
+                        } else {
+                            String::new()
+                        };
+                        if !path.is_empty() {
+                            info!("Agent router: redirecting FETCH_URL discord.com -> DISCORD_API GET {}", path);
+                            send_status(&format!("Discord API: GET {}", path));
+                            match crate::discord::api::discord_api_request("GET", &path, None).await {
                         Ok(result) => format!(
                             "Discord API result (GET {}):\n\n{}\n\nUse this to answer the user's question.",
                             path, result
                         ),
                         Err(e) => format!("Discord API failed (GET {}): {}. Try DISCORD_API: GET {} or delegate to AGENT: discord-expert.", path, e, path),
                     }
-                } else {
-                    info!("Agent router: blocked FETCH_URL for discord.com (no API path). Redirecting to discord-expert.");
-                    "Cannot fetch discord.com pages directly. Discord requires authenticated API access. Use AGENT: discord-expert for all Discord tasks, or use DISCORD_API: GET <path> with the correct API endpoint.".to_string()
-                }
-            }
-            "FETCH_URL" => {
-                send_status(&format!("🌐 Fetching page at {}…", crate::logging::ellipse(&arg, 45)));
-                info!("Discord/Ollama: FETCH_URL requested: {}", arg);
-                let url = arg.to_string();
-                let fetch_result = tokio::task::spawn_blocking(move || crate::commands::browser::fetch_page_content(&url))
-                    .await
-                    .map_err(|e| format!("Fetch task: {}", e))?
-                    .map_err(|e| format!("Fetch page failed: {}", e));
-                match fetch_result {
-                    Ok(body) => {
-                        let estimated_used = (messages.iter().map(|m| m.content.len()).sum::<usize>()
-                            + agent_descriptions.len())
-                            / CHARS_PER_TOKEN
-                            + 50;
-                        let body_fit = reduce_fetched_content_to_fit(
-                            &body,
-                            model_info.context_size_tokens,
-                            estimated_used as u32,
-                            model_override.clone(),
-                            options_override.clone(),
-                        )
-                        .await?;
-                        format!(
+                        } else {
+                            info!("Agent router: blocked FETCH_URL for discord.com (no API path). Redirecting to discord-expert.");
+                            "Cannot fetch discord.com pages directly. Discord requires authenticated API access. Use AGENT: discord-expert for all Discord tasks, or use DISCORD_API: GET <path> with the correct API endpoint.".to_string()
+                        }
+                    }
+                    "FETCH_URL" => {
+                        send_status(&format!(
+                            "🌐 Fetching page at {}…",
+                            crate::logging::ellipse(&arg, 45)
+                        ));
+                        info!("Discord/Ollama: FETCH_URL requested: {}", arg);
+                        let url = arg.to_string();
+                        let fetch_result = tokio::task::spawn_blocking(move || {
+                            crate::commands::browser::fetch_page_content(&url)
+                        })
+                        .await
+                        .map_err(|e| format!("Fetch task: {}", e))?
+                        .map_err(|e| format!("Fetch page failed: {}", e));
+                        match fetch_result {
+                            Ok(body) => {
+                                let estimated_used =
+                                    (messages.iter().map(|m| m.content.len()).sum::<usize>()
+                                        + agent_descriptions.len())
+                                        / CHARS_PER_TOKEN
+                                        + 50;
+                                let body_fit = reduce_fetched_content_to_fit(
+                                    &body,
+                                    model_info.context_size_tokens,
+                                    estimated_used as u32,
+                                    model_override.clone(),
+                                    options_override.clone(),
+                                )
+                                .await?;
+                                format!(
                             "Here is the page content:\n\n{}\n\nPlease answer the user's question based on this content.",
                             body_fit
                         )
-                    }
-                    Err(e) => {
-                        if e.contains("401") {
-                            info!("Discord/Ollama: Fetch returned 401 Unauthorized, stopping");
-                            "That URL returned 401 Unauthorized. Do not try another URL. Answer based on what you know.".to_string()
-                        } else {
-                            info!("Discord/Ollama: FETCH_URL failed: {}", crate::logging::ellipse(&e, 300));
-                            let url_lower = arg.to_lowercase();
-                            let redmine_hint = if url_lower.contains("redmine") || url_lower.contains("/issues/") {
-                                " For Redmine tickets use REDMINE_API or say \"review ticket <id>\"."
-                            } else {
-                                ""
-                            };
-                            format!("That URL could not be fetched (connection or server error).{redmine_hint} Answer without that page.")
+                            }
+                            Err(e) => {
+                                if e.contains("401") {
+                                    info!(
+                                        "Discord/Ollama: Fetch returned 401 Unauthorized, stopping"
+                                    );
+                                    "That URL returned 401 Unauthorized. Do not try another URL. Answer based on what you know.".to_string()
+                                } else {
+                                    info!(
+                                        "Discord/Ollama: FETCH_URL failed: {}",
+                                        crate::logging::ellipse(&e, 300)
+                                    );
+                                    let url_lower = arg.to_lowercase();
+                                    let redmine_hint = if url_lower.contains("redmine")
+                                        || url_lower.contains("/issues/")
+                                    {
+                                        " For Redmine tickets use REDMINE_API or say \"review ticket <id>\"."
+                                    } else {
+                                        ""
+                                    };
+                                    format!("That URL could not be fetched (connection or server error).{redmine_hint} Answer without that page.")
+                                }
+                            }
                         }
                     }
-                }
-            }
-            "BROWSER_SCREENSHOT" => {
-                let url_arg = arg.trim().to_string();
-                let is_current = url_arg.is_empty() || url_arg.eq_ignore_ascii_case("current");
-                // Browser-use style: screenshot only works on current page. Reject BROWSER_SCREENSHOT: <url>.
-                if !is_current {
-                    info!("Agent router: rejecting BROWSER_SCREENSHOT: {} — use NAVIGATE first, then SCREENSHOT: current", crate::logging::ellipse(&url_arg, 60));
-                    format!(
+                    "BROWSER_SCREENSHOT" => {
+                        let url_arg = arg.trim().to_string();
+                        let is_current =
+                            url_arg.is_empty() || url_arg.eq_ignore_ascii_case("current");
+                        // Browser-use style: screenshot only works on current page. Reject BROWSER_SCREENSHOT: <url>.
+                        if !is_current {
+                            info!("Agent router: rejecting BROWSER_SCREENSHOT: {} — use NAVIGATE first, then SCREENSHOT: current", crate::logging::ellipse(&url_arg, 60));
+                            format!(
                         "BROWSER_SCREENSHOT only works on the current page. Use BROWSER_NAVIGATE: {} first, then BROWSER_SCREENSHOT: current. Never use BROWSER_SCREENSHOT: <url>.",
                         url_arg
                     )
-                } else {
-                    send_status("📸 Taking screenshot of current page");
-                    match tokio::task::spawn_blocking(crate::browser_agent::take_screenshot_current_page).await {
-                        Ok(Ok(path)) => {
-                            attachment_paths.push(path.clone());
-                            if let Some(ref tx) = status_tx {
-                                let _ = tx.send(format!("ATTACH:{}", path.display()));
-                            }
-                            format!(
+                        } else {
+                            send_status("📸 Taking screenshot of current page");
+                            match tokio::task::spawn_blocking(
+                                crate::browser_agent::take_screenshot_current_page,
+                            )
+                            .await
+                            {
+                                Ok(Ok(path)) => {
+                                    attachment_paths.push(path.clone());
+                                    if let Some(ref tx) = status_tx {
+                                        let _ = tx.send(format!("ATTACH:{}", path.display()));
+                                    }
+                                    format!(
                                 "Screenshot of current page saved to: {}.\n\nTell the user the screenshot was taken; the app will attach it in Discord.",
                                 path.display()
                             )
+                                }
+                                Ok(Err(e)) => {
+                                    info!("Agent router [{}]: BROWSER_SCREENSHOT (current) failed: {}", request_id, crate::logging::ellipse(&e, 200));
+                                    format!("Screenshot of current page failed: {}. (Use BROWSER_NAVIGATE and BROWSER_CLICK first with CDP; then BROWSER_SCREENSHOT: current. Chrome may need to be on port 9222.)", e)
+                                }
+                                Err(e) => format!("Screenshot task error: {}", e),
+                            }
                         }
-                        Ok(Err(e)) => {
-                            info!("Discord/Ollama: BROWSER_SCREENSHOT (current) failed: {}", crate::logging::ellipse(&e, 200));
-                            format!("Screenshot of current page failed: {}. (Use BROWSER_NAVIGATE and BROWSER_CLICK first with CDP; then BROWSER_SCREENSHOT: current. Chrome may need to be on port 9222.)", e)
-                        }
-                        Err(e) => format!("Screenshot task error: {}", e),
                     }
-                }
-            }
-            "BROWSER_NAVIGATE" => {
-                let url_arg = arg.trim().to_string();
-                send_status(&format!("🧭 Navigating to {}…", url_arg));
-                if url_arg.is_empty() {
-                    "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
-                } else {
-                    info!("BROWSER_NAVIGATE: URL sent to CDP: {}", url_arg);
-                    match tokio::task::spawn_blocking({
-                        let u = url_arg.clone();
-                        move || crate::browser_agent::navigate_and_get_state(&u)
-                    }).await {
-                        Ok(Ok(state_str)) => state_str,
-                        Ok(Err(cdp_err)) => {
-                            info!("BROWSER_NAVIGATE CDP failed, ensuring Chrome on 9222 and retrying: {}", crate::logging::ellipse(&cdp_err, 120));
-                            tokio::task::spawn_blocking(|| crate::browser_agent::ensure_chrome_on_port(9222)).await.ok();
+                    "BROWSER_NAVIGATE" => {
+                        let url_arg = arg.trim().to_string();
+                        send_status(&format!("🧭 Navigating to {}…", url_arg));
+                        if url_arg.is_empty() {
+                            "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
+                        } else {
+                            info!(
+                                "Agent router [{}]: BROWSER_NAVIGATE: URL sent to CDP: {}",
+                                request_id, url_arg
+                            );
                             match tokio::task::spawn_blocking({
                                 let u = url_arg.clone();
                                 move || crate::browser_agent::navigate_and_get_state(&u)
-                            }).await {
+                            })
+                            .await
+                            {
                                 Ok(Ok(state_str)) => state_str,
-                                Ok(Err(cdp_err2)) => {
-                                    info!("BROWSER_NAVIGATE CDP retry failed, trying HTTP fallback: {}", crate::logging::ellipse(&cdp_err2, 120));
-                                    match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_http(&url_arg)).await {
+                                Ok(Err(cdp_err)) => {
+                                    info!("BROWSER_NAVIGATE CDP failed, ensuring Chrome on 9222 and retrying: {}", crate::logging::ellipse(&cdp_err, 120));
+                                    tokio::task::spawn_blocking(|| {
+                                        crate::browser_agent::ensure_chrome_on_port(9222)
+                                    })
+                                    .await
+                                    .ok();
+                                    match tokio::task::spawn_blocking({
+                                        let u = url_arg.clone();
+                                        move || crate::browser_agent::navigate_and_get_state(&u)
+                                    })
+                                    .await
+                                    {
+                                        Ok(Ok(state_str)) => state_str,
+                                        Ok(Err(cdp_err2)) => {
+                                            info!("BROWSER_NAVIGATE CDP retry failed, trying HTTP fallback: {}", crate::logging::ellipse(&cdp_err2, 120));
+                                            match tokio::task::spawn_blocking(move || crate::browser_agent::navigate_http(&url_arg)).await {
                                         Ok(Ok(state_str)) => state_str,
                                         Ok(Err(http_err)) => format!(
                                             "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
@@ -2585,30 +3253,39 @@ pub fn answer_with_ollama_and_fetch(
                                         ),
                                         Err(e) => format!("BROWSER_NAVIGATE HTTP fallback task error: {}", e),
                                     }
+                                        }
+                                        Err(e) => {
+                                            format!("BROWSER_NAVIGATE CDP retry task error: {}", e)
+                                        }
+                                    }
                                 }
-                                Err(e) => format!("BROWSER_NAVIGATE CDP retry task error: {}", e),
+                                Err(e) => format!("BROWSER_NAVIGATE task error: {}", e),
                             }
                         }
-                        Err(e) => format!("BROWSER_NAVIGATE task error: {}", e),
                     }
-                }
-            }
-            "BROWSER_CLICK" => {
-                let index_arg = arg.split_whitespace().next().unwrap_or("").trim();
-                let index = index_arg.parse::<u32>().ok();
-                let status_msg = match index {
-                    Some(idx) => {
-                        let label = crate::browser_agent::get_last_element_label(idx);
-                        if let Some(l) = label {
-                            format!("🖱️ Clicking element {} ({})", idx, crate::logging::ellipse(&l, 30))
-                        } else {
-                            format!("🖱️ Clicking element {}", idx)
-                        }
-                    }
-                    None => format!("🖱️ Clicking element {}", if index_arg.is_empty() { "?" } else { index_arg }),
-                };
-                send_status(&status_msg);
-                match index {
+                    "BROWSER_CLICK" => {
+                        let index_arg = arg.split_whitespace().next().unwrap_or("").trim();
+                        let index = index_arg.parse::<u32>().ok();
+                        let status_msg = match index {
+                            Some(idx) => {
+                                let label = crate::browser_agent::get_last_element_label(idx);
+                                if let Some(l) = label {
+                                    format!(
+                                        "🖱️ Clicking element {} ({})",
+                                        idx,
+                                        crate::logging::ellipse(&l, 30)
+                                    )
+                                } else {
+                                    format!("🖱️ Clicking element {}", idx)
+                                }
+                            }
+                            None => format!(
+                                "🖱️ Clicking element {}",
+                                if index_arg.is_empty() { "?" } else { index_arg }
+                            ),
+                        };
+                        send_status(&status_msg);
+                        match index {
                     Some(idx) => {
                         info!("BROWSER_CLICK: index {}", idx);
                         match tokio::task::spawn_blocking(move || crate::browser_agent::click_by_index(idx)).await {
@@ -2625,26 +3302,33 @@ pub fn answer_with_ollama_and_fetch(
                     }
                     None => "BROWSER_CLICK requires a numeric index (e.g. BROWSER_CLICK: 3). Use the index from the Current page Elements list.".to_string(),
                 }
-            }
-            "BROWSER_INPUT" => {
-                let mut parts = arg.trim().splitn(2, |c: char| c.is_whitespace());
-                let index_arg = parts.next().unwrap_or("").trim();
-                let index_for_status = index_arg.parse::<u32>().ok();
-                let status_msg = match index_for_status {
-                    Some(idx) => {
-                        let label = crate::browser_agent::get_last_element_label(idx);
-                        if let Some(l) = label {
-                            format!("✍️ Typing into element {} ({})…", idx, crate::logging::ellipse(&l, 30))
-                        } else {
-                            format!("✍️ Typing into element {}…", idx)
-                        }
                     }
-                    None => format!("✍️ Typing into element {}…", if index_arg.is_empty() { "?" } else { index_arg }),
-                };
-                send_status(&status_msg);
-                let text = parts.next().unwrap_or("").trim().to_string();
-                let index = index_arg.parse::<u32>().ok();
-                match index {
+                    "BROWSER_INPUT" => {
+                        let mut parts = arg.trim().splitn(2, |c: char| c.is_whitespace());
+                        let index_arg = parts.next().unwrap_or("").trim();
+                        let index_for_status = index_arg.parse::<u32>().ok();
+                        let status_msg = match index_for_status {
+                            Some(idx) => {
+                                let label = crate::browser_agent::get_last_element_label(idx);
+                                if let Some(l) = label {
+                                    format!(
+                                        "✍️ Typing into element {} ({})…",
+                                        idx,
+                                        crate::logging::ellipse(&l, 30)
+                                    )
+                                } else {
+                                    format!("✍️ Typing into element {}…", idx)
+                                }
+                            }
+                            None => format!(
+                                "✍️ Typing into element {}…",
+                                if index_arg.is_empty() { "?" } else { index_arg }
+                            ),
+                        };
+                        send_status(&status_msg);
+                        let text = parts.next().unwrap_or("").trim().to_string();
+                        let index = index_arg.parse::<u32>().ok();
+                        match index {
                     Some(idx) => {
                         info!("BROWSER_INPUT: index {} ({} chars)", idx, text.len());
                         let text_clone = text.clone();
@@ -2662,53 +3346,82 @@ pub fn answer_with_ollama_and_fetch(
                     }
                     None => "BROWSER_INPUT requires a numeric index and text (e.g. BROWSER_INPUT: 4 search query). Use the index from the Current page Elements list.".to_string(),
                 }
-            }
-            "BROWSER_SCROLL" => {
-                let scroll_arg = if arg.trim().is_empty() { "down".to_string() } else { arg.trim().to_string() };
-                send_status(&format!("📜 Scrolling {}…", crate::logging::ellipse(&scroll_arg, 20)));
-                match tokio::task::spawn_blocking(move || crate::browser_agent::scroll_page(&scroll_arg)).await {
-                    Ok(Ok(state_str)) => state_str,
-                    Ok(Err(e)) => {
-                        info!("BROWSER_SCROLL failed: {}", crate::logging::ellipse(&e, 200));
-                        format!("BROWSER_SCROLL failed: {}", e)
                     }
-                    Err(e) => format!("BROWSER_SCROLL task error: {}", e),
-                }
-            }
-            "BROWSER_EXTRACT" => {
-                send_status("📄 Extracting page text…");
-                match tokio::task::spawn_blocking(crate::browser_agent::extract_page_text).await {
-                    Ok(Ok(text)) => text,
-                    Ok(Err(_cdp_err)) => {
-                        match tokio::task::spawn_blocking(crate::browser_agent::extract_http).await {
+                    "BROWSER_SCROLL" => {
+                        let scroll_arg = if arg.trim().is_empty() {
+                            "down".to_string()
+                        } else {
+                            arg.trim().to_string()
+                        };
+                        send_status(&format!(
+                            "📜 Scrolling {}…",
+                            crate::logging::ellipse(&scroll_arg, 20)
+                        ));
+                        match tokio::task::spawn_blocking(move || {
+                            crate::browser_agent::scroll_page(&scroll_arg)
+                        })
+                        .await
+                        {
+                            Ok(Ok(state_str)) => state_str,
+                            Ok(Err(e)) => {
+                                info!(
+                                    "BROWSER_SCROLL failed: {}",
+                                    crate::logging::ellipse(&e, 200)
+                                );
+                                format!("BROWSER_SCROLL failed: {}", e)
+                            }
+                            Err(e) => format!("BROWSER_SCROLL task error: {}", e),
+                        }
+                    }
+                    "BROWSER_EXTRACT" => {
+                        send_status("📄 Extracting page text…");
+                        match tokio::task::spawn_blocking(crate::browser_agent::extract_page_text)
+                            .await
+                        {
+                            Ok(Ok(text)) => text,
+                            Ok(Err(_cdp_err)) => {
+                                match tokio::task::spawn_blocking(crate::browser_agent::extract_http).await {
                             Ok(Ok(text)) => text,
                             Ok(Err(e)) => format!("BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)", e),
                             Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
                         }
-                    }
-                    Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
-                }
-            }
-            "BROWSER_SEARCH_PAGE" => {
-                let pattern = arg.trim().to_string();
-                if pattern.is_empty() {
-                    "BROWSER_SEARCH_PAGE requires a search pattern (e.g. BROWSER_SEARCH_PAGE: Ralf Röber). Use to find specific text on the current page.".to_string()
-                } else {
-                    send_status(&format!("🔍 Searching page for \"{}\"…", crate::logging::ellipse(&pattern, 30)));
-                    match tokio::task::spawn_blocking(move || crate::browser_agent::search_page_text(&pattern)).await {
-                        Ok(Ok(result)) => result,
-                        Ok(Err(e)) => {
-                            info!("BROWSER_SEARCH_PAGE failed: {}", crate::logging::ellipse(&e, 200));
-                            format!("BROWSER_SEARCH_PAGE failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)", e)
+                            }
+                            Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
                         }
-                        Err(e) => format!("BROWSER_SEARCH_PAGE task error: {}", e),
                     }
-                }
-            }
-            "BRAVE_SEARCH" => {
-                send_status(&format!("🌐 Searching the web for \"{}\"…", crate::logging::ellipse(&arg, 35)));
-                info!("Discord/Ollama: BRAVE_SEARCH requested: {}", arg);
-                match crate::commands::brave::get_brave_api_key() {
+                    "BROWSER_SEARCH_PAGE" => {
+                        let pattern = arg.trim().to_string();
+                        if pattern.is_empty() {
+                            "BROWSER_SEARCH_PAGE requires a search pattern (e.g. BROWSER_SEARCH_PAGE: Ralf Röber). Use to find specific text on the current page.".to_string()
+                        } else {
+                            send_status(&format!(
+                                "🔍 Searching page for \"{}\"…",
+                                crate::logging::ellipse(&pattern, 30)
+                            ));
+                            match tokio::task::spawn_blocking(move || {
+                                crate::browser_agent::search_page_text(&pattern)
+                            })
+                            .await
+                            {
+                                Ok(Ok(result)) => result,
+                                Ok(Err(e)) => {
+                                    info!(
+                                        "BROWSER_SEARCH_PAGE failed: {}",
+                                        crate::logging::ellipse(&e, 200)
+                                    );
+                                    format!("BROWSER_SEARCH_PAGE failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)", e)
+                                }
+                                Err(e) => format!("BROWSER_SEARCH_PAGE task error: {}", e),
+                            }
+                        }
+                    }
+                    "BRAVE_SEARCH" => {
+                        send_status(&format!(
+                            "🌐 Searching the web for \"{}\"…",
+                            crate::logging::ellipse(&arg, 35)
+                        ));
+                        info!("Discord/Ollama: BRAVE_SEARCH requested: {}", arg);
+                        match crate::commands::brave::get_brave_api_key() {
                     Some(api_key) => match crate::commands::brave::brave_web_search(&arg, &api_key).await {
                         Ok(results) => format!(
                             "Brave Search results:\n\n{}\n\nUse these to answer the user's question.",
@@ -2718,146 +3431,253 @@ pub fn answer_with_ollama_and_fetch(
                     },
                     None => "Brave Search is not configured (no BRAVE_API_KEY in env or .config.env). Answer without search results.".to_string(),
                 }
-            }
-            "PERPLEXITY_SEARCH" => {
-                send_status(&format!("🔎 Searching (Perplexity) for \"{}\"…", crate::logging::ellipse(&arg, 35)));
-                info!("Discord/Ollama: PERPLEXITY_SEARCH requested: {}", arg);
-                match crate::commands::perplexity::perplexity_search(crate::commands::perplexity::PerplexitySearchRequest {
-                    query: arg.to_string(),
-                    max_results: Some(15),
-                })
-                .await
-                {
-                    Ok(resp) => {
-                        let q_lower = question.to_lowercase();
-                        let want_screenshots = (q_lower.contains("screenshot") || q_lower.contains("screen shot"))
-                            && (q_lower.contains("visit") || q_lower.contains("url") || q_lower.contains(" 5 ") || q_lower.contains(" 3 ")
-                                || q_lower.contains("send me") || q_lower.contains("send the") || q_lower.contains("in discord") || q_lower.contains(" here "));
-                        let urls: Vec<String> = resp
-                            .results
-                            .iter()
-                            .filter(|r| r.url.starts_with("http://") || r.url.starts_with("https://"))
-                            .map(|r| r.url.clone())
-                            .take(5)
-                            .collect();
-                        let results: String = resp
-                            .results
-                            .into_iter()
-                            .map(|r| format!("- {}: {} ({})", r.title, r.snippet, r.url))
-                            .collect::<Vec<_>>()
-                            .join("\n\n");
-                        let mut result_text = if results.is_empty() {
-                            "Perplexity search returned no results. Answer from general knowledge.".to_string()
-                        } else {
-                            format!(
-                                "Perplexity Search results:\n\n{}\n\nUse these to answer the user's question.",
+                    }
+                    "PERPLEXITY_SEARCH" => {
+                        send_status(&format!(
+                            "🔎 Searching (Perplexity) for \"{}\"…",
+                            crate::logging::ellipse(&arg, 35)
+                        ));
+                        info!("Discord/Ollama: PERPLEXITY_SEARCH requested: {}", arg);
+                        match crate::commands::perplexity::perplexity_search(
+                            crate::commands::perplexity::PerplexitySearchRequest {
+                                query: arg.to_string(),
+                                max_results: Some(crate::config::Config::perplexity_max_results()),
+                            },
+                        )
+                        .await
+                        {
+                            Ok(resp) => {
+                                let q_lower = question.to_lowercase();
+                                let want_screenshots = (q_lower.contains("screenshot")
+                                    || q_lower.contains("screen shot"))
+                                    && (q_lower.contains("visit")
+                                        || q_lower.contains("url")
+                                        || q_lower.contains(" 5 ")
+                                        || q_lower.contains(" 3 ")
+                                        || q_lower.contains("send me")
+                                        || q_lower.contains("send the")
+                                        || q_lower.contains("in discord")
+                                        || q_lower.contains(" here "));
+                                let urls: Vec<String> = resp
+                                    .results
+                                    .iter()
+                                    .filter(|r| {
+                                        r.url.starts_with("http://")
+                                            || r.url.starts_with("https://")
+                                    })
+                                    .map(|r| r.url.clone())
+                                    .take(5)
+                                    .collect();
+                                // In verbose mode (Discord): brief feedback that results were received before next step.
+                                const MAX_PERPLEXITY_SUMMARY_CHARS: usize = 380;
+                                if status_tx.is_some() {
+                                    let n = resp.results.len();
+                                    let titles: String = resp
+                                        .results
+                                        .iter()
+                                        .take(5)
+                                        .map(|r| r.title.trim().to_string())
+                                        .filter(|t| !t.is_empty())
+                                        .collect::<Vec<_>>()
+                                        .join(", ");
+                                    let summary = build_perplexity_verbose_summary(
+                                        n,
+                                        titles,
+                                        MAX_PERPLEXITY_SUMMARY_CHARS,
+                                    );
+                                    send_status(&summary);
+                                }
+                                let snippet_max =
+                                    crate::config::Config::perplexity_snippet_max_chars();
+                                let num_results = resp.results.len();
+                                // Structured markdown: numbered results with explicit Title/URL/Date/Snippet so the model parses and cites reliably.
+                                let results: String = resp
+                                    .results
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(i, r)| {
+                                        let snippet = if r.snippet.chars().count() > snippet_max {
+                                            format!(
+                                                "{}…",
+                                                r.snippet
+                                                    .chars()
+                                                    .take(snippet_max)
+                                                    .collect::<String>()
+                                            )
+                                        } else {
+                                            r.snippet
+                                        };
+                                        let date_str = r
+                                            .date
+                                            .as_deref()
+                                            .or(r.last_updated.as_deref())
+                                            .unwrap_or("")
+                                            .trim();
+                                        let date_line = if date_str.is_empty() {
+                                            String::new()
+                                        } else {
+                                            format!("- **Date:** {}\n", date_str)
+                                        };
+                                        format!(
+                                            "### {}. {}\n- **URL:** {}\n{}- **Snippet:** {}",
+                                            i + 1,
+                                            r.title,
+                                            r.url,
+                                            date_line,
+                                            snippet
+                                        )
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n\n");
+                                let mut result_text = if results.is_empty() {
+                                    "Perplexity search returned no results. Answer from general knowledge.".to_string()
+                                } else {
+                                    format!(
+                                "## Perplexity Search Results ({} items)\n\n{}\n\nUse these to answer the user's question. Cite source number, title or URL, and date when given.",
+                                num_results,
                                 results
                             )
-                        };
-                        if want_screenshots && !urls.is_empty() {
-                            info!("Agent router: auto-visit and screenshot for {} URLs (user asked for screenshots)", urls.len());
-                            for (i, url) in urls.iter().enumerate() {
-                                send_status(&format!("🧭 Visiting {} of {}…", i + 1, urls.len()));
-                                let nav_result = tokio::task::spawn_blocking({
-                                    let u = url.clone();
-                                    move || crate::browser_agent::navigate_and_get_state(&u)
-                                })
-                                .await;
-                                match nav_result {
-                                    Ok(Ok(_)) => {
-                                        send_status(&format!("📸 Taking screenshot {} of {}…", i + 1, urls.len()));
-                                        let shot_result = tokio::task::spawn_blocking(crate::browser_agent::take_screenshot_current_page).await;
-                                        if let Ok(Ok(path)) = shot_result {
-                                            attachment_paths.push(path.clone());
-                                            if let Some(ref tx) = status_tx {
-                                                let _ = tx.send(format!("ATTACH:{}", path.display()));
+                                };
+                                if want_screenshots && !urls.is_empty() {
+                                    info!("Agent router: auto-visit and screenshot for {} URLs (user asked for screenshots)", urls.len());
+                                    for (i, url) in urls.iter().enumerate() {
+                                        send_status(&format!(
+                                            "🧭 Visiting {} of {}…",
+                                            i + 1,
+                                            urls.len()
+                                        ));
+                                        let nav_result = tokio::task::spawn_blocking({
+                                            let u = url.clone();
+                                            move || crate::browser_agent::navigate_and_get_state(&u)
+                                        })
+                                        .await;
+                                        match nav_result {
+                                            Ok(Ok(_)) => {
+                                                send_status(&format!(
+                                                    "📸 Taking screenshot {} of {}…",
+                                                    i + 1,
+                                                    urls.len()
+                                                ));
+                                                let shot_result = tokio::task::spawn_blocking(crate::browser_agent::take_screenshot_current_page).await;
+                                                if let Ok(Ok(path)) = shot_result {
+                                                    attachment_paths.push(path.clone());
+                                                    if let Some(ref tx) = status_tx {
+                                                        let _ = tx.send(format!(
+                                                            "ATTACH:{}",
+                                                            path.display()
+                                                        ));
+                                                    }
+                                                    info!("Agent router: auto-screenshot {} saved to {:?}", i + 1, path);
+                                                }
                                             }
-                                            info!("Agent router: auto-screenshot {} saved to {:?}", i + 1, path);
+                                            Ok(Err(e)) => {
+                                                info!(
+                                                    "Agent router: auto-navigate {} failed: {}",
+                                                    url,
+                                                    crate::logging::ellipse(&e, 80)
+                                                );
+                                            }
+                                            Err(e) => {
+                                                info!(
+                                                    "Agent router: auto-navigate task error: {}",
+                                                    e
+                                                );
+                                            }
                                         }
                                     }
-                                    Ok(Err(e)) => {
-                                        info!("Agent router: auto-navigate {} failed: {}", url, crate::logging::ellipse(&e, 80));
-                                    }
-                                    Err(e) => {
-                                        info!("Agent router: auto-navigate task error: {}", e);
-                                    }
-                                }
-                            }
-                            result_text.push_str(&format!(
+                                    result_text.push_str(&format!(
                                 "\n\nI navigated to and took screenshots of {} page(s). The app will attach them in Discord.",
                                 urls.len()
                             ));
+                                }
+                                result_text
+                            }
+                            Err(e) => {
+                                if status_tx.is_some() {
+                                    send_status(&format!(
+                                        "Perplexity search failed: {}",
+                                        crate::logging::ellipse(&e.to_string(), 120)
+                                    ));
+                                }
+                                format!(
+                                    "Perplexity search failed: {}. Answer without search results.",
+                                    e
+                                )
+                            }
                         }
-                        result_text
                     }
-                    Err(e) => format!("Perplexity search failed: {}. Answer without search results.", e),
-                }
-            }
-            // RUN_JS: agent-triggered; runs with process privileges via run_js_via_node.
-            // Treat agent output as untrusted code. Audit log code length + hash only (no full body).
-            "RUN_JS" => {
-                const CODE_PREVIEW_LEN: usize = 50;
-                let code_preview: String = arg
-                    .trim()
-                    .lines()
-                    .next()
-                    .unwrap_or(arg.trim())
-                    .chars()
-                    .take(CODE_PREVIEW_LEN)
-                    .collect();
-                let code_label = if arg.trim().chars().count() > CODE_PREVIEW_LEN {
-                    format!("{}…", code_preview.trim())
-                } else {
-                    code_preview.trim().to_string()
-                };
-                let code_ref = if code_label.is_empty() { "…" } else { &code_label };
-                send_status(&format!("Running code: {}…", code_ref));
-                // Audit: code length + content hash only (no full code in logs).
-                let code_len = arg.chars().count();
-                let code_hash = {
-                    use std::hash::{Hash, Hasher};
-                    let mut h = std::collections::hash_map::DefaultHasher::new();
-                    arg.hash(&mut h);
-                    h.finish()
-                };
-                info!(
-                    "RUN_JS audit: len={} hash_hex={:016x} preview={}",
-                    code_len, code_hash, code_ref
-                );
-                match run_js_via_node(&arg) {
-                    Ok(result) => format!(
+                    // RUN_JS: agent-triggered; runs with process privileges via run_js_via_node.
+                    // Treat agent output as untrusted code. Audit log code length + hash only (no full body).
+                    "RUN_JS" => {
+                        const CODE_PREVIEW_LEN: usize = 50;
+                        let code_preview: String = arg
+                            .trim()
+                            .lines()
+                            .next()
+                            .unwrap_or(arg.trim())
+                            .chars()
+                            .take(CODE_PREVIEW_LEN)
+                            .collect();
+                        let code_label = if arg.trim().chars().count() > CODE_PREVIEW_LEN {
+                            format!("{}…", code_preview.trim())
+                        } else {
+                            code_preview.trim().to_string()
+                        };
+                        let code_ref = if code_label.is_empty() {
+                            "…"
+                        } else {
+                            &code_label
+                        };
+                        send_status(&format!("Running code: {}…", code_ref));
+                        // Audit: code length + content hash only (no full code in logs).
+                        let code_len = arg.chars().count();
+                        let code_hash = {
+                            use std::hash::{Hash, Hasher};
+                            let mut h = std::collections::hash_map::DefaultHasher::new();
+                            arg.hash(&mut h);
+                            h.finish()
+                        };
+                        info!(
+                            "RUN_JS audit: len={} hash_hex={:016x} preview={}",
+                            code_len, code_hash, code_ref
+                        );
+                        match run_js_via_node(&arg) {
+                            Ok(result) => format!(
                         "JavaScript result:\n\n{}\n\nUse this to answer the user's question.",
                         result
                     ),
-                    Err(e) => {
-                        info!("Discord/Ollama: RUN_JS failed: {}", e);
-                        format!("JavaScript execution failed: {}. Answer the user's question without running code.", e)
+                            Err(e) => {
+                                info!("Discord/Ollama: RUN_JS failed: {}", e);
+                                format!("JavaScript execution failed: {}. Answer the user's question without running code.", e)
+                            }
+                        }
                     }
-                }
-            }
-            "SKILL" => {
-                send_status("Using skill…");
-                let arg = arg.trim();
-                let (selector, task_message) = if let Some(space_idx) = arg.find(' ') {
-                    let (sel, rest) = arg.split_at(space_idx);
-                    (sel.trim(), rest.trim())
-                } else {
-                    (arg, "")
-                };
-                let skills = crate::skills::load_skills();
-                match crate::skills::find_skill_by_number_or_topic(&skills, selector) {
-                    Some(skill) => {
-                        send_status(&format!("Using skill {}-{}…", skill.number, skill.topic));
-                        info!(
+                    "SKILL" => {
+                        send_status("Using skill…");
+                        let arg = arg.trim();
+                        let (selector, task_message) = if let Some(space_idx) = arg.find(' ') {
+                            let (sel, rest) = arg.split_at(space_idx);
+                            (sel.trim(), rest.trim())
+                        } else {
+                            (arg, "")
+                        };
+                        let skills = crate::skills::load_skills();
+                        match crate::skills::find_skill_by_number_or_topic(&skills, selector) {
+                            Some(skill) => {
+                                send_status(&format!(
+                                    "Using skill {}-{}…",
+                                    skill.number, skill.topic
+                                ));
+                                info!(
                             "Agent router: using skill {} ({}) — new session (no main context)",
                             skill.number, skill.topic
                         );
-                        let user_msg = if task_message.is_empty() {
-                            question
-                        } else {
-                            task_message
-                        };
-                        match run_skill_ollama_session(
+                                let user_msg = if task_message.is_empty() {
+                                    question
+                                } else {
+                                    task_message
+                                };
+                                match run_skill_ollama_session(
                             &skill.content,
                             user_msg,
                             model_override.clone(),
@@ -2874,269 +3694,362 @@ pub fn answer_with_ollama_and_fetch(
                                 format!("Skill \"{}-{}\" failed: {}. Answer without this result.", skill.number, skill.topic, e)
                             }
                         }
-                    }
-                    None => {
-                        info!("Agent router: SKILL unknown selector \"{}\" (available: {:?})", selector, skills.iter().map(|s| format!("{}-{}", s.number, s.topic)).collect::<Vec<_>>());
-                        format!(
+                            }
+                            None => {
+                                info!(
+                                    "Agent router: SKILL unknown selector \"{}\" (available: {:?})",
+                                    selector,
+                                    skills
+                                        .iter()
+                                        .map(|s| format!("{}-{}", s.number, s.topic))
+                                        .collect::<Vec<_>>()
+                                );
+                                format!(
                             "Unknown skill \"{}\". Available skills: {}. Answer without using a skill.",
                             selector,
                             skills.iter().map(|s| format!("{}-{}", s.number, s.topic)).collect::<Vec<_>>().join(", ")
                         )
+                            }
+                        }
                     }
-                }
-            }
-            "AGENT" => {
-                let arg = arg.trim();
-                let (selector, task_message) = if let Some(space_idx) = arg.find(' ') {
-                    let (sel, rest) = arg.split_at(space_idx);
-                    (sel.trim(), rest.trim())
-                } else {
-                    (arg, "")
-                };
-                let agents = crate::agents::load_agents();
-                match crate::agents::find_agent_by_id_or_name(&agents, selector) {
-                    Some(agent) => {
-                        let mut user_msg: String = if task_message.is_empty() {
-                            question.to_string()
+                    "AGENT" => {
+                        let arg = arg.trim();
+                        let (selector, task_message) = if let Some(space_idx) = arg.find(' ') {
+                            let (sel, rest) = arg.split_at(space_idx);
+                            (sel.trim(), rest.trim())
                         } else {
-                            task_message.to_string()
+                            (arg, "")
                         };
-                        // When invoking discord-expert from Discord, fetch guild/channel metadata via API and inject so the agent has current context.
-                        let is_discord_expert = agent.slug.as_deref().map_or(false, |s| s.eq_ignore_ascii_case("discord-expert"))
-                            || agent.id == "004";
-                        if is_discord_expert {
-                            if let Some(channel_id) = discord_reply_channel_id {
-                                send_status("Fetching Discord guild/channel context…");
-                                match crate::discord::api::fetch_guild_channel_metadata(channel_id).await {
-                                    Ok(meta) => {
-                                        user_msg = format!(
+                        let agents = crate::agents::load_agents();
+                        match crate::agents::find_agent_by_id_or_name(&agents, selector) {
+                            Some(agent) => {
+                                // Break out of AGENT: orchestrator loop when the last message was already
+                                // an orchestrator result (model keeps re-invoking instead of replying).
+                                let is_orchestrator = agent.id == "000";
+                                let last_is_orchestrator_result = messages
+                                    .last()
+                                    .filter(|m| m.role == "user")
+                                    .map(|m| m.content.starts_with("Agent \"Orchestrator\""))
+                                    .unwrap_or(false);
+                                if is_orchestrator && last_is_orchestrator_result {
+                                    info!("Agent router: skipping repeated AGENT: orchestrator (loop breaker)");
+                                    format!(
+                                "The orchestrator already replied above. Reply with a one-sentence summary for the user and **DONE: success** or **DONE: no**. Do not output AGENT: orchestrator again."
+                            )
+                                } else {
+                                    let mut user_msg: String = if task_message.is_empty() {
+                                        question.to_string()
+                                    } else {
+                                        task_message.to_string()
+                                    };
+                                    // When invoking discord-expert from Discord, fetch guild/channel metadata via API and inject so the agent has current context.
+                                    let is_discord_expert =
+                                        agent.slug.as_deref().map_or(false, |s| {
+                                            s.eq_ignore_ascii_case("discord-expert")
+                                        }) || agent.id == "004";
+                                    if is_discord_expert {
+                                        if let Some(channel_id) = discord_reply_channel_id {
+                                            send_status("Fetching Discord guild/channel context…");
+                                            match crate::discord::api::fetch_guild_channel_metadata(
+                                                channel_id,
+                                            )
+                                            .await
+                                            {
+                                                Ok(meta) => {
+                                                    user_msg = format!(
                                             "Current Discord context (use these IDs in DISCORD_API calls):\n{}\n\nUser request: {}",
                                             meta, user_msg
                                         );
-                                        info!("Agent router: injected Discord guild/channel metadata for discord-expert (channel {})", channel_id);
+                                                    info!("Agent router: injected Discord guild/channel metadata for discord-expert (channel {})", channel_id);
+                                                }
+                                                Err(e) => {
+                                                    tracing::debug!("Agent router: Discord metadata fetch failed (channel {}): {}", channel_id, e);
+                                                }
+                                            }
+                                        }
                                     }
-                                    Err(e) => {
-                                        tracing::debug!("Agent router: Discord metadata fetch failed (channel {}): {}", channel_id, e);
-                                    }
-                                }
-                            }
-                        }
-                        const STATUS_MSG_MAX: usize = 120;
-                        let preview: String = user_msg.chars().take(STATUS_MSG_MAX).collect();
-                        let status_text = if user_msg.chars().count() > STATUS_MSG_MAX {
-                            format!("{}…", preview)
-                        } else {
-                            preview
-                        };
-                        send_status(&format!("{} -> Ollama: {}", agent.name, status_text));
-                        match run_agent_ollama_session(
-                            agent,
-                            &user_msg,
-                            status_tx.as_ref(),
-                        )
-                        .await
-                        {
-                            Ok(result) => {
-                                let label = format!("{} ({})", agent.name, agent.id);
-                                agent_conversation.push((label.clone(), result.trim().to_string()));
-                                format!(
+                                    const STATUS_MSG_MAX: usize = 120;
+                                    let preview: String =
+                                        user_msg.chars().take(STATUS_MSG_MAX).collect();
+                                    let status_text = if user_msg.chars().count() > STATUS_MSG_MAX {
+                                        format!("{}…", preview)
+                                    } else {
+                                        preview
+                                    };
+                                    send_status(&format!(
+                                        "{} -> Ollama: {}",
+                                        agent.name, status_text
+                                    ));
+                                    match run_agent_ollama_session(
+                                        agent,
+                                        &user_msg,
+                                        status_tx.as_ref(),
+                                    )
+                                    .await
+                                    {
+                                        Ok(result) => {
+                                            let label = format!("{} ({})", agent.name, agent.id);
+                                            agent_conversation
+                                                .push((label.clone(), result.trim().to_string()));
+                                            format!(
                                     "Agent \"{}\" ({}) result:\n\n{}\n\nUse this to answer the user's question.",
                                     agent.name, agent.id, result
                                 )
-                            }
-                            Err(e) => {
-                                info!("Agent router: AGENT session failed: {}", e);
-                                format!(
+                                        }
+                                        Err(e) => {
+                                            info!("Agent router: AGENT session failed: {}", e);
+                                            format!(
                                     "Agent \"{}\" ({}) failed: {}. Answer without this result.",
                                     agent.name, agent.id, e
                                 )
+                                        }
+                                    }
+                                }
                             }
-                        }
-                    }
-                    None => {
-                        let list: String = agents
-                            .iter()
-                            .map(|a| a.slug.as_deref().unwrap_or(a.name.as_str()).to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        info!("Agent router: AGENT unknown selector \"{}\" (available: {})", selector, list);
-                        format!(
+                            None => {
+                                let list: String = agents
+                                    .iter()
+                                    .map(|a| {
+                                        a.slug.as_deref().unwrap_or(a.name.as_str()).to_string()
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                                info!(
+                                    "Agent router: AGENT unknown selector \"{}\" (available: {})",
+                                    selector, list
+                                );
+                                format!(
                             "Unknown agent \"{}\". Available agents: {}. Answer without using an agent.",
                             selector, list
                         )
+                            }
+                        }
                     }
-                }
-            }
-            "SCHEDULE" => {
-                if !allow_schedule {
-                    info!("Agent router: SCHEDULE ignored (disabled in scheduler context)");
-                    "Scheduling is not available when running from a scheduled task. Do not add a schedule; complete the task without scheduling."
+                    "SCHEDULE" => {
+                        if !allow_schedule {
+                            info!("Agent router: SCHEDULE ignored (disabled in scheduler context)");
+                            "Scheduling is not available when running from a scheduled task. Do not add a schedule; complete the task without scheduling."
                         .to_string()
-                } else {
-                    let schedule_preview: String = arg.chars().take(50).collect();
-                    let schedule_preview = schedule_preview.trim();
-                    send_status(&format!(
-                        "Scheduling: {}…",
-                        if schedule_preview.is_empty() { "…" } else { schedule_preview }
-                    ));
-                    info!("Agent router: SCHEDULE requested (arg len={})", arg.chars().count());
-                    match parse_schedule_arg(&arg) {
-                        Ok(ScheduleParseResult::Cron { cron_str, task }) => {
-                            let id = format!("discord-{}", chrono::Utc::now().timestamp());
-                            let reply_to_channel_id = discord_reply_channel_id.map(|u| u.to_string());
-                            match crate::scheduler::add_schedule(id.clone(), cron_str.clone(), task.clone(), reply_to_channel_id) {
-                                Ok(crate::scheduler::ScheduleAddOutcome::Added) => {
-                                    info!("Agent router: SCHEDULE added (id={}, cron={})", id, cron_str);
-                                    let task_preview: String = task.chars().take(100).collect();
-                                    format!(
+                        } else {
+                            let schedule_preview: String = arg.chars().take(50).collect();
+                            let schedule_preview = schedule_preview.trim();
+                            send_status(&format!(
+                                "Scheduling: {}…",
+                                if schedule_preview.is_empty() {
+                                    "…"
+                                } else {
+                                    schedule_preview
+                                }
+                            ));
+                            info!(
+                                "Agent router: SCHEDULE requested (arg len={})",
+                                arg.chars().count()
+                            );
+                            match parse_schedule_arg(&arg) {
+                                Ok(ScheduleParseResult::Cron { cron_str, task }) => {
+                                    let id = format!("discord-{}", chrono::Utc::now().timestamp());
+                                    let reply_to_channel_id =
+                                        discord_reply_channel_id.map(|u| u.to_string());
+                                    match crate::scheduler::add_schedule(
+                                        id.clone(),
+                                        cron_str.clone(),
+                                        task.clone(),
+                                        reply_to_channel_id,
+                                    ) {
+                                        Ok(crate::scheduler::ScheduleAddOutcome::Added) => {
+                                            info!(
+                                                "Agent router: SCHEDULE added (id={}, cron={})",
+                                                id, cron_str
+                                            );
+                                            let task_preview: String =
+                                                task.chars().take(100).collect();
+                                            format!(
                                         "Schedule added successfully. Schedule ID: **{}**. The scheduler will run this task (cron: {}): \"{}\". Tell the user the schedule ID is {} and they can remove it later with \"Remove schedule: {}\" or by saying REMOVE_SCHEDULE: {}.",
                                         id, cron_str, task_preview.trim(), id, id, id
                                     )
-                                }
-                                Ok(crate::scheduler::ScheduleAddOutcome::AlreadyExists) => {
-                                    info!("Agent router: SCHEDULE skipped (same task already scheduled)");
-                                    "This task is already scheduled with the same cron and description. Tell the user no duplicate was added."
+                                        }
+                                        Ok(crate::scheduler::ScheduleAddOutcome::AlreadyExists) => {
+                                            info!("Agent router: SCHEDULE skipped (same task already scheduled)");
+                                            "This task is already scheduled with the same cron and description. Tell the user no duplicate was added."
                                         .to_string()
+                                        }
+                                        Err(e) => {
+                                            info!("Agent router: SCHEDULE failed: {}", e);
+                                            format!("Failed to add schedule: {}. Tell the user and suggest they check ~/.mac-stats/schedules.json.", e)
+                                        }
+                                    }
                                 }
-                                Err(e) => {
-                                    info!("Agent router: SCHEDULE failed: {}", e);
-                                    format!("Failed to add schedule: {}. Tell the user and suggest they check ~/.mac-stats/schedules.json.", e)
-                                }
-                            }
-                        }
-                        Ok(ScheduleParseResult::At { at_str, task }) => {
-                            let id = format!("discord-{}", chrono::Utc::now().timestamp());
-                            let reply_to_channel_id = discord_reply_channel_id.map(|u| u.to_string());
-                            match crate::scheduler::add_schedule_at(id.clone(), at_str.clone(), task.clone(), reply_to_channel_id) {
-                                Ok(crate::scheduler::ScheduleAddOutcome::Added) => {
-                                    info!("Agent router: SCHEDULE at added (id={}, at={})", id, at_str);
-                                    let task_preview: String = task.chars().take(100).collect();
-                                    format!(
+                                Ok(ScheduleParseResult::At { at_str, task }) => {
+                                    let id = format!("discord-{}", chrono::Utc::now().timestamp());
+                                    let reply_to_channel_id =
+                                        discord_reply_channel_id.map(|u| u.to_string());
+                                    match crate::scheduler::add_schedule_at(
+                                        id.clone(),
+                                        at_str.clone(),
+                                        task.clone(),
+                                        reply_to_channel_id,
+                                    ) {
+                                        Ok(crate::scheduler::ScheduleAddOutcome::Added) => {
+                                            info!(
+                                                "Agent router: SCHEDULE at added (id={}, at={})",
+                                                id, at_str
+                                            );
+                                            let task_preview: String =
+                                                task.chars().take(100).collect();
+                                            format!(
                                         "One-time schedule added. Schedule ID: **{}** (at {}): \"{}\". Tell the user the schedule ID is {} and they can remove it with \"Remove schedule: {}\" or REMOVE_SCHEDULE: {}.",
                                         id, at_str, task_preview.trim(), id, id, id
                                     )
-                                }
-                                Ok(crate::scheduler::ScheduleAddOutcome::AlreadyExists) => {
-                                    info!("Agent router: SCHEDULE at skipped (duplicate)");
-                                    "This one-time schedule was already added. Tell the user no duplicate was added.".to_string()
+                                        }
+                                        Ok(crate::scheduler::ScheduleAddOutcome::AlreadyExists) => {
+                                            info!("Agent router: SCHEDULE at skipped (duplicate)");
+                                            "This one-time schedule was already added. Tell the user no duplicate was added.".to_string()
+                                        }
+                                        Err(e) => {
+                                            info!("Agent router: SCHEDULE at failed: {}", e);
+                                            format!("Failed to add one-shot schedule: {}. Tell the user and suggest they check ~/.mac-stats/schedules.json.", e)
+                                        }
+                                    }
                                 }
                                 Err(e) => {
-                                    info!("Agent router: SCHEDULE at failed: {}", e);
-                                    format!("Failed to add one-shot schedule: {}. Tell the user and suggest they check ~/.mac-stats/schedules.json.", e)
+                                    info!("Agent router: SCHEDULE parse failed: {}", e);
+                                    format!("Could not parse schedule (expected e.g. \"every 5 minutes <task>\", \"at <datetime> <task>\", or \"<cron> <task>\"): {}. Ask the user to rephrase.", e)
                                 }
                             }
                         }
-                        Err(e) => {
-                            info!("Agent router: SCHEDULE parse failed: {}", e);
-                            format!("Could not parse schedule (expected e.g. \"every 5 minutes <task>\", \"at <datetime> <task>\", or \"<cron> <task>\"): {}. Ask the user to rephrase.", e)
-                        }
                     }
-                }
-            }
-            "REMOVE_SCHEDULE" => {
-                let id = arg.trim();
-                if id.is_empty() {
-                    "REMOVE_SCHEDULE requires a schedule ID (e.g. discord-1770648842). Ask the user which schedule to remove or to provide the ID.".to_string()
-                } else {
-                    send_status(&format!("Removing schedule: {}…", id));
-                    info!("Agent router: REMOVE_SCHEDULE requested: id={}", id);
-                    match crate::scheduler::remove_schedule_by_id(id) {
+                    "REMOVE_SCHEDULE" => {
+                        let id = arg.trim();
+                        if id.is_empty() {
+                            "REMOVE_SCHEDULE requires a schedule ID (e.g. discord-1770648842). Ask the user which schedule to remove or to provide the ID.".to_string()
+                        } else {
+                            send_status(&format!("Removing schedule: {}…", id));
+                            info!("Agent router: REMOVE_SCHEDULE requested: id={}", id);
+                            match crate::scheduler::remove_schedule_by_id(id) {
                         Ok(true) => format!("Schedule {} has been removed. Tell the user it is cancelled.", id),
                         Ok(false) => format!("No schedule found with ID \"{}\". The ID may be wrong or already removed. Tell the user.", id),
                         Err(e) => format!("Failed to remove schedule: {}. Tell the user.", e),
                     }
-                }
-            }
-            "LIST_SCHEDULES" => {
-                send_status("Listing schedules…");
-                info!("Agent router: LIST_SCHEDULES requested");
-                let list = crate::scheduler::list_schedules_formatted();
-                format!("{}\n\nUse this to answer the user.", list)
-            }
-            "RUN_CMD" => {
-                info!("Agent router: RUN_CMD requested: {}", crate::logging::ellipse(&arg, 120));
-                if !crate::commands::run_cmd::is_local_cmd_allowed() {
-                    "RUN_CMD is not available (disabled by ALLOW_LOCAL_CMD=0). Answer without running local commands.".to_string()
-                } else if last_run_cmd_arg.as_deref() == Some(arg.as_str()) {
-                    info!("Agent router: RUN_CMD duplicate (same arg as last run), skipping execution");
-                    "You already ran this command; the result is in the message above. Do not run RUN_CMD again. Reply with TASK_APPEND then TASK_STATUS as the task instructs.".to_string()
-                } else {
-                    const MAX_CMD_RETRIES: u32 = 3;
-                    let mut current_cmd = arg.to_string();
-                    let mut last_output = String::new();
+                        }
+                    }
+                    "LIST_SCHEDULES" => {
+                        send_status("Listing schedules…");
+                        info!("Agent router: LIST_SCHEDULES requested");
+                        let list = crate::scheduler::list_schedules_formatted();
+                        format!("{}\n\nUse this to answer the user.", list)
+                    }
+                    "RUN_CMD" => {
+                        info!(
+                            "Agent router: RUN_CMD requested: {}",
+                            crate::logging::ellipse(&arg, 120)
+                        );
+                        if !crate::commands::run_cmd::is_local_cmd_allowed() {
+                            "RUN_CMD is not available (disabled by ALLOW_LOCAL_CMD=0). Answer without running local commands.".to_string()
+                        } else if last_run_cmd_arg.as_deref() == Some(arg.as_str()) {
+                            info!("Agent router: RUN_CMD duplicate (same arg as last run), skipping execution");
+                            "You already ran this command; the result is in the message above. Do not run RUN_CMD again. Reply with TASK_APPEND then TASK_STATUS as the task instructs.".to_string()
+                        } else {
+                            const MAX_CMD_RETRIES: u32 = 3;
+                            let mut current_cmd = arg.to_string();
+                            let mut last_output = String::new();
 
-                    for attempt in 0..=MAX_CMD_RETRIES {
-                        send_status(&format!("Running local command{}: {}", if attempt > 0 { format!(" (retry {})", attempt) } else { String::new() }, current_cmd));
-                        info!("Agent router: RUN_CMD attempt {}: {}", attempt, current_cmd);
-                        match tokio::task::spawn_blocking({
-                            let cmd = current_cmd.clone();
-                            move || crate::commands::run_cmd::run_local_command(&cmd)
-                        })
-                        .await
-                        .map_err(|e| format!("RUN_CMD task: {}", e))
-                        .and_then(|r| r)
-                        {
-                            Ok(output) => {
-                                last_run_cmd_raw_output = Some(output.clone());
-                                info!("Agent router: RUN_CMD completed, stored output for next TASK_APPEND ({} chars)", output.len());
-                                last_output = format!(
+                            for attempt in 0..=MAX_CMD_RETRIES {
+                                send_status(&format!(
+                                    "Running local command{}: {}",
+                                    if attempt > 0 {
+                                        format!(" (retry {})", attempt)
+                                    } else {
+                                        String::new()
+                                    },
+                                    current_cmd
+                                ));
+                                info!("Agent router: RUN_CMD attempt {}: {}", attempt, current_cmd);
+                                match tokio::task::spawn_blocking({
+                                    let cmd = current_cmd.clone();
+                                    move || crate::commands::run_cmd::run_local_command(&cmd)
+                                })
+                                .await
+                                .map_err(|e| format!("RUN_CMD task: {}", e))
+                                .and_then(|r| r)
+                                {
+                                    Ok(output) => {
+                                        last_run_cmd_raw_output = Some(output.clone());
+                                        info!("Agent router: RUN_CMD completed, stored output for next TASK_APPEND ({} chars)", output.len());
+                                        last_output = format!(
                                     "Here is the command output:\n\n{}\n\nUse this to answer the user's question.",
                                     output
                                 );
-                                break;
-                            }
-                            Err(e) => {
-                                info!("Agent router: RUN_CMD failed (attempt {}): {}", attempt, e);
-                                if attempt >= MAX_CMD_RETRIES {
-                                    last_output = format!(
-                                        "RUN_CMD failed after {} retries: {}. Answer the user's question without this result.",
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        info!(
+                                            "Agent router: RUN_CMD failed (attempt {}): {}",
+                                            attempt, e
+                                        );
+                                        if attempt >= MAX_CMD_RETRIES {
+                                            last_output = format!(
+                                        "RUN_CMD failed after {} retries: {}.\n\nAnswer the user's question only (e.g. explain that the export or command failed). Do not include Redmine time entries, summaries, or other tool output that is unrelated to this request.",
                                         MAX_CMD_RETRIES, e
                                     );
-                                    break;
-                                }
-                                // Ask Ollama to fix the command
-                                let allowed = crate::commands::run_cmd::allowed_commands().join(", ");
-                                let fix_prompt = format!(
+                                            break;
+                                        }
+                                        // Ask Ollama to fix the command
+                                        let allowed =
+                                            crate::commands::run_cmd::allowed_commands().join(", ");
+                                        let fix_prompt = format!(
                                     "The command `{}` failed with error:\n{}\n\nReply with ONLY the corrected command on a single line, in this exact format:\nRUN_CMD: <corrected command>\n\nAllowed commands: {}. Paths must be under ~/.mac-stats.",
                                     current_cmd, e, allowed
                                 );
-                                let fix_messages = vec![
-                                    crate::ollama::ChatMessage { role: "user".to_string(), content: fix_prompt, images: None },
-                                ];
-                                match send_ollama_chat_messages(fix_messages, model_override.clone(), options_override.clone()).await {
-                                    Ok(resp) => {
-                                        let fixed = resp.message.content.trim().to_string();
-                                        info!("Agent router: RUN_CMD fix suggestion: {}", crate::logging::ellipse(&fixed, 120));
-                                        if let Some((_, new_arg)) = parse_tool_from_response(&fixed) {
-                                            current_cmd = new_arg;
-                                        } else {
-                                            last_output = format!(
-                                                "RUN_CMD failed: {}. AI could not produce a corrected command. Answer the user's question without this result.",
+                                        let fix_messages = vec![crate::ollama::ChatMessage {
+                                            role: "user".to_string(),
+                                            content: fix_prompt,
+                                            images: None,
+                                        }];
+                                        match send_ollama_chat_messages(
+                                            fix_messages,
+                                            model_override.clone(),
+                                            options_override.clone(),
+                                        )
+                                        .await
+                                        {
+                                            Ok(resp) => {
+                                                let fixed = resp.message.content.trim().to_string();
+                                                info!(
+                                                    "Agent router: RUN_CMD fix suggestion: {}",
+                                                    crate::logging::ellipse(&fixed, 120)
+                                                );
+                                                if let Some((_, new_arg)) =
+                                                    parse_tool_from_response(&fixed)
+                                                {
+                                                    current_cmd = new_arg;
+                                                } else {
+                                                    last_output = format!(
+                                                "RUN_CMD failed: {}. AI could not produce a corrected command. Answer the user's question only; do not include Redmine or other unrelated tool output.",
                                                 e
                                             );
-                                            break;
-                                        }
-                                    }
-                                    Err(ollama_err) => {
-                                        info!("Agent router: RUN_CMD fix Ollama call failed: {}", ollama_err);
-                                        last_output = format!(
-                                            "RUN_CMD failed: {}. Answer the user's question without this result.",
+                                                    break;
+                                                }
+                                            }
+                                            Err(ollama_err) => {
+                                                info!("Agent router: RUN_CMD fix Ollama call failed: {}", ollama_err);
+                                                last_output = format!(
+                                            "RUN_CMD failed: {}. Answer the user's question only; do not include Redmine or other unrelated tool output.",
                                             e
                                         );
-                                        break;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                             }
+                            last_output
                         }
                     }
-                    last_output
-                }
-            }
-            "PYTHON_SCRIPT" => {
-                if !crate::commands::python_agent::is_python_script_allowed() {
-                    "PYTHON_SCRIPT is not available (disabled by ALLOW_PYTHON_SCRIPT=0). Answer without running Python.".to_string()
-                } else {
-                    match parse_python_script_from_response(&response_content) {
+                    "PYTHON_SCRIPT" => {
+                        if !crate::commands::python_agent::is_python_script_allowed() {
+                            "PYTHON_SCRIPT is not available (disabled by ALLOW_PYTHON_SCRIPT=0). Answer without running Python.".to_string()
+                        } else {
+                            match parse_python_script_from_response(&response_content) {
                         Some((id, topic, script_body)) => {
                             let script_label = format!("{} ({})", id, topic);
                             send_status(&format!("Running Python script '{}'…", script_label));
@@ -3163,59 +4076,77 @@ pub fn answer_with_ollama_and_fetch(
                         }
                         None => "PYTHON_SCRIPT requires: PYTHON_SCRIPT: <id> <topic> and then the Python code on the next lines or in a ```python block.".to_string(),
                     }
-                }
-            }
-            "DISCORD_API" => {
-                let arg = arg.trim();
-                let (method, rest) = match arg.find(' ') {
-                    Some(i) => (arg[..i].trim().to_string(), arg[i..].trim()),
-                    None => ("GET".to_string(), arg),
-                };
-                let (path_raw, body) = if let Some(idx) = rest.find(" {") {
-                    let (p, b) = rest.split_at(idx);
-                    (p.trim().to_string(), Some(b.trim().to_string()))
-                } else {
-                    (rest.to_string(), None)
-                };
-                let path = normalize_discord_api_path(&path_raw);
-                if path.is_empty() {
-                    "DISCORD_API requires: DISCORD_API: <METHOD> <path> or DISCORD_API: POST <path> {\"content\":\"...\"}.".to_string()
-                } else if last_successful_discord_call.as_ref().map(|(m, p)| m == &method && p == &path).unwrap_or(false) {
-                    "You already received the data for this endpoint above. Format it for the user and reply; do not call DISCORD_API again for the same path.".to_string()
-                } else {
-                    let status_msg = format!("Calling Discord API: {} {}", method, path);
-                    send_status(&status_msg);
-                    info!("Discord API: {} {}", method, path);
-                    match crate::discord::api::discord_api_request(&method, &path, body.as_deref()).await {
-                        Ok(result) => {
-                            last_successful_discord_call = Some((method.clone(), path.clone()));
-                            format!(
+                        }
+                    }
+                    "DISCORD_API" => {
+                        let arg = arg.trim();
+                        let (method, rest) = match arg.find(' ') {
+                            Some(i) => (arg[..i].trim().to_string(), arg[i..].trim()),
+                            None => ("GET".to_string(), arg),
+                        };
+                        let (path_raw, body) = if let Some(idx) = rest.find(" {") {
+                            let (p, b) = rest.split_at(idx);
+                            (p.trim().to_string(), Some(b.trim().to_string()))
+                        } else {
+                            (rest.to_string(), None)
+                        };
+                        let path = normalize_discord_api_path(&path_raw);
+                        if path.is_empty() {
+                            "DISCORD_API requires: DISCORD_API: <METHOD> <path> or DISCORD_API: POST <path> {\"content\":\"...\"}.".to_string()
+                        } else if last_successful_discord_call
+                            .as_ref()
+                            .map(|(m, p)| m == &method && p == &path)
+                            .unwrap_or(false)
+                        {
+                            "You already received the data for this endpoint above. Format it for the user and reply; do not call DISCORD_API again for the same path.".to_string()
+                        } else {
+                            let status_msg = format!("Calling Discord API: {} {}", method, path);
+                            send_status(&status_msg);
+                            info!("Discord API: {} {}", method, path);
+                            match crate::discord::api::discord_api_request(
+                                &method,
+                                &path,
+                                body.as_deref(),
+                            )
+                            .await
+                            {
+                                Ok(result) => {
+                                    last_successful_discord_call =
+                                        Some((method.clone(), path.clone()));
+                                    format!(
                                 "Discord API result:\n\n{}\n\nUse this to answer the user's question.",
                                 result
                             )
-                        }
-                        Err(e) => {
-                            let msg = crate::discord::api::sanitize_discord_api_error(&e);
-                            format!("Discord API failed: {}. Answer without this result.", msg)
+                                }
+                                Err(e) => {
+                                    let msg = crate::discord::api::sanitize_discord_api_error(&e);
+                                    format!(
+                                        "Discord API failed: {}. Answer without this result.",
+                                        msg
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-            }
-            "OLLAMA_API" => {
-                let arg = arg.trim();
-                let (action, rest) = match arg.find(' ') {
-                    Some(i) => (arg[..i].trim().to_lowercase(), arg[i..].trim()),
-                    None => (arg.to_lowercase(), ""),
-                };
-                let status_detail = if rest.is_empty() {
-                    format!("Ollama API: {}…", action)
-                } else {
-                    let preview: String = rest.chars().take(40).collect();
-                    format!("Ollama API: {} {}…", action, preview)
-                };
-                send_status(&status_detail);
-                info!("Agent router: OLLAMA_API requested: action={}, rest={} chars", action, rest.chars().count());
-                let result = match action.as_str() {
+                    "OLLAMA_API" => {
+                        let arg = arg.trim();
+                        let (action, rest) = match arg.find(' ') {
+                            Some(i) => (arg[..i].trim().to_lowercase(), arg[i..].trim()),
+                            None => (arg.to_lowercase(), ""),
+                        };
+                        let status_detail = if rest.is_empty() {
+                            format!("Ollama API: {}…", action)
+                        } else {
+                            let preview: String = rest.chars().take(40).collect();
+                            format!("Ollama API: {} {}…", action, preview)
+                        };
+                        send_status(&status_detail);
+                        info!(
+                            "Agent router: OLLAMA_API requested: action={}, rest={} chars",
+                            action,
+                            rest.chars().count()
+                        );
+                        let result = match action.as_str() {
                     "list_models" => {
                         list_ollama_models_full().await.map(|r| serde_json::to_string_pretty(&r).unwrap_or_else(|_| "[]".to_string()))
                     }
@@ -3271,62 +4202,73 @@ pub fn answer_with_ollama_and_fetch(
                     }
                     _ => Err(format!("Unknown OLLAMA_API action: {}. Use list_models, version, running, pull, delete, embed, load, or unload.", action)),
                 };
-                match result {
+                        match result {
                     Ok(msg) => format!("Ollama API result:\n\n{}\n\nUse this to answer the user's question.", msg),
                     Err(e) => format!("OLLAMA_API failed: {}. Answer without this result.", e),
                 }
-            }
-            "TASK_APPEND" => {
-                let (path_or_id, content) = match arg.find(' ') {
-                    Some(i) => (arg[..i].trim(), arg[i..].trim()),
-                    None => ("", ""),
-                };
-                if path_or_id.is_empty() || content.is_empty() {
-                    "TASK_APPEND requires: TASK_APPEND: <path or task id> <content>.".to_string()
-                } else {
-                    match crate::task::resolve_task_path(path_or_id) {
-                        Ok(path) => {
-                            current_task_path = Some(path.clone());
-                            let task_label = crate::task::task_file_name(&path);
-                            send_status(&format!("Appending to task '{}'…", task_label));
-                            // If we just ran RUN_CMD, append the full command output to the task (model often sends a summary only).
-                            let content_to_append = if let Some(raw) = last_run_cmd_raw_output.take() {
-                                info!("Agent router: TASK_APPEND using full RUN_CMD output ({} chars) for task '{}'", raw.chars().count(), task_label);
-                                raw
-                            } else {
-                                content.to_string()
-                            };
-                            info!("Agent router: TASK_APPEND for task '{}' ({} chars)", task_label, content_to_append.chars().count());
-                            match crate::task::append_to_task(&path, &content_to_append) {
-                                Ok(()) => format!("Appended to task file '{}'. Use this to continue.", task_label),
+                    }
+                    "TASK_APPEND" => {
+                        let (path_or_id, content) = match arg.find(' ') {
+                            Some(i) => (arg[..i].trim(), arg[i..].trim()),
+                            None => ("", ""),
+                        };
+                        if path_or_id.is_empty() || content.is_empty() {
+                            "TASK_APPEND requires: TASK_APPEND: <path or task id> <content>."
+                                .to_string()
+                        } else {
+                            match crate::task::resolve_task_path(path_or_id) {
+                                Ok(path) => {
+                                    current_task_path = Some(path.clone());
+                                    let task_label = crate::task::task_file_name(&path);
+                                    send_status(&format!("Appending to task '{}'…", task_label));
+                                    // If we just ran RUN_CMD, append the full command output to the task (model often sends a summary only).
+                                    let content_to_append = if let Some(raw) =
+                                        last_run_cmd_raw_output.take()
+                                    {
+                                        info!("Agent router: TASK_APPEND using full RUN_CMD output ({} chars) for task '{}'", raw.chars().count(), task_label);
+                                        raw
+                                    } else {
+                                        content.to_string()
+                                    };
+                                    info!(
+                                        "Agent router: TASK_APPEND for task '{}' ({} chars)",
+                                        task_label,
+                                        content_to_append.chars().count()
+                                    );
+                                    match crate::task::append_to_task(&path, &content_to_append) {
+                                        Ok(()) => format!(
+                                            "Appended to task file '{}'. Use this to continue.",
+                                            task_label
+                                        ),
+                                        Err(e) => format!("TASK_APPEND failed: {}.", e),
+                                    }
+                                }
                                 Err(e) => format!("TASK_APPEND failed: {}.", e),
                             }
                         }
-                        Err(e) => format!("TASK_APPEND failed: {}.", e),
                     }
-                }
-            }
-            "TASK_STATUS" => {
-                let parts: Vec<&str> = arg.split_whitespace().collect();
-                if parts.len() < 2 {
-                    "TASK_STATUS requires: TASK_STATUS: <path or task id> wip|finished.".to_string()
-                } else {
-                    // Find first valid status word (allow trailing punctuation: "finished." -> "finished")
-                    let mut path_or_id = parts[0].to_string();
-                    let mut status: Option<String> = None;
-                    for (i, part) in parts.iter().skip(1).enumerate() {
-                        let s = part
-                            .trim_end_matches(['.', ',', ';'])
-                            .to_lowercase();
-                        if ["wip", "finished", "unsuccessful", "paused"].contains(&s.as_str()) {
-                            status = Some(s);
-                            if i > 0 {
-                                path_or_id = parts[..=i].join(" ");
+                    "TASK_STATUS" => {
+                        let parts: Vec<&str> = arg.split_whitespace().collect();
+                        if parts.len() < 2 {
+                            "TASK_STATUS requires: TASK_STATUS: <path or task id> wip|finished."
+                                .to_string()
+                        } else {
+                            // Find first valid status word (allow trailing punctuation: "finished." -> "finished")
+                            let mut path_or_id = parts[0].to_string();
+                            let mut status: Option<String> = None;
+                            for (i, part) in parts.iter().skip(1).enumerate() {
+                                let s = part.trim_end_matches(['.', ',', ';']).to_lowercase();
+                                if ["wip", "finished", "unsuccessful", "paused"]
+                                    .contains(&s.as_str())
+                                {
+                                    status = Some(s);
+                                    if i > 0 {
+                                        path_or_id = parts[..=i].join(" ");
+                                    }
+                                    break;
+                                }
                             }
-                            break;
-                        }
-                    }
-                    match status {
+                            match status {
                         None => {
                             "TASK_STATUS status must be wip, finished, unsuccessful, or paused.".to_string()
                         }
@@ -3353,591 +4295,853 @@ pub fn answer_with_ollama_and_fetch(
                             Err(e) => format!("TASK_STATUS failed: {}.", e),
                         },
                     }
-                }
-            }
-            "TASK_CREATE" => {
-                let segs: Vec<&str> = arg.splitn(3, ' ').map(str::trim).collect();
-                if segs.len() >= 3 && !segs[2].is_empty() {
-                    let topic = segs[0];
-                    let id = segs[1];
-                    // Truncate at " then " / " then TASK" so we don't store the next tool call in the task body
-                    let initial_content = segs[2];
-                    let content = if let Some(pos) = initial_content
-                        .to_uppercase()
-                        .find(" THEN ")
-                    {
-                        initial_content[..pos].trim()
-                    } else {
-                        initial_content
-                    };
-                    match crate::task::create_task(topic, id, content, None) {
-                        Ok(path) => {
-                            current_task_path = Some(path.clone());
-                            let name = crate::task::task_file_name(&path);
-                            format!("Task created: {}. Use TASK_APPEND: {} or TASK_APPEND: <id> <content> and TASK_STATUS to update.", name, name)
                         }
-                        Err(e) => format!("TASK_CREATE failed: {}.", e),
                     }
-                } else {
-                    "TASK_CREATE requires: TASK_CREATE: <topic> <id> <initial content>.".to_string()
-                }
-            }
-            "TASK_SHOW" => {
-                if arg.trim().is_empty() {
-                    "TASK_SHOW requires: TASK_SHOW: <path or task id>.".to_string()
-                } else {
-                    send_status("Showing task…");
-                    info!("Agent router: TASK_SHOW requested: {}", arg.trim());
-                    match crate::task::resolve_task_path(arg.trim()) {
-                        Ok(path) => {
-                            current_task_path = Some(path.clone());
-                            match crate::task::show_task_content(&path) {
-                                Ok((status, assignee, content)) => {
-                                    const MAX_CHANNEL_MSG: usize = 1900;
-                                    let body = format!(
-                                        "**Status:** {} | **Assigned:** {}\n\n{}",
-                                        status, assignee, content
-                                    );
-                                    let msg = if body.chars().count() <= MAX_CHANNEL_MSG {
-                                        body
-                                    } else {
-                                        crate::logging::ellipse(&body, MAX_CHANNEL_MSG)
-                                    };
-                                    send_status(&msg);
-                                    "Task content was sent to the user in the channel. They can ask you to TASK_APPEND or TASK_STATUS for this task.".to_string()
+                    "TASK_CREATE" => {
+                        let segs: Vec<&str> = arg.splitn(3, ' ').map(str::trim).collect();
+                        if segs.len() >= 3 && !segs[2].is_empty() {
+                            let topic = segs[0];
+                            let id = segs[1];
+                            // Truncate at " then " / " then TASK" so we don't store the next tool call in the task body
+                            let initial_content = segs[2];
+                            let content =
+                                if let Some(pos) = initial_content.to_uppercase().find(" THEN ") {
+                                    initial_content[..pos].trim()
+                                } else {
+                                    initial_content
+                                };
+                            let reply_to = discord_reply_channel_id;
+                            match crate::task::create_task(topic, id, content, None, reply_to) {
+                                Ok(path) => {
+                                    current_task_path = Some(path.clone());
+                                    let name = crate::task::task_file_name(&path);
+                                    format!("Task created: {}. Use TASK_APPEND: {} or TASK_APPEND: <id> <content> and TASK_STATUS to update.", name, name)
+                                }
+                                Err(e) => format!("TASK_CREATE failed: {}.", e),
+                            }
+                        } else {
+                            "TASK_CREATE requires: TASK_CREATE: <topic> <id> <initial content>."
+                                .to_string()
+                        }
+                    }
+                    "TASK_SHOW" => {
+                        if arg.trim().is_empty() {
+                            "TASK_SHOW requires: TASK_SHOW: <path or task id>.".to_string()
+                        } else {
+                            send_status("Showing task…");
+                            info!("Agent router: TASK_SHOW requested: {}", arg.trim());
+                            match crate::task::resolve_task_path(arg.trim()) {
+                                Ok(path) => {
+                                    current_task_path = Some(path.clone());
+                                    match crate::task::show_task_content(&path) {
+                                        Ok((status, assignee, content)) => {
+                                            const MAX_CHANNEL_MSG: usize = 1900;
+                                            let body = format!(
+                                                "**Status:** {} | **Assigned:** {}\n\n{}",
+                                                status, assignee, content
+                                            );
+                                            let msg = if body.chars().count() <= MAX_CHANNEL_MSG {
+                                                body
+                                            } else {
+                                                crate::logging::ellipse(&body, MAX_CHANNEL_MSG)
+                                            };
+                                            send_status(&msg);
+                                            "Task content was sent to the user in the channel. They can ask you to TASK_APPEND or TASK_STATUS for this task.".to_string()
+                                        }
+                                        Err(e) => format!("TASK_SHOW failed: {}.", e),
+                                    }
                                 }
                                 Err(e) => format!("TASK_SHOW failed: {}.", e),
                             }
                         }
-                        Err(e) => format!("TASK_SHOW failed: {}.", e),
                     }
-                }
-            }
-            "TASK_ASSIGN" => {
-                let parts: Vec<&str> = arg.split_whitespace().collect();
-                if parts.len() < 2 {
-                    "TASK_ASSIGN requires: TASK_ASSIGN: <path or task id> <agent_id> (e.g. scheduler, discord, cpu, default).".to_string()
-                } else {
-                    let path_or_id = parts[..parts.len() - 1].join(" ");
-                    let agent_id_raw = parts[parts.len() - 1];
-                    // Normalize so "CURSOR_AGENT" / "cursor-agent" => scheduler (review loop only picks scheduler/default)
-                    let agent_id = match agent_id_raw.to_uppercase().as_str() {
-                        "CURSOR_AGENT" | "CURSOR-AGENT" => "scheduler",
-                        _ => agent_id_raw,
-                    };
-                    send_status(&format!("Assigning task to {}…", agent_id));
-                    info!("Agent router: TASK_ASSIGN {} -> {} (raw: {})", path_or_id, agent_id, agent_id_raw);
-                    match crate::task::resolve_task_path(&path_or_id) {
-                        Ok(path) => {
-                            current_task_path = Some(path.clone());
-                            match crate::task::set_assignee(&path, agent_id) {
-                                Ok(()) => {
-                                    let _ = crate::task::append_to_task(&path, &format!("Reassigned to {}.", agent_id));
-                                    format!("Task assigned to {}.", agent_id)
+                    "TASK_ASSIGN" => {
+                        let parts: Vec<&str> = arg.split_whitespace().collect();
+                        if parts.len() < 2 {
+                            "TASK_ASSIGN requires: TASK_ASSIGN: <path or task id> <agent_id> (e.g. scheduler, discord, cpu, default).".to_string()
+                        } else {
+                            let path_or_id = parts[..parts.len() - 1].join(" ");
+                            let agent_id_raw = parts[parts.len() - 1];
+                            // Normalize so "CURSOR_AGENT" / "cursor-agent" => scheduler (review loop only picks scheduler/default)
+                            let agent_id = match agent_id_raw.to_uppercase().as_str() {
+                                "CURSOR_AGENT" | "CURSOR-AGENT" => "scheduler",
+                                _ => agent_id_raw,
+                            };
+                            send_status(&format!("Assigning task to {}…", agent_id));
+                            info!(
+                                "Agent router: TASK_ASSIGN {} -> {} (raw: {})",
+                                path_or_id, agent_id, agent_id_raw
+                            );
+                            match crate::task::resolve_task_path(&path_or_id) {
+                                Ok(path) => {
+                                    current_task_path = Some(path.clone());
+                                    match crate::task::set_assignee(&path, agent_id) {
+                                        Ok(()) => {
+                                            let _ = crate::task::append_to_task(
+                                                &path,
+                                                &format!("Reassigned to {}.", agent_id),
+                                            );
+                                            format!("Task assigned to {}.", agent_id)
+                                        }
+                                        Err(e) => format!("TASK_ASSIGN failed: {}.", e),
+                                    }
                                 }
                                 Err(e) => format!("TASK_ASSIGN failed: {}.", e),
                             }
                         }
-                        Err(e) => format!("TASK_ASSIGN failed: {}.", e),
                     }
-                }
-            }
-            "TASK_SLEEP" => {
-                let parts: Vec<&str> = arg.split_whitespace().collect();
-                let (path_or_id, until_str) = if parts.len() >= 3 && parts[parts.len() - 2].eq_ignore_ascii_case("until") {
-                    (parts[..parts.len() - 2].join(" "), parts[parts.len() - 1])
-                } else if parts.len() >= 2 {
-                    (parts[..parts.len() - 1].join(" "), parts[parts.len() - 1])
-                } else {
-                    ("".to_string(), "")
-                };
-                if path_or_id.is_empty() || until_str.is_empty() {
-                    "TASK_SLEEP requires: TASK_SLEEP: <path or task id> until <ISO datetime> (e.g. 2025-02-10T09:00:00).".to_string()
-                } else {
-                    send_status("Pausing task…");
-                    info!("Agent router: TASK_SLEEP {} until {}", path_or_id, until_str);
-                    match crate::task::resolve_task_path(&path_or_id) {
-                        Ok(path) => {
-                            current_task_path = Some(path.clone());
-                            if let Ok(new_path) = crate::task::set_task_status(&path, "paused") {
-                                current_task_path = Some(new_path.clone());
-                                let _ = crate::task::set_paused_until(&new_path, Some(until_str));
-                                let _ = crate::task::append_to_task(&new_path, &format!("Paused until {}.", until_str));
-                            }
-                            format!("Task paused until {}. It will resume automatically after that time.", until_str)
-                        }
-                        Err(e) => format!("TASK_SLEEP failed: {}.", e),
-                    }
-                }
-            }
-            "TASK_LIST" => {
-                let show_all = arg.trim().to_lowercase() == "all"
-                    || arg.trim().to_lowercase() == "all tasks"
-                    || arg.trim().to_lowercase().starts_with("all ");
-                let result = if show_all {
-                    send_status("Listing all tasks (by status)…");
-                    info!("Agent router: TASK_LIST all requested");
-                    match crate::task::format_list_all_tasks() {
-                        Ok(list) => {
-                            const MAX_CHANNEL_MSG: usize = 1900;
-                            const LIST_MAX: usize = MAX_CHANNEL_MSG - 20;
-                            let msg = if list.chars().count() <= LIST_MAX {
-                                format!("**All tasks**\n\n{}", list)
-                            } else {
-                                format!("**All tasks**\n\n{}", crate::logging::ellipse(&list, LIST_MAX))
-                            };
-                            send_status(&msg);
-                            "The full task list (Open, WIP, Finished, Unsuccessful) was sent to the user in the channel. Acknowledge that you showed all tasks. Task ids are the filenames; the user can use TASK_APPEND or TASK_STATUS with those ids.".to_string()
-                        }
-                        Err(e) => format!("TASK_LIST failed: {}.", e),
-                    }
-                } else {
-                    send_status("Listing open and WIP tasks…");
-                    info!("Agent router: TASK_LIST requested");
-                    match crate::task::format_list_open_and_wip_tasks() {
-                        Ok(list) => {
-                            const MAX_CHANNEL_MSG: usize = 1900;
-                            const LIST_MAX: usize = MAX_CHANNEL_MSG - 20;
-                            let msg = if list.chars().count() <= LIST_MAX {
-                                format!("**Active task list**\n\n{}", list)
-                            } else {
-                                format!("**Active task list**\n\n{}", crate::logging::ellipse(&list, LIST_MAX))
-                            };
-                            send_status(&msg);
-                            "The task list was sent to the user in the channel. Acknowledge that you showed the list. Task ids are the filenames; the user can use TASK_APPEND or TASK_STATUS with those ids.".to_string()
-                        }
-                        Err(e) => format!("TASK_LIST failed: {}.", e),
-                    }
-                };
-                result
-            }
-            "MCP" => {
-                send_status("Calling MCP tool…");
-                info!("Agent router: MCP requested (arg len={})", arg.chars().count());
-                match crate::mcp::get_mcp_server_url() {
-                    Some(server_url) => {
-                        let (mcp_tool_name, mcp_args) = if let Some(space) = arg.find(' ') {
-                            let (name, rest) = arg.split_at(space);
-                            let rest = rest.trim();
-                            let args = if rest.starts_with('{') {
-                                serde_json::from_str(rest).ok()
-                            } else {
-                                Some(serde_json::json!({ "input": rest }))
-                            };
-                            (name.to_string(), args)
+                    "TASK_SLEEP" => {
+                        let parts: Vec<&str> = arg.split_whitespace().collect();
+                        let (path_or_id, until_str) = if parts.len() >= 3
+                            && parts[parts.len() - 2].eq_ignore_ascii_case("until")
+                        {
+                            (parts[..parts.len() - 2].join(" "), parts[parts.len() - 1])
+                        } else if parts.len() >= 2 {
+                            (parts[..parts.len() - 1].join(" "), parts[parts.len() - 1])
                         } else {
-                            (arg.clone(), None)
+                            ("".to_string(), "")
                         };
-                        match crate::mcp::call_tool(&server_url, &mcp_tool_name, mcp_args).await {
-                            Ok(result) => {
-                                info!("Agent router: MCP tool {} completed ({} chars)", mcp_tool_name, result.len());
-                                format!(
+                        if path_or_id.is_empty() || until_str.is_empty() {
+                            "TASK_SLEEP requires: TASK_SLEEP: <path or task id> until <ISO datetime> (e.g. 2025-02-10T09:00:00).".to_string()
+                        } else {
+                            send_status("Pausing task…");
+                            info!(
+                                "Agent router: TASK_SLEEP {} until {}",
+                                path_or_id, until_str
+                            );
+                            match crate::task::resolve_task_path(&path_or_id) {
+                                Ok(path) => {
+                                    current_task_path = Some(path.clone());
+                                    if let Ok(new_path) =
+                                        crate::task::set_task_status(&path, "paused")
+                                    {
+                                        current_task_path = Some(new_path.clone());
+                                        let _ = crate::task::set_paused_until(
+                                            &new_path,
+                                            Some(until_str),
+                                        );
+                                        let _ = crate::task::append_to_task(
+                                            &new_path,
+                                            &format!("Paused until {}.", until_str),
+                                        );
+                                    }
+                                    format!("Task paused until {}. It will resume automatically after that time.", until_str)
+                                }
+                                Err(e) => format!("TASK_SLEEP failed: {}.", e),
+                            }
+                        }
+                    }
+                    "TASK_LIST" => {
+                        let show_all = arg.trim().to_lowercase() == "all"
+                            || arg.trim().to_lowercase() == "all tasks"
+                            || arg.trim().to_lowercase().starts_with("all ");
+                        let result = if show_all {
+                            send_status("Listing all tasks (by status)…");
+                            info!("Agent router: TASK_LIST all requested");
+                            match crate::task::format_list_all_tasks() {
+                                Ok(list) => {
+                                    const MAX_CHANNEL_MSG: usize = 1900;
+                                    const LIST_MAX: usize = MAX_CHANNEL_MSG - 20;
+                                    let msg = if list.chars().count() <= LIST_MAX {
+                                        format!("**All tasks**\n\n{}", list)
+                                    } else {
+                                        format!(
+                                            "**All tasks**\n\n{}",
+                                            crate::logging::ellipse(&list, LIST_MAX)
+                                        )
+                                    };
+                                    send_status(&msg);
+                                    "The full task list (Open, WIP, Finished, Unsuccessful) was sent to the user in the channel. Acknowledge that you showed all tasks. Task ids are the filenames; the user can use TASK_APPEND or TASK_STATUS with those ids.".to_string()
+                                }
+                                Err(e) => format!("TASK_LIST failed: {}.", e),
+                            }
+                        } else {
+                            send_status("Listing open and WIP tasks…");
+                            info!("Agent router: TASK_LIST requested");
+                            match crate::task::format_list_open_and_wip_tasks() {
+                                Ok(list) => {
+                                    const MAX_CHANNEL_MSG: usize = 1900;
+                                    const LIST_MAX: usize = MAX_CHANNEL_MSG - 20;
+                                    let msg = if list.chars().count() <= LIST_MAX {
+                                        format!("**Active task list**\n\n{}", list)
+                                    } else {
+                                        format!(
+                                            "**Active task list**\n\n{}",
+                                            crate::logging::ellipse(&list, LIST_MAX)
+                                        )
+                                    };
+                                    send_status(&msg);
+                                    "The task list was sent to the user in the channel. Acknowledge that you showed the list. Task ids are the filenames; the user can use TASK_APPEND or TASK_STATUS with those ids.".to_string()
+                                }
+                                Err(e) => format!("TASK_LIST failed: {}.", e),
+                            }
+                        };
+                        result
+                    }
+                    "MCP" => {
+                        send_status("Calling MCP tool…");
+                        info!(
+                            "Agent router: MCP requested (arg len={})",
+                            arg.chars().count()
+                        );
+                        match crate::mcp::get_mcp_server_url() {
+                            Some(server_url) => {
+                                let (mcp_tool_name, mcp_args) = if let Some(space) = arg.find(' ') {
+                                    let (name, rest) = arg.split_at(space);
+                                    let rest = rest.trim();
+                                    let args = if rest.starts_with('{') {
+                                        serde_json::from_str(rest).ok()
+                                    } else {
+                                        Some(serde_json::json!({ "input": rest }))
+                                    };
+                                    (name.to_string(), args)
+                                } else {
+                                    (arg.clone(), None)
+                                };
+                                match crate::mcp::call_tool(&server_url, &mcp_tool_name, mcp_args)
+                                    .await
+                                {
+                                    Ok(result) => {
+                                        info!(
+                                            "Agent router: MCP tool {} completed ({} chars)",
+                                            mcp_tool_name,
+                                            result.len()
+                                        );
+                                        format!(
                                     "MCP tool \"{}\" result:\n\n{}\n\nUse this to answer the user's question.",
                                     mcp_tool_name, result
                                 )
+                                    }
+                                    Err(e) => {
+                                        info!(
+                                            "Agent router: MCP tool {} failed: {}",
+                                            mcp_tool_name, e
+                                        );
+                                        format!("MCP tool \"{}\" failed: {}. Answer the user without this result.", mcp_tool_name, e)
+                                    }
+                                }
                             }
-                            Err(e) => {
-                                info!("Agent router: MCP tool {} failed: {}", mcp_tool_name, e);
-                                format!("MCP tool \"{}\" failed: {}. Answer the user without this result.", mcp_tool_name, e)
+                            None => {
+                                info!("Agent router: MCP not configured (no MCP_SERVER_URL)");
+                                "MCP is not configured (set MCP_SERVER_URL in env or .config.env). Answer without using MCP.".to_string()
                             }
                         }
                     }
-                    None => {
-                        info!("Agent router: MCP not configured (no MCP_SERVER_URL)");
-                        "MCP is not configured (set MCP_SERVER_URL in env or .config.env). Answer without using MCP.".to_string()
-                    }
-                }
-            }
-            "CURSOR_AGENT" => {
-                if !crate::commands::cursor_agent::is_cursor_agent_available() {
-                    "CURSOR_AGENT is not available (cursor-agent CLI not found on PATH). Answer without it.".to_string()
-                } else {
-                    let prompt = arg.trim().to_string();
-                    if prompt.is_empty() {
-                        "CURSOR_AGENT requires a prompt: CURSOR_AGENT: <detailed coding task>".to_string()
-                    } else {
-                        let preview: String = prompt.chars().take(80).collect();
-                        send_status(&format!("Running Cursor Agent: {}…", preview));
-                        info!("Agent router: CURSOR_AGENT running prompt ({} chars)", prompt.len());
-                        match tokio::task::spawn_blocking({
-                            let p = prompt.clone();
-                            move || crate::commands::cursor_agent::run_cursor_agent(&p)
-                        })
-                        .await
-                        .map_err(|e| format!("CURSOR_AGENT task: {}", e))
-                        .and_then(|r| r)
-                        {
-                            Ok(output) => {
-                                info!("Agent router: CURSOR_AGENT completed ({} chars output)", output.len());
-                                let truncated = if output.chars().count() > 4000 {
-                                    let half = 1800;
-                                    let start: String = output.chars().take(half).collect();
-                                    let end: String = output.chars().rev().take(half).collect::<String>().chars().rev().collect();
-                                    format!("{}...\n[truncated]\n...{}", start, end)
-                                } else {
-                                    output
-                                };
-                                format!(
+                    "CURSOR_AGENT" => {
+                        if !crate::commands::cursor_agent::is_cursor_agent_available() {
+                            "CURSOR_AGENT is not available (cursor-agent CLI not found on PATH). Answer without it.".to_string()
+                        } else {
+                            let prompt = arg.trim().to_string();
+                            if prompt.is_empty() {
+                                "CURSOR_AGENT requires a prompt: CURSOR_AGENT: <detailed coding task>".to_string()
+                            } else {
+                                let preview: String = prompt.chars().take(80).collect();
+                                send_status(&format!("Running Cursor Agent: {}…", preview));
+                                info!(
+                                    "Agent router: CURSOR_AGENT running prompt ({} chars)",
+                                    prompt.len()
+                                );
+                                match tokio::task::spawn_blocking({
+                                    let p = prompt.clone();
+                                    move || crate::commands::cursor_agent::run_cursor_agent(&p)
+                                })
+                                .await
+                                .map_err(|e| format!("CURSOR_AGENT task: {}", e))
+                                .and_then(|r| r)
+                                {
+                                    Ok(output) => {
+                                        info!("Agent router: CURSOR_AGENT completed ({} chars output)", output.len());
+                                        let truncated = if output.chars().count() > 4000 {
+                                            let half = 1800;
+                                            let start: String = output.chars().take(half).collect();
+                                            let end: String = output
+                                                .chars()
+                                                .rev()
+                                                .take(half)
+                                                .collect::<String>()
+                                                .chars()
+                                                .rev()
+                                                .collect();
+                                            format!("{}...\n[truncated]\n...{}", start, end)
+                                        } else {
+                                            output
+                                        };
+                                        format!(
                                     "Cursor Agent result:\n\n{}\n\nUse this to answer the user's question.",
                                     truncated
                                 )
-                            }
-                            Err(e) => {
-                                info!("Agent router: CURSOR_AGENT failed: {}", e);
-                                format!("CURSOR_AGENT failed: {}. Answer the user without this result.", e)
-                            }
-                        }
-                    }
-                }
-            }
-            "REDMINE_API" => {
-                let arg = arg.trim();
-                let (method, rest) = match arg.find(' ') {
-                    Some(i) => (arg[..i].trim().to_string(), arg[i..].trim()),
-                    None => ("GET".to_string(), arg),
-                };
-                let (path, body) = if let Some(idx) = rest.find(" {") {
-                    let (p, b) = rest.split_at(idx);
-                    (p.trim().to_string(), Some(b.trim().to_string()))
-                } else {
-                    (rest.to_string(), None)
-                };
-                if path.is_empty() {
-                    "REDMINE_API requires: REDMINE_API: GET /issues/1234.json?include=journals,attachments".to_string()
-                } else {
-                    send_status(&format!("Querying Redmine: {} {}", method, path));
-                    info!("Agent router: REDMINE_API {} {}", method, path);
-                    match crate::redmine::redmine_api_request(&method, &path, body.as_deref()).await {
-                        Ok(result) => {
-                            let mut msg = format!(
-                                "Redmine API result:\n\n{}\n\nUse this data to answer the user's question. Summarize the issue clearly: subject, description quality, what's missing, status, assignee, and key comments.",
-                                result
-                            );
-                            if method.to_uppercase() == "GET" {
-                                let id = path
-                                    .trim_start_matches('/')
-                                    .strip_prefix("issues/")
-                                    .map(|s| s.split(['.', '?']).next().unwrap_or("").to_string())
-                                    .unwrap_or_default();
-                                if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) {
-                                    msg.push_str(&format!(
-                                        "\n\nIf the user asked to **update** this ticket or **add a comment**, your next reply MUST be exactly one line: REDMINE_API: PUT /issues/{}.json {{\"issue\":{{\"notes\":\"<your comment text>\"}}}}. Do not reply with only a summary.",
-                                        id
-                                    ));
+                                    }
+                                    Err(e) => {
+                                        info!("Agent router: CURSOR_AGENT failed: {}", e);
+                                        format!("CURSOR_AGENT failed: {}. Answer the user without this result.", e)
+                                    }
                                 }
                             }
-                            msg
                         }
-                        Err(e) => format!("Redmine API failed: {}. Answer without this result.", e),
                     }
-                }
-            }
-            "MASTODON_POST" => {
-                let arg = arg.trim();
-                if arg.is_empty() {
-                    "MASTODON_POST requires text. Usage: MASTODON_POST: <text to post>. Optional visibility prefix: MASTODON_POST: unlisted: <text> (default: public).".to_string()
-                } else {
-                    let (visibility, text) = if let Some(rest) = arg.strip_prefix("unlisted:").or_else(|| arg.strip_prefix("unlisted ")) {
-                        ("unlisted", rest.trim())
-                    } else if let Some(rest) = arg.strip_prefix("private:").or_else(|| arg.strip_prefix("private ")) {
-                        ("private", rest.trim())
-                    } else if let Some(rest) = arg.strip_prefix("direct:").or_else(|| arg.strip_prefix("direct ")) {
-                        ("direct", rest.trim())
-                    } else if let Some(rest) = arg.strip_prefix("public:").or_else(|| arg.strip_prefix("public ")) {
-                        ("public", rest.trim())
-                    } else {
-                        ("public", arg)
-                    };
-                    send_status(&format!("Posting to Mastodon ({})…", visibility));
-                    info!("Agent router: MASTODON_POST visibility={} text={}", visibility, crate::logging::ellipse(text, 100));
-                    match mastodon_post(text, visibility).await {
-                        Ok(msg) => msg,
-                        Err(e) => format!("Mastodon post failed: {}", e),
-                    }
-                }
-            }
-            "MEMORY_APPEND" => {
-                let arg = arg.trim();
-                if arg.is_empty() {
-                    "MEMORY_APPEND requires content. Usage: MEMORY_APPEND: <lesson> or MEMORY_APPEND: agent:<slug-or-id> <lesson>".to_string()
-                } else {
-                    let (target, lesson) = if arg.to_lowercase().starts_with("agent:") {
-                        let rest = arg["agent:".len()..].trim();
-                        if let Some(space_idx) = rest.find(' ') {
-                            let (sel, content) = rest.split_at(space_idx);
-                            (Some(sel.trim().to_string()), content.trim().to_string())
+                    "REDMINE_API" => {
+                        let arg = arg.trim();
+                        let (method, rest) = match arg.find(' ') {
+                            Some(i) => (arg[..i].trim().to_string(), arg[i..].trim()),
+                            None => ("GET".to_string(), arg),
+                        };
+                        let (path, body) = if let Some(idx) = rest.find(" {") {
+                            let (p, b) = rest.split_at(idx);
+                            (p.trim().to_string(), Some(b.trim().to_string()))
                         } else {
-                            (None, arg.to_string())
-                        }
-                    } else {
-                        (None, arg.to_string())
-                    };
-                    let lesson_line = format!("- {}\n", lesson.trim_start_matches("- "));
-                    let result = if let Some(selector) = target {
-                        let agents = crate::agents::load_agents();
-                        if let Some(agent) = crate::agents::find_agent_by_id_or_name(&agents, &selector) {
-                            if let Some(dir) = crate::agents::get_agent_dir(&agent.id) {
-                                let path = dir.join("memory.md");
-                                append_to_file(&path, &lesson_line)
-                            } else {
-                                Err(format!("Agent directory not found for '{}'", selector))
+                            (rest.to_string(), None)
+                        };
+                        if path.is_empty() {
+                            "REDMINE_API requires: REDMINE_API: GET /issues/1234.json?include=journals,attachments".to_string()
+                        } else {
+                            send_status(&format!("Querying Redmine: {} {}", method, path));
+                            info!(
+                                "Agent router [{}]: REDMINE_API {} {}",
+                                request_id, method, path
+                            );
+                            match crate::redmine::redmine_api_request(
+                                &method,
+                                &path,
+                                body.as_deref(),
+                            )
+                            .await
+                            {
+                                Ok(result) => {
+                                    let mut msg = if path.contains("time_entries") {
+                                        format!(
+                                            "Redmine API result:\n\n{}\n\nUse this data to answer the user's question. Summarize the actual time-entry data only: totals, projects or tickets worked, missing data, and any clear next step.",
+                                            result
+                                        )
+                                    } else {
+                                        format!(
+                                            "Redmine API result:\n\n{}\n\nUse this data to answer the user's question. Summarize the issue clearly: subject, description quality, what's missing, status, assignee, and key comments.",
+                                            result
+                                        )
+                                    };
+                                    if method.to_uppercase() == "GET" {
+                                        if is_redmine_review_or_summarize_only(question) {
+                                            msg.push_str(
+                                        "\n\nThe user asked only to review/summarize. Do NOT update the ticket or add a comment. Reply with your summary and DONE: success.",
+                                    );
+                                        } else {
+                                            if path.contains("time_entries") {
+                                                msg.push_str(
+                                            "\n\nUse this data to answer. If the user asked for \"this month\", use from/to for the current month. If success criteria require JSON format, reply with valid JSON only (e.g. total hours, project breakdown).",
+                                        );
+                                            } else {
+                                                let id = path
+                                                    .trim_start_matches('/')
+                                                    .strip_prefix("issues/")
+                                                    .map(|s| {
+                                                        s.split(['.', '?'])
+                                                            .next()
+                                                            .unwrap_or("")
+                                                            .to_string()
+                                                    })
+                                                    .unwrap_or_default();
+                                                if !id.is_empty()
+                                                    && id.chars().all(|c| c.is_ascii_digit())
+                                                {
+                                                    msg.push_str(&format!(
+                                                "\n\nIf the user asked to **update** this ticket or **add a comment**, your next reply MUST be exactly one line: REDMINE_API: PUT /issues/{}.json {{\"issue\":{{\"notes\":\"<your comment text>\"}}}}. Do not reply with only a summary.",
+                                                id
+                                            ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    msg
+                                }
+                                Err(e) => format!(
+                                    "Redmine API failed: {}. Answer without this result.",
+                                    e
+                                ),
                             }
+                        }
+                    }
+                    "MASTODON_POST" => {
+                        let arg = arg.trim();
+                        if arg.is_empty() {
+                            "MASTODON_POST requires text. Usage: MASTODON_POST: <text to post>. Optional visibility prefix: MASTODON_POST: unlisted: <text> (default: public).".to_string()
                         } else {
-                            Err(format!("Agent '{}' not found", selector))
+                            let (visibility, text) = if let Some(rest) = arg
+                                .strip_prefix("unlisted:")
+                                .or_else(|| arg.strip_prefix("unlisted "))
+                            {
+                                ("unlisted", rest.trim())
+                            } else if let Some(rest) = arg
+                                .strip_prefix("private:")
+                                .or_else(|| arg.strip_prefix("private "))
+                            {
+                                ("private", rest.trim())
+                            } else if let Some(rest) = arg
+                                .strip_prefix("direct:")
+                                .or_else(|| arg.strip_prefix("direct "))
+                            {
+                                ("direct", rest.trim())
+                            } else if let Some(rest) = arg
+                                .strip_prefix("public:")
+                                .or_else(|| arg.strip_prefix("public "))
+                            {
+                                ("public", rest.trim())
+                            } else {
+                                ("public", arg)
+                            };
+                            send_status(&format!("Posting to Mastodon ({})…", visibility));
+                            info!(
+                                "Agent router: MASTODON_POST visibility={} text={}",
+                                visibility,
+                                crate::logging::ellipse(text, 100)
+                            );
+                            match mastodon_post(text, visibility).await {
+                                Ok(msg) => msg,
+                                Err(e) => format!("Mastodon post failed: {}", e),
+                            }
                         }
-                    } else {
-                        let path = discord_reply_channel_id
-                            .map(crate::config::Config::memory_file_path_for_discord_channel)
-                            .unwrap_or_else(crate::config::Config::memory_file_path);
-                        append_to_file(&path, &lesson_line)
-                    };
-                    match result {
-                        Ok(path) => {
-                            info!("Agent router: MEMORY_APPEND wrote to {:?}", path);
-                            format!("Memory updated ({}). The lesson will be included in future prompts.", path.display())
+                    }
+                    "MEMORY_APPEND" => {
+                        let arg = arg.trim();
+                        if arg.is_empty() {
+                            "MEMORY_APPEND requires content. Usage: MEMORY_APPEND: <lesson> or MEMORY_APPEND: agent:<slug-or-id> <lesson>".to_string()
+                        } else {
+                            let (target, lesson) = if arg.to_lowercase().starts_with("agent:") {
+                                let rest = arg["agent:".len()..].trim();
+                                if let Some(space_idx) = rest.find(' ') {
+                                    let (sel, content) = rest.split_at(space_idx);
+                                    (Some(sel.trim().to_string()), content.trim().to_string())
+                                } else {
+                                    (None, arg.to_string())
+                                }
+                            } else {
+                                (None, arg.to_string())
+                            };
+                            let lesson_line = format!("- {}\n", lesson.trim_start_matches("- "));
+                            let result = if let Some(selector) = target {
+                                let agents = crate::agents::load_agents();
+                                if let Some(agent) =
+                                    crate::agents::find_agent_by_id_or_name(&agents, &selector)
+                                {
+                                    if let Some(dir) = crate::agents::get_agent_dir(&agent.id) {
+                                        let path = dir.join("memory.md");
+                                        append_to_file(&path, &lesson_line)
+                                    } else {
+                                        Err(format!("Agent directory not found for '{}'", selector))
+                                    }
+                                } else {
+                                    Err(format!("Agent '{}' not found", selector))
+                                }
+                            } else {
+                                let path = discord_reply_channel_id
+                                    .map(
+                                        crate::config::Config::memory_file_path_for_discord_channel,
+                                    )
+                                    .unwrap_or_else(crate::config::Config::memory_file_path);
+                                append_to_file(&path, &lesson_line)
+                            };
+                            match result {
+                                Ok(path) => {
+                                    info!("Agent router: MEMORY_APPEND wrote to {:?}", path);
+                                    format!("Memory updated ({}). The lesson will be included in future prompts.", path.display())
+                                }
+                                Err(e) => {
+                                    info!("Agent router: MEMORY_APPEND failed: {}", e);
+                                    format!("Failed to update memory: {}", e)
+                                }
+                            }
                         }
-                        Err(e) => {
-                            info!("Agent router: MEMORY_APPEND failed: {}", e);
-                            format!("Failed to update memory: {}", e)
-                        }
+                    }
+                    _ => continue,
+                };
+
+                let result_len = user_message.chars().count();
+                info!(
+                    "Agent router: tool {} completed, sending result back to Ollama ({} chars): {}",
+                    tool,
+                    result_len,
+                    log_content(&user_message)
+                );
+
+                if tool == "RUN_CMD" && user_message.starts_with("Here is the command output") {
+                    last_run_cmd_arg = Some(arg.clone());
+                } else if tool != "RUN_CMD" {
+                    last_run_cmd_arg = None;
+                }
+                // Only clear stored RUN_CMD output when we run something other than RUN_CMD or TASK_APPEND
+                // (so it stays set for the next TASK_APPEND after RUN_CMD).
+                if tool != "TASK_APPEND" && tool != "RUN_CMD" {
+                    last_run_cmd_raw_output = None;
+                }
+                if tool == "BROWSER_EXTRACT"
+                    && !user_message.is_empty()
+                    && !user_message.contains("BROWSER_EXTRACT failed")
+                {
+                    last_browser_extract = Some(user_message.clone());
+                }
+
+                let is_browser_error = if tool == "BROWSER_SCREENSHOT" {
+                    user_message.starts_with("Screenshot of current page failed")
+                        || user_message.starts_with("Screenshot task error")
+                } else if tool.starts_with("BROWSER_") {
+                    user_message.starts_with(&format!("{} failed", tool))
+                        || user_message.starts_with(&format!("{} task error", tool))
+                        || user_message.starts_with(&format!("{} HTTP fallback task error", tool))
+                        || user_message.starts_with(&format!("{} CDP retry task error", tool))
+                } else {
+                    false
+                };
+
+                tool_results.push(user_message);
+
+                if is_browser_error {
+                    info!(
+                        "Agent router: {} returned an error, aborting remaining tools in this turn",
+                        tool
+                    );
+                    break;
+                }
+            }
+
+            if done_claimed.is_some() {
+                exited_via_done = true;
+                break;
+            }
+            let user_message = tool_results.join("\n\n---\n\n");
+
+            messages.push(crate::ollama::ChatMessage {
+                role: "assistant".to_string(),
+                content: response_content.clone(),
+                images: None,
+            });
+            let tool_result_role = if user_message.starts_with("Here is the command output") {
+                "system"
+            } else {
+                "user"
+            };
+            messages.push(crate::ollama::ChatMessage {
+                role: tool_result_role.to_string(),
+                content: user_message,
+                images: None,
+            });
+
+            let follow_up = send_ollama_chat_messages(
+                messages.clone(),
+                model_override.clone(),
+                options_override.clone(),
+            )
+            .await?;
+            response_content = follow_up.message.content.clone();
+
+            // Fallback: if Ollama returned empty after a successful tool result, use the raw
+            // tool output directly so the user at least sees what the tool produced.
+            if response_content.trim().is_empty() {
+                if let Some(last_msg) = messages.last() {
+                    let raw = &last_msg.content;
+                    if raw.starts_with("Here is the command output")
+                        || raw.starts_with("Here is the page content")
+                        || raw.starts_with("MCP tool")
+                        || raw.starts_with("Search results")
+                        || raw.starts_with("Discord API")
+                    {
+                        info!("Agent router: Ollama returned empty after tool success — using raw tool output as response");
+                        // Strip the instruction suffix we appended for the model
+                        let cleaned = raw
+                            .replace("\n\nUse this to answer the user's question.", "")
+                            .replace("Here is the command output:\n\n", "")
+                            .replace("Here is the page content:\n\n", "");
+                        response_content = cleaned;
                     }
                 }
             }
-            _ => continue,
-        };
 
-        let result_len = user_message.chars().count();
-        info!("Agent router: tool {} completed, sending result back to Ollama ({} chars): {}", tool, result_len, log_content(&user_message));
-
-        if tool == "RUN_CMD" && user_message.starts_with("Here is the command output") {
-            last_run_cmd_arg = Some(arg.clone());
-        } else if tool != "RUN_CMD" {
-            last_run_cmd_arg = None;
-        }
-        // Only clear stored RUN_CMD output when we run something other than RUN_CMD or TASK_APPEND
-        // (so it stays set for the next TASK_APPEND after RUN_CMD).
-        if tool != "TASK_APPEND" && tool != "RUN_CMD" {
-            last_run_cmd_raw_output = None;
-        }
-        if tool == "BROWSER_EXTRACT" && !user_message.is_empty() && !user_message.contains("BROWSER_EXTRACT failed") {
-            last_browser_extract = Some(user_message.clone());
+            if tool_count >= max_tool_iterations {
+                info!(
+                    "Agent router: max tool iterations reached ({}), using last response as final",
+                    max_tool_iterations
+                );
+            }
         }
 
-        let is_browser_error = if tool == "BROWSER_SCREENSHOT" {
-            user_message.starts_with("Screenshot of current page failed") || user_message.starts_with("Screenshot task error")
-        } else if tool.starts_with("BROWSER_") {
-            user_message.starts_with(&format!("{} failed", tool))
-                || user_message.starts_with(&format!("{} task error", tool))
-                || user_message.starts_with(&format!("{} HTTP fallback task error", tool))
-                || user_message.starts_with(&format!("{} CDP retry task error", tool))
-        } else {
-            false
-        };
-
-        tool_results.push(user_message);
-
-        if is_browser_error {
-            info!("Agent router: {} returned an error, aborting remaining tools in this turn", tool);
-            break;
-        }
-        }
-
-        if done_claimed.is_some() {
-            exited_via_done = true;
-            break;
-        }
-        let user_message = tool_results.join("\n\n---\n\n");
-
-        messages.push(crate::ollama::ChatMessage {
-            role: "assistant".to_string(),
-            content: response_content.clone(),
-            images: None,
-        });
-        let tool_result_role = if user_message.starts_with("Here is the command output") {
-            "system"
-        } else {
-            "user"
-        };
-        messages.push(crate::ollama::ChatMessage {
-            role: tool_result_role.to_string(),
-            content: user_message,
-            images: None,
-        });
-
-        let follow_up = send_ollama_chat_messages(messages.clone(), model_override.clone(), options_override.clone()).await?;
-        response_content = follow_up.message.content.clone();
-
-        // Fallback: if Ollama returned empty after a successful tool result, use the raw
-        // tool output directly so the user at least sees what the tool produced.
-        if response_content.trim().is_empty() {
-            if let Some(last_msg) = messages.last() {
-                let raw = &last_msg.content;
-                if raw.starts_with("Here is the command output")
-                    || raw.starts_with("Here is the page content")
-                    || raw.starts_with("MCP tool")
-                    || raw.starts_with("Search results")
-                    || raw.starts_with("Discord API")
-                {
-                    info!("Agent router: Ollama returned empty after tool success — using raw tool output as response");
-                    // Strip the instruction suffix we appended for the model
-                    let cleaned = raw
-                        .replace("\n\nUse this to answer the user's question.", "")
-                        .replace("Here is the command output:\n\n", "")
-                        .replace("Here is the page content:\n\n", "");
-                    response_content = cleaned;
+        if exited_via_done {
+            let lines: Vec<&str> = response_content.lines().collect();
+            if let Some(last) = lines.last() {
+                let t = last.trim();
+                if t.to_uppercase().starts_with("DONE") && t.contains(':') {
+                    let keep = lines.len().saturating_sub(1);
+                    response_content = lines[..keep].join("\n").trim_end().to_string();
                 }
             }
         }
 
-        if tool_count >= max_tool_iterations {
-            info!("Agent router: max tool iterations reached ({}), using last response as final", max_tool_iterations);
-        }
-    }
+        let final_len = response_content.chars().count();
+        info!(
+            "Agent router: done after {} tool(s), returning final response ({} chars): {}",
+            tool_count,
+            final_len,
+            log_content(&response_content)
+        );
 
-    if exited_via_done {
-        let lines: Vec<&str> = response_content.lines().collect();
-        if let Some(last) = lines.last() {
-            let t = last.trim();
-            if t.to_uppercase().starts_with("DONE") && t.contains(':') {
-                let keep = lines.len().saturating_sub(1);
-                response_content = lines[..keep].join("\n").trim_end().to_string();
+        // When multiple agents participated, ensure the user sees the conversation: append a transcript if we have 2+ agent turns and the final reply is short (so we don't hide a long model summary).
+        if agent_conversation.len() >= 2 {
+            const SHORT_REPLY_THRESHOLD: usize = 500;
+            if response_content.chars().count() < SHORT_REPLY_THRESHOLD
+                || response_content.contains("Thank you for providing")
+                || response_content.contains("If you have any specific tasks")
+            {
+                let mut transcript = String::from("\n\n---\n**Conversation:**\n\n");
+                for (label, reply) in &agent_conversation {
+                    transcript.push_str("**");
+                    transcript.push_str(label);
+                    transcript.push_str(":**\n");
+                    transcript.push_str(reply);
+                    transcript.push_str("\n\n");
+                }
+                response_content.push_str(transcript.trim_end());
             }
         }
-    }
 
-    let final_len = response_content.chars().count();
-    info!("Agent router: done after {} tool(s), returning final response ({} chars): {}", tool_count, final_len, log_content(&response_content));
-
-    // When multiple agents participated, ensure the user sees the conversation: append a transcript if we have 2+ agent turns and the final reply is short (so we don't hide a long model summary).
-    if agent_conversation.len() >= 2 {
-        const SHORT_REPLY_THRESHOLD: usize = 500;
-        if response_content.chars().count() < SHORT_REPLY_THRESHOLD
-            || response_content.contains("Thank you for providing")
-            || response_content.contains("If you have any specific tasks")
-        {
-            let mut transcript = String::from("\n\n---\n**Conversation:**\n\n");
-            for (label, reply) in &agent_conversation {
-                transcript.push_str("**");
-                transcript.push_str(label);
-                transcript.push_str(":**\n");
-                transcript.push_str(reply);
-                transcript.push_str("\n\n");
-            }
-            response_content.push_str(transcript.trim_end());
-        }
-    }
-
-    // Log the full conversation (user question + assistant reply) into the task file when we touched a task this run.
-    // Skip when the "user" message is the task runner's prompt (synthetic), so we don't log runner turns as User/Assistant.
-    let is_runner_prompt = question.trim_start().starts_with("Current task file content:");
-    if let Some(ref path) = current_task_path {
-        if !is_runner_prompt {
-            if let Err(e) = crate::task::append_conversation_block(path, question, &response_content) {
-                info!("Agent router: could not append conversation to task file: {}", e);
+        // Log the full conversation (user question + assistant reply) into the task file when we touched a task this run.
+        // Skip when the "user" message is the task runner's prompt (synthetic), so we don't log runner turns as User/Assistant.
+        let is_runner_prompt = question
+            .trim_start()
+            .starts_with("Current task file content:");
+        if let Some(ref path) = current_task_path {
+            if !is_runner_prompt {
+                if let Err(e) =
+                    crate::task::append_conversation_block(path, question, &response_content)
+                {
+                    info!(
+                        "Agent router: could not append conversation to task file: {}",
+                        e
+                    );
+                } else {
+                    info!(
+                        "Agent router: appended conversation to task {}",
+                        crate::task::task_file_name(path)
+                    );
+                }
             } else {
-                info!("Agent router: appended conversation to task {}", crate::task::task_file_name(path));
+                info!(
+                    "Agent router: skipped appending conversation (task runner turn) for {}",
+                    crate::task::task_file_name(path)
+                );
             }
-        } else {
-            info!("Agent router: skipped appending conversation (task runner turn) for {}", crate::task::task_file_name(path));
         }
-    }
 
-    // Heuristic guard: screenshot requested but no attachment
-    let question_lower = question.to_lowercase();
-    let plan_mentions_screenshot = recommendation.to_uppercase().contains("BROWSER_SCREENSHOT");
-    let user_asked_screenshot = question_lower.contains("screenshot");
-    if (user_asked_screenshot || plan_mentions_screenshot) && attachment_paths.is_empty() {
-        response_content.push_str("\n\nNote: A screenshot was requested but none was attached.");
-        info!("Agent router: heuristic guard — screenshot requested but no attachment, appended note");
-    }
+        // Heuristic guard: screenshot requested but no attachment
+        let plan_mentions_screenshot = recommendation.to_uppercase().contains("BROWSER_SCREENSHOT");
+        let user_asked_screenshot = user_explicitly_asked_for_screenshot(question);
+        if (user_asked_screenshot || plan_mentions_screenshot) && attachment_paths.is_empty() {
+            response_content
+                .push_str("\n\nNote: A screenshot was requested but none was attached.");
+            info!("Agent router: heuristic guard — screenshot requested but no attachment, appended note");
+        }
 
-    // Completion verification: one short Ollama call; if not satisfied, retry once (A2) or append disclaimer
-    let criteria_count = success_criteria.as_ref().map(|c| c.len()).unwrap_or(0);
-    info!(
-        "Agent router: running completion verification ({} criteria, {} attachment(s))",
-        criteria_count,
-        attachment_paths.len()
-    );
-    match verify_completion(
-        question,
-        &response_content,
-        &attachment_paths,
-        success_criteria.as_deref(),
-        last_browser_extract.as_deref(),
-        model_override.clone(),
-        options_override.clone(),
-    )
-    .await
-    {
-        Ok((false, reason)) => {
-            let memory_snippet = search_memory_for_request(question, reason.as_deref(), discord_reply_channel_id);
-            if retry_on_verification_no {
-                let retry_base = reason
+        // Completion verification: one short Ollama call; if not satisfied, retry once (A2) or append disclaimer
+        let criteria_count = success_criteria.as_ref().map(|c| c.len()).unwrap_or(0);
+        info!(
+            "Agent router [{}]: running completion verification ({} criteria, {} attachment(s))",
+            request_id,
+            criteria_count,
+            attachment_paths.len()
+        );
+        match verify_completion(
+            question,
+            &response_content,
+            &attachment_paths,
+            success_criteria.as_deref(),
+            last_browser_extract.as_deref(),
+            model_override.clone(),
+            options_override.clone(),
+        )
+        .await
+        {
+            Ok((false, reason)) => {
+                // Use only the user's question for memory search — not the verification reason.
+                // The reason contains generic words ("request", "verified", "assistant", "tools") that
+                // match unrelated memory (e.g. GitLab/Redmine) and confuse the retry.
+                let memory_snippet =
+                    search_memory_for_request(question, None, discord_reply_channel_id);
+                if retry_on_verification_no {
+                    let retry_base = reason
                     .as_deref()
                     .map(|r| format!("Verification said we didn't fully complete: {}. Complete the remaining steps now, then reply.", r.trim()))
                     .unwrap_or_else(|| "Verification said we didn't fully complete. Complete the remaining steps now, then reply.".to_string());
-                let retry_question = if let Some(ref from_memory) = memory_snippet {
-                    format!("From memory (possibly relevant):\n{}\n\n{}", from_memory, retry_base)
-                } else {
-                    retry_base
-                };
-                info!("Agent router: verification said not satisfied, retrying once with: {}...", retry_question.chars().take(60).collect::<String>());
-                let mut updated_history: Vec<crate::ollama::ChatMessage> = conversation_history.clone();
-                updated_history.push(crate::ollama::ChatMessage {
-                    role: "user".to_string(),
-                    content: question.to_string(),
-                    images: None,
-                });
-                updated_history.push(crate::ollama::ChatMessage {
-                    role: "assistant".to_string(),
-                    content: response_content.clone(),
-                    images: None,
-                });
-                return answer_with_ollama_and_fetch(
-                    retry_question.as_str(),
-                    status_tx,
-                    discord_reply_channel_id,
-                    discord_user_id,
-                    discord_user_name,
-                    model_override,
-                    options_override,
-                    skill_content,
-                    agent_override,
-                    allow_schedule,
-                    Some(updated_history),
-                    escalation,
-                    false, // don't retry again
-                    from_remote,
-                    None, // don't re-send attachment images on retry
-                )
-                .await;
-            }
-            let reason_preview = reason.as_deref().map(|r| r.chars().take(80).collect::<String>()).unwrap_or_default();
-            let disclaimer = reason
-                .map(|r| format!("\n\nNote: We may not have fully met your request: {}.", r.trim()))
-                .unwrap_or_else(|| "\n\nNote: We may not have fully met your request.".to_string());
-            response_content.push_str(&disclaimer);
-            // Do not append "From past sessions" memory dump to the user-visible reply — it creates a messy mix and confuses Discord users.
-            if let Some(ref from_memory) = memory_snippet {
-                info!("Agent router: memory search found {} chars (not appended to reply)", from_memory.len());
-            }
-            info!(
+                    // When verifier said no and the reason mentions screenshots/attachments, steer the
+                    // model to reply with a summary and DONE — do not invoke AGENT: orchestrator or
+                    // create tasks, which can lead to unrelated actions (e.g. organize ~/tmp).
+                    let reason_lower = reason
+                        .as_deref()
+                        .map(|r| r.to_lowercase())
+                        .unwrap_or_default();
+                    let reason_about_attachments = reason_lower.contains("screenshot")
+                        || reason_lower.contains("attachment")
+                        || (reason_lower.contains("missing")
+                            && (reason_lower.contains("upload") || reason_lower.contains("sent")));
+                    let reason_about_time_or_data = reason_lower.contains("time")
+                        || reason_lower.contains("actual data")
+                        || reason_lower.contains("spent time")
+                        || reason_lower.contains("project parameter")
+                        || (reason_lower.contains("missing")
+                            && (reason_lower.contains("data")
+                                || reason_lower.contains("parameter")));
+                    let reason_about_json_format = reason_lower.contains("json format")
+                        || reason_lower.contains("not in json")
+                        || (reason_lower.contains("response") && reason_lower.contains("json"));
+                    let response_has_ticket_summary = response_content.len() > 150
+                        && (response_content.contains("Subject")
+                            || response_content.contains("Description")
+                            || response_content.contains("Status")
+                            || response_content.contains("Redmine"));
+                    let retry_base_with_hint = if is_redmine_review_or_summarize_only(question)
+                        && response_has_ticket_summary
+                    {
+                        "The request was only to review/summarize. A summary was already provided. Reply with a brief confirmation and DONE: success; do not update or close the ticket.".to_string()
+                    } else if reason_about_json_format {
+                        format!(
+                        "Success criteria require a response in JSON format. Reply with **valid JSON only** (e.g. total hours, project breakdown, user contributions); do not reply with prose or markdown lists.\n\n{}",
+                        retry_base
+                    )
+                    } else if reason_about_time_or_data
+                        && (question.to_lowercase().contains("redmine")
+                            || question.to_lowercase().contains("time")
+                            || question.to_lowercase().contains("spent"))
+                    {
+                        format!(
+                        "Use the correct Redmine API for time entries: REDMINE_API: GET /time_entries.json with from= and to= for the **current month** (e.g. 2026-03-01..2026-03-31). Optionally include project_id= or user_id=me. Do not use /search.json for time entries. Then reply with the data or a clear summary.\n\n{}",
+                        retry_base
+                    )
+                    } else if !attachment_paths.is_empty() && reason_about_attachments {
+                        let n = attachment_paths.len();
+                        format!(
+                        "The app already attached {} file(s) to this reply. If the only missing item was screenshots/attachments, \
+                         reply with a brief summary of what was done and end with **DONE: success**. \
+                         Do not invoke AGENT: orchestrator and do not create new tasks.\n\n{}",
+                        n, retry_base
+                    )
+                    } else if attachment_paths.is_empty()
+                        && user_explicitly_asked_for_screenshot(question)
+                        && reason_lower.contains("screenshot")
+                    {
+                        format!(
+                        "Screenshots could not be attached to this reply. Reply with a brief summary of what was done (e.g. screenshot taken and saved), state that the app could not attach it to Discord, and end with **DONE: no**. \
+                         Do not invoke AGENT: orchestrator and do not create new tasks.\n\n{}",
+                        retry_base
+                    )
+                    } else if reason_lower.contains("cookie")
+                        || (reason_lower.contains("consent") && reason_lower.contains("banner"))
+                    {
+                        format!(
+                        "Original request: \"{}\". Verification said the cookie consent banner was not addressed. A screenshot may already have been taken. Complete the remaining step: dismiss the cookie banner (BROWSER_CLICK on the consent button using the Elements list) then BROWSER_SCREENSHOT: current if needed, or reply with a brief summary and **DONE: no** if the browser session is no longer available.\n\n{}",
+                        question.trim(),
+                        retry_base
+                    )
+                    } else {
+                        retry_base
+                    };
+                    let retry_question = if let Some(ref from_memory) = memory_snippet {
+                        format!(
+                            "From memory (possibly relevant):\n{}\n\n{}",
+                            from_memory, retry_base_with_hint
+                        )
+                    } else {
+                        retry_base_with_hint
+                    };
+                    info!("Agent router [{}]: verification said not satisfied, retrying once with: {}...", request_id, retry_question.chars().take(60).collect::<String>());
+                    let mut updated_history: Vec<crate::ollama::ChatMessage> =
+                        conversation_history.clone();
+                    updated_history.push(crate::ollama::ChatMessage {
+                        role: "user".to_string(),
+                        content: question.to_string(),
+                        images: None,
+                    });
+                    updated_history.push(crate::ollama::ChatMessage {
+                        role: "assistant".to_string(),
+                        content: response_content.clone(),
+                        images: None,
+                    });
+                    let pass_intermediate =
+                        discord_reply_channel_id.map(|_| response_content.clone());
+                    return answer_with_ollama_and_fetch(
+                        retry_question.as_str(),
+                        status_tx,
+                        discord_reply_channel_id,
+                        discord_user_id,
+                        discord_user_name,
+                        model_override,
+                        options_override,
+                        skill_content,
+                        agent_override,
+                        allow_schedule,
+                        Some(updated_history),
+                        escalation,
+                        false, // don't retry again
+                        from_remote,
+                        None,              // don't re-send attachment images on retry
+                        pass_intermediate, // format reply as Intermediate + Final when returning to Discord
+                        true,              // is_verification_retry: keep context, skip NEW_TOPIC
+                    )
+                    .await;
+                }
+                let reason_preview = reason
+                    .as_deref()
+                    .map(|r| r.chars().take(80).collect::<String>())
+                    .unwrap_or_default();
+                let disclaimer = reason
+                    .map(|r| {
+                        format!(
+                            "\n\nNote: We may not have fully met your request: {}.",
+                            r.trim()
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        "\n\nNote: We may not have fully met your request.".to_string()
+                    });
+                response_content.push_str(&disclaimer);
+                // Do not append "From past sessions" memory dump to the user-visible reply — it creates a messy mix and confuses Discord users.
+                if let Some(ref from_memory) = memory_snippet {
+                    info!(
+                        "Agent router: memory search found {} chars (not appended to reply)",
+                        from_memory.len()
+                    );
+                }
+                info!(
                 "Agent router: verification said not satisfied, appended disclaimer (reason: {}...)",
                 reason_preview
             );
+            }
+            Ok((true, _)) => {
+                info!("Agent router: verification passed (satisfied)");
+            }
+            Err(e) => {
+                tracing::debug!("Agent router: verification failed (ignored): {}", e);
+            }
         }
-        Ok((true, _)) => {
-            info!("Agent router: verification passed (satisfied)");
-        }
-        Err(e) => {
-            tracing::debug!("Agent router: verification failed (ignored): {}", e);
-        }
-    }
 
-    Ok(OllamaReply {
-        text: response_content,
-        attachment_paths,
-    })
+        let final_text = if discord_reply_channel_id.is_some()
+            && discord_intermediate.as_ref().is_some()
+        {
+            let inter = discord_intermediate.as_ref().unwrap();
+            let same = is_final_same_as_intermediate(inter, &response_content);
+            if same {
+                format!(
+                "--- Intermediate answer:\n\n{}\n\n---\n\nFinal answer is the same as intermediate.",
+                inter.trim()
+            )
+            } else {
+                format!(
+                    "--- Intermediate answer:\n\n{}\n\n---\n\n--- Final answer:\n\n{}\n\n---",
+                    inter.trim(),
+                    response_content.trim()
+                )
+            }
+        } else {
+            response_content
+        };
+
+        Ok(OllamaReply {
+            text: final_text,
+            attachment_paths,
+        })
     })
 }
 
@@ -4013,7 +5217,9 @@ fn parse_schedule_arg(arg: &str) -> Result<ScheduleParseResult, String> {
         if n_str.is_empty() {
             return Err("expected a number after 'every' (e.g. every 5 minutes)".to_string());
         }
-        let n: u64 = n_str.parse().map_err(|_| "expected integer after 'every'".to_string())?;
+        let n: u64 = n_str
+            .parse()
+            .map_err(|_| "expected integer after 'every'".to_string())?;
         if n == 0 {
             return Err("interval must be at least 1 minute".to_string());
         }
@@ -4030,7 +5236,10 @@ fn parse_schedule_arg(arg: &str) -> Result<ScheduleParseResult, String> {
         let after_at = after_at.trim_start();
         let tokens: Vec<&str> = after_at.split_whitespace().collect();
         if tokens.is_empty() {
-            return Err("at requires a datetime and task (e.g. at 2025-02-09T05:00:00 Remind me)".to_string());
+            return Err(
+                "at requires a datetime and task (e.g. at 2025-02-09T05:00:00 Remind me)"
+                    .to_string(),
+            );
         }
         // Try first token as ISO (2025-02-09T05:00:00)
         if tokens[0].contains('T') {
@@ -4053,7 +5262,10 @@ fn parse_schedule_arg(arg: &str) -> Result<ScheduleParseResult, String> {
                 return Ok(ScheduleParseResult::At { at_str: dt, task });
             }
         }
-        return Err("invalid at datetime: use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM (local time)".to_string());
+        return Err(
+            "invalid at datetime: use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM (local time)"
+                .to_string(),
+        );
     }
 
     // 3. Raw cron: first 5 or 6 space-separated tokens, then task
@@ -4086,18 +5298,35 @@ fn parse_at_datetime(s: &str) -> Result<String, String> {
     let dt = chrono::DateTime::parse_from_rfc3339(s)
         .map(|dt| dt.with_timezone(&Local))
         .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
-                .map(|n| Local.from_local_datetime(&n).single().unwrap_or_else(|| n.and_utc().with_timezone(&Local)))
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").map(|n| {
+                Local
+                    .from_local_datetime(&n)
+                    .single()
+                    .unwrap_or_else(|| n.and_utc().with_timezone(&Local))
+            })
         })
         .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-                .map(|n| Local.from_local_datetime(&n).single().unwrap_or_else(|| n.and_utc().with_timezone(&Local)))
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").map(|n| {
+                Local
+                    .from_local_datetime(&n)
+                    .single()
+                    .unwrap_or_else(|| n.and_utc().with_timezone(&Local))
+            })
         })
         .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M")
-                .map(|n| Local.from_local_datetime(&n).single().unwrap_or_else(|| n.and_utc().with_timezone(&Local)))
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").map(|n| {
+                Local
+                    .from_local_datetime(&n)
+                    .single()
+                    .unwrap_or_else(|| n.and_utc().with_timezone(&Local))
+            })
         })
-        .map_err(|e| format!("invalid datetime: {} (use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM)", e))?;
+        .map_err(|e| {
+            format!(
+                "invalid datetime: {} (use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM)",
+                e
+            )
+        })?;
     let now = Local::now();
     if dt < now {
         return Err("datetime must be in the future".to_string());
@@ -4139,20 +5368,64 @@ fn line_starts_with_tool_prefix(line: &str) -> bool {
 
 /// Parse one tool starting at the given line index. Returns (tool_name, argument) and the next line index to scan.
 fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String, String), usize)> {
-    let prefixes = ["FETCH_URL:", "BRAVE_SEARCH:", "BROWSER_SCREENSHOT:", "BROWSER_NAVIGATE:", "BROWSER_CLICK:", "BROWSER_INPUT:", "BROWSER_SCROLL:", "BROWSER_EXTRACT:", "BROWSER_SEARCH_PAGE:", "PERPLEXITY_SEARCH:", "RUN_JS:", "SKILL:", "AGENT:", "RUN_CMD:", "SCHEDULE:", "SCHEDULER:", "REMOVE_SCHEDULE:", "LIST_SCHEDULES:", "TASK_LIST:", "TASK_SHOW:", "TASK_APPEND:", "TASK_STATUS:", "TASK_CREATE:", "TASK_ASSIGN:", "TASK_SLEEP:", "OLLAMA_API:", "PYTHON_SCRIPT:", "MCP:", "DISCORD_API:", "CURSOR_AGENT:", "REDMINE_API:", "MEMORY_APPEND:", "MASTODON_POST:", "DONE:"];
+    let prefixes = [
+        "FETCH_URL:",
+        "BRAVE_SEARCH:",
+        "BROWSER_SCREENSHOT:",
+        "BROWSER_NAVIGATE:",
+        "BROWSER_CLICK:",
+        "BROWSER_INPUT:",
+        "BROWSER_SCROLL:",
+        "BROWSER_EXTRACT:",
+        "BROWSER_SEARCH_PAGE:",
+        "PERPLEXITY_SEARCH:",
+        "RUN_JS:",
+        "SKILL:",
+        "AGENT:",
+        "RUN_CMD:",
+        "SCHEDULE:",
+        "SCHEDULER:",
+        "REMOVE_SCHEDULE:",
+        "LIST_SCHEDULES:",
+        "TASK_LIST:",
+        "TASK_SHOW:",
+        "TASK_APPEND:",
+        "TASK_STATUS:",
+        "TASK_CREATE:",
+        "TASK_ASSIGN:",
+        "TASK_SLEEP:",
+        "OLLAMA_API:",
+        "PYTHON_SCRIPT:",
+        "MCP:",
+        "DISCORD_API:",
+        "CURSOR_AGENT:",
+        "REDMINE_API:",
+        "MEMORY_APPEND:",
+        "MASTODON_POST:",
+        "DONE:",
+    ];
     let line = lines.get(line_index)?.trim();
     if line.eq_ignore_ascii_case("TASK_LIST") {
         return Some((("TASK_LIST".to_string(), String::new()), line_index + 1));
     }
     if line.eq_ignore_ascii_case("LIST_SCHEDULES") {
-        return Some((("LIST_SCHEDULES".to_string(), String::new()), line_index + 1));
+        return Some((
+            ("LIST_SCHEDULES".to_string(), String::new()),
+            line_index + 1,
+        ));
     }
     // Lenient: model sometimes replies with bare tool name (no colon), e.g. "BROWSER_EXTRACT" or "BROWSER_SCREENSHOT"
     if line.eq_ignore_ascii_case("BROWSER_EXTRACT") {
-        return Some((("BROWSER_EXTRACT".to_string(), String::new()), line_index + 1));
+        return Some((
+            ("BROWSER_EXTRACT".to_string(), String::new()),
+            line_index + 1,
+        ));
     }
     if line.eq_ignore_ascii_case("BROWSER_SCREENSHOT") {
-        return Some((("BROWSER_SCREENSHOT".to_string(), "current".to_string()), line_index + 1));
+        return Some((
+            ("BROWSER_SCREENSHOT".to_string(), "current".to_string()),
+            line_index + 1,
+        ));
     }
     let mut search = line;
     loop {
@@ -4175,7 +5448,14 @@ fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String,
     for prefix in prefixes {
         if search.to_uppercase().starts_with(prefix) {
             let mut arg = search[prefix.len()..].trim().to_string();
-            if arg.is_empty() && prefix != "TASK_LIST:" && prefix != "TASK_SHOW:" && prefix != "LIST_SCHEDULES:" && prefix != "BROWSER_EXTRACT:" && prefix != "BROWSER_SCREENSHOT:" && prefix != "DONE:" {
+            if arg.is_empty()
+                && prefix != "TASK_LIST:"
+                && prefix != "TASK_SHOW:"
+                && prefix != "LIST_SCHEDULES:"
+                && prefix != "BROWSER_EXTRACT:"
+                && prefix != "BROWSER_SCREENSHOT:"
+                && prefix != "DONE:"
+            {
                 continue;
             }
             let tool_name = prefix.trim_end_matches(':');
@@ -4185,16 +5465,30 @@ fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String,
                 tool_name.to_string()
             };
             let next_line = if tool_name == "TASK_APPEND" || tool_name == "TASK_CREATE" {
-                line_index + 1 + lines[line_index + 1..].iter().take_while(|l| !line_starts_with_tool_prefix(l)).count()
+                line_index
+                    + 1
+                    + lines[line_index + 1..]
+                        .iter()
+                        .take_while(|l| !line_starts_with_tool_prefix(l))
+                        .count()
             } else {
                 line_index + 1
             };
-            if tool_name == "FETCH_URL" || tool_name == "BRAVE_SEARCH" || tool_name == "BROWSER_SCREENSHOT" || tool_name == "BROWSER_NAVIGATE" || tool_name == "BROWSER_SEARCH_PAGE" || tool_name == "PERPLEXITY_SEARCH" {
+            if tool_name == "FETCH_URL"
+                || tool_name == "BRAVE_SEARCH"
+                || tool_name == "BROWSER_SCREENSHOT"
+                || tool_name == "BROWSER_NAVIGATE"
+                || tool_name == "BROWSER_SEARCH_PAGE"
+                || tool_name == "PERPLEXITY_SEARCH"
+            {
                 if let Some(idx) = arg.find(';') {
                     arg = arg[..idx].trim().to_string();
                 }
             }
-            if tool_name == "FETCH_URL" || tool_name == "BROWSER_SCREENSHOT" || tool_name == "BROWSER_NAVIGATE" {
+            if tool_name == "FETCH_URL"
+                || tool_name == "BROWSER_SCREENSHOT"
+                || tool_name == "BROWSER_NAVIGATE"
+            {
                 if let Some(first_space) = arg.find(' ') {
                     arg = arg[..first_space].trim().to_string();
                 }
@@ -4223,7 +5517,14 @@ fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String,
             if tool_name == "PERPLEXITY_SEARCH" || tool_name == "BRAVE_SEARCH" {
                 arg = truncate_search_query_arg(&arg);
             }
-            if !arg.is_empty() || tool_name == "TASK_LIST" || tool_name == "TASK_SHOW" || tool_name == "LIST_SCHEDULES" || tool_name == "BROWSER_EXTRACT" || tool_name == "BROWSER_SCREENSHOT" || (tool_name == "TASK_SLEEP" && !arg.is_empty()) {
+            if !arg.is_empty()
+                || tool_name == "TASK_LIST"
+                || tool_name == "TASK_SHOW"
+                || tool_name == "LIST_SCHEDULES"
+                || tool_name == "BROWSER_EXTRACT"
+                || tool_name == "BROWSER_SCREENSHOT"
+                || (tool_name == "TASK_SLEEP" && !arg.is_empty())
+            {
                 return Some(((tool_name, arg), next_line));
             }
         }
@@ -4239,6 +5540,32 @@ fn wants_visible_browser(question: &str) -> bool {
         || q.contains("show me a browser")
         || q.contains("i want to see the browser")
         || q.contains("open a window")
+}
+
+/// Build the short Perplexity result summary for verbose Discord (respects max_chars).
+pub(crate) fn build_perplexity_verbose_summary(
+    n: usize,
+    titles: String,
+    max_chars: usize,
+) -> String {
+    if n == 0 {
+        "Perplexity: 0 results.".to_string()
+    } else if titles.trim().is_empty() {
+        format!("Perplexity: {} result(s) received.", n)
+    } else {
+        let raw = format!("Perplexity: {} result(s) — {}", n, titles.trim());
+        if raw.chars().count() > max_chars {
+            format!(
+                "{}…",
+                raw.chars()
+                    .take(max_chars - 1)
+                    .collect::<String>()
+                    .trim_end()
+            )
+        } else {
+            raw
+        }
+    }
 }
 
 /// For PERPLEXITY_SEARCH/BRAVE_SEARCH, the recommendation often contains the whole plan after the query (e.g. "spanish newspapers then BROWSER_NAVIGATE: ..."). Truncate to just the search query so the API gets a clean query.
@@ -4259,7 +5586,11 @@ fn truncate_search_query_arg(arg: &str) -> String {
     .filter_map(|sep| arg_lower.find(sep).map(|i| i))
     .min();
     let base = earliest.map(|i| arg[..i].trim()).unwrap_or(arg);
-    base.chars().take(150).collect::<String>().trim().to_string()
+    base.chars()
+        .take(150)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// Parse one of FETCH_URL:, BRAVE_SEARCH:, RUN_JS:, SCHEDULE:/SCHEDULER:, MCP:, PYTHON_SCRIPT: from assistant content (first match only).
@@ -4292,8 +5623,39 @@ fn parse_all_tools_from_response(content: &str) -> Vec<(String, String)> {
 
 /// Tool line prefixes that indicate start of another tool (used to stop script body extraction).
 const TOOL_LINE_PREFIXES: &[&str] = &[
-    "FETCH_URL:", "BRAVE_SEARCH:", "BROWSER_SCREENSHOT:", "BROWSER_NAVIGATE:", "BROWSER_CLICK:", "BROWSER_INPUT:", "BROWSER_SCROLL:", "BROWSER_EXTRACT:", "BROWSER_SEARCH_PAGE:", "PERPLEXITY_SEARCH:", "RUN_JS:", "SKILL:", "AGENT:", "RUN_CMD:", "SCHEDULE:", "SCHEDULER:", "REMOVE_SCHEDULE:", "LIST_SCHEDULES:",
-    "TASK_LIST:", "TASK_SHOW:", "TASK_APPEND:", "TASK_STATUS:", "TASK_CREATE:", "TASK_ASSIGN:", "TASK_SLEEP:", "OLLAMA_API:", "MCP:", "PYTHON_SCRIPT:", "DISCORD_API:", "CURSOR_AGENT:", "REDMINE_API:", "MEMORY_APPEND:", "DONE:",
+    "FETCH_URL:",
+    "BRAVE_SEARCH:",
+    "BROWSER_SCREENSHOT:",
+    "BROWSER_NAVIGATE:",
+    "BROWSER_CLICK:",
+    "BROWSER_INPUT:",
+    "BROWSER_SCROLL:",
+    "BROWSER_EXTRACT:",
+    "BROWSER_SEARCH_PAGE:",
+    "PERPLEXITY_SEARCH:",
+    "RUN_JS:",
+    "SKILL:",
+    "AGENT:",
+    "RUN_CMD:",
+    "SCHEDULE:",
+    "SCHEDULER:",
+    "REMOVE_SCHEDULE:",
+    "LIST_SCHEDULES:",
+    "TASK_LIST:",
+    "TASK_SHOW:",
+    "TASK_APPEND:",
+    "TASK_STATUS:",
+    "TASK_CREATE:",
+    "TASK_ASSIGN:",
+    "TASK_SLEEP:",
+    "OLLAMA_API:",
+    "MCP:",
+    "PYTHON_SCRIPT:",
+    "DISCORD_API:",
+    "CURSOR_AGENT:",
+    "REDMINE_API:",
+    "MEMORY_APPEND:",
+    "DONE:",
 ];
 
 /// Parse PYTHON_SCRIPT from full response: (id, topic, script_body).
@@ -4335,7 +5697,10 @@ fn parse_python_script_from_response(content: &str) -> Option<(String, String, S
     }
     // Also try ``` (no "python") for flexibility
     if let Some(start) = content.find("```") {
-        let after_newline = content[start + 3..].find('\n').map(|i| start + 3 + i + 1).unwrap_or(start + 3);
+        let after_newline = content[start + 3..]
+            .find('\n')
+            .map(|i| start + 3 + i + 1)
+            .unwrap_or(start + 3);
         let rest = &content[after_newline..];
         if let Some(close) = rest.find("```") {
             let body = rest[..close].trim().to_string();
@@ -4358,7 +5723,9 @@ fn parse_python_script_from_response(content: &str) -> Option<(String, String, S
             body_lines.push(trimmed);
             continue;
         }
-        let is_other_tool = TOOL_LINE_PREFIXES.iter().any(|p| trimmed.to_uppercase().starts_with(p));
+        let is_other_tool = TOOL_LINE_PREFIXES
+            .iter()
+            .any(|p| trimmed.to_uppercase().starts_with(p));
         if is_other_tool {
             break;
         }
@@ -4374,38 +5741,44 @@ fn parse_python_script_from_response(content: &str) -> Option<(String, String, S
 /// List available Ollama models (async, non-blocking)
 #[tauri::command]
 pub async fn list_ollama_models() -> Result<Vec<String>, String> {
-    use tracing::{debug, info};
     use serde_json;
-    
+    use tracing::{debug, info};
+
     info!("Ollama: Listing available models...");
-    
+
     // Clone client data to avoid holding lock across await
     let (endpoint, api_key) = {
-        let client_guard = get_ollama_client().lock()
-            .map_err(|e| e.to_string())?;
+        let client_guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
 
-        let client = client_guard.as_ref()
+        let client = client_guard
+            .as_ref()
             .ok_or_else(|| "Ollama not configured".to_string())?;
-        
-        (client.config.endpoint.clone(), client.config.api_key.clone())
+
+        (
+            client.config.endpoint.clone(),
+            client.config.api_key.clone(),
+        )
     };
-    
+
     // Create a temporary client for this request (non-blocking)
     let temp_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-    
+
     let url = format!("{}/api/tags", endpoint);
     info!("Ollama: Using endpoint: {}", url);
     let mut request = temp_client.get(&url);
-    
+
     // Add API key if configured
     if let Some(keychain_account) = &api_key {
         if let Ok(Some(api_key_value)) = crate::security::get_credential(keychain_account) {
             let masked = crate::security::mask_credential(&api_key_value);
             request = request.header("Authorization", format!("Bearer {}", api_key_value));
-            debug!("Ollama: Using API key for model listing (masked: {})", masked);
+            debug!(
+                "Ollama: Using API key for model listing (masked: {})",
+                masked
+            );
         }
     }
 
@@ -4422,18 +5795,25 @@ pub async fn list_ollama_models() -> Result<Vec<String>, String> {
             debug!("Ollama: Failed to parse models response: {}", e);
             format!("Failed to parse models response: {}", e)
         })?;
-    
+
     // Log raw response JSON
     let response_json = serde_json::to_string_pretty(&response)
         .unwrap_or_else(|_| "Failed to serialize response".to_string());
-    info!("Ollama: Received models list HTTP response JSON:\n{}", response_json);
-    
+    info!(
+        "Ollama: Received models list HTTP response JSON:\n{}",
+        response_json
+    );
+
     let models: Vec<String> = response
         .get("models")
         .and_then(|m| m.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .filter_map(|m| {
+                    m.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -4447,14 +5827,13 @@ pub async fn list_ollama_models() -> Result<Vec<String>, String> {
 pub async fn list_ollama_models_full() -> Result<ListResponse, String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
-    client
-        .list_models_full()
-        .await
-        .map_err(|e| e.to_string())
+    client.list_models_full().await.map_err(|e| e.to_string())
 }
 
 /// Get Ollama server version (GET /api/version).
@@ -4462,7 +5841,9 @@ pub async fn list_ollama_models_full() -> Result<ListResponse, String> {
 pub async fn get_ollama_version() -> Result<VersionResponse, String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
@@ -4474,7 +5855,9 @@ pub async fn get_ollama_version() -> Result<VersionResponse, String> {
 pub async fn list_ollama_running_models() -> Result<PsResponse, String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
@@ -4489,7 +5872,9 @@ pub async fn list_ollama_running_models() -> Result<PsResponse, String> {
 pub async fn pull_ollama_model(model: String, stream: bool) -> Result<(), String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
@@ -4504,14 +5889,13 @@ pub async fn pull_ollama_model(model: String, stream: bool) -> Result<(), String
 pub async fn delete_ollama_model(model: String) -> Result<(), String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
-    client
-        .delete_model(&model)
-        .await
-        .map_err(|e| e.to_string())
+    client.delete_model(&model).await.map_err(|e| e.to_string())
 }
 
 /// Generate embeddings (POST /api/embed). Input can be a single string or array of strings.
@@ -4545,7 +5929,9 @@ pub async fn ollama_embeddings(
         .unwrap_or((None, None));
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
@@ -4560,14 +5946,13 @@ pub async fn ollama_embeddings(
 pub async fn unload_ollama_model(model: String) -> Result<(), String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
-    client
-        .unload_model(&model)
-        .await
-        .map_err(|e| e.to_string())
+    client.unload_model(&model).await.map_err(|e| e.to_string())
 }
 
 /// Load (warm) a model into memory. Optional keep_alive e.g. "5m".
@@ -4575,7 +5960,9 @@ pub async fn unload_ollama_model(model: String) -> Result<(), String> {
 pub async fn load_ollama_model(model: String, keep_alive: Option<String>) -> Result<(), String> {
     let config = {
         let guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
-        let client = guard.as_ref().ok_or_else(|| "Ollama not configured".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
         client.config.clone()
     };
     let client = OllamaClient::new(config).map_err(|e| e.to_string())?;
@@ -4601,7 +5988,7 @@ pub struct OllamaJsExecutionLog {
 #[tauri::command]
 pub fn log_ollama_js_execution(log: OllamaJsExecutionLog) -> Result<(), String> {
     use tracing::{error, info, warn};
-    
+
     info!("Ollama JS Execution: ========================================");
     info!("Ollama JS Execution: JavaScript code block detected and executed");
     info!("Ollama JS Execution: Code:\n{}", log.code);
@@ -4611,7 +5998,7 @@ pub fn log_ollama_js_execution(log: OllamaJsExecutionLog) -> Result<(), String> 
     info!("Ollama JS Execution: Result: {}", log.result);
     info!("Ollama JS Execution: ========================================");
     info!("Ollama JS Execution: Is undefined: {}", log.is_undefined);
-    
+
     if log.is_undefined {
         warn!("Ollama JS Execution: WARNING - Result is undefined");
         warn!("Ollama JS Execution: Executed code was:\n{}", log.code);
@@ -4621,7 +6008,7 @@ pub fn log_ollama_js_execution(log: OllamaJsExecutionLog) -> Result<(), String> 
         warn!("Ollama JS Execution:   - Code throws an error (check error details below)");
         warn!("Ollama JS Execution:   - Code is an async function that doesn't return a value");
     }
-    
+
     if !log.success {
         error!("Ollama JS Execution: ERROR - Code execution failed");
         if let Some(ref error_name) = log.error_name {
@@ -4634,9 +6021,9 @@ pub fn log_ollama_js_execution(log: OllamaJsExecutionLog) -> Result<(), String> 
             error!("Ollama JS Execution: Error stack:\n{}", error_stack);
         }
     }
-    
+
     info!("Ollama JS Execution: ========================================");
-    
+
     Ok(())
 }
 
@@ -4644,17 +6031,26 @@ pub fn log_ollama_js_execution(log: OllamaJsExecutionLog) -> Result<(), String> 
 #[tauri::command]
 pub fn log_ollama_js_check(response_content: String, response_length: usize) -> Result<(), String> {
     use tracing::info;
-    
+
     info!("Ollama JS Execution: Checking response for JavaScript code blocks");
-    info!("Ollama JS Execution: Response length: {} characters", response_length);
+    info!(
+        "Ollama JS Execution: Response length: {} characters",
+        response_length
+    );
     const LOG_MAX: usize = 500;
     let verbosity = crate::logging::VERBOSITY.load(Ordering::Relaxed);
     if verbosity >= 2 {
-        info!("Ollama JS Execution: Response content:\n{}", response_content);
+        info!(
+            "Ollama JS Execution: Response content:\n{}",
+            response_content
+        );
     } else {
-        info!("Ollama JS Execution: Response content:\n{}", crate::logging::ellipse(&response_content, LOG_MAX));
+        info!(
+            "Ollama JS Execution: Response content:\n{}",
+            crate::logging::ellipse(&response_content, LOG_MAX)
+        );
     }
-    
+
     Ok(())
 }
 
@@ -4662,12 +6058,15 @@ pub fn log_ollama_js_check(response_content: String, response_length: usize) -> 
 #[tauri::command]
 pub fn log_ollama_js_extraction(found_blocks: usize, blocks: Vec<String>) -> Result<(), String> {
     use tracing::info;
-    
-    info!("Ollama JS Execution: Extraction complete - found {} code block(s)", found_blocks);
+
+    info!(
+        "Ollama JS Execution: Extraction complete - found {} code block(s)",
+        found_blocks
+    );
     for (i, block) in blocks.iter().enumerate() {
         info!("Ollama JS Execution: Extracted block {}:\n{}", i + 1, block);
     }
-    
+
     Ok(())
 }
 
@@ -4675,10 +6074,13 @@ pub fn log_ollama_js_extraction(found_blocks: usize, blocks: Vec<String>) -> Res
 #[tauri::command]
 pub fn log_ollama_js_no_blocks(response_content: String) -> Result<(), String> {
     use tracing::info;
-    
+
     info!("Ollama JS Execution: No JavaScript code blocks found in response");
-    info!("Ollama JS Execution: Response preview:\n{}", response_content);
-    
+    info!(
+        "Ollama JS Execution: Response preview:\n{}",
+        response_content
+    );
+
     Ok(())
 }
 
@@ -4760,35 +6162,32 @@ fn ensure_cpu_window_open() {
 pub async fn ollama_chat_with_execution(
     request: OllamaChatWithExecutionRequest,
 ) -> Result<OllamaChatWithExecutionResponse, String> {
-    use tracing::info;
     use crate::metrics::format_metrics_for_ai_context;
+    use tracing::info;
 
     ensure_cpu_window_open();
 
-    info!("Ollama Chat with Execution: Starting for question: {}", request.question);
+    info!(
+        "Ollama Chat with Execution: Starting for question: {}",
+        request.question
+    );
 
     // Include gathered metrics so the model can answer accurately when the user asks about CPU, RAM, etc.
     let metrics_block = format_metrics_for_ai_context();
-    let context_message = format!(
-        "{}\n\nUser question: {}",
-        metrics_block,
-        request.question
-    );
-    
+    let context_message = format!("{}\n\nUser question: {}", metrics_block, request.question);
+
     // Get system prompt: use soul.md (~/.mac-stats/agents/soul.md or bundled default) + tools when not overridden
     let system_prompt = request
         .system_prompt
         .unwrap_or_else(default_non_agent_system_prompt);
-    
+
     // Build messages array with conversation history
-    let mut messages = vec![
-        crate::ollama::ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt.clone(),
-            images: None,
-        },
-    ];
-    
+    let mut messages = vec![crate::ollama::ChatMessage {
+        role: "system".to_string(),
+        content: system_prompt.clone(),
+        images: None,
+    }];
+
     // Add conversation history if provided (exclude system messages - we already have one)
     if let Some(ref history) = request.conversation_history {
         for msg in history {
@@ -4797,25 +6196,31 @@ pub async fn ollama_chat_with_execution(
                 messages.push(msg.clone());
             }
         }
-        info!("Ollama Chat with Execution: Added {} messages from conversation history", 
-              history.iter().filter(|m| m.role == "user" || m.role == "assistant").count());
+        info!(
+            "Ollama Chat with Execution: Added {} messages from conversation history",
+            history
+                .iter()
+                .filter(|m| m.role == "user" || m.role == "assistant")
+                .count()
+        );
     }
-    
+
     // Add current user message
     messages.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
         content: context_message.clone(),
         images: None,
     });
-    
+
     let chat_request = ChatRequest {
         messages: messages.clone(),
     };
-    
+
     info!("Ollama Chat with Execution: Sending initial request to Ollama");
-    let mut response = ollama_chat(chat_request).await
+    let mut response = ollama_chat(chat_request)
+        .await
         .map_err(|e| format!("Failed to send chat request: {}", e))?;
-    
+
     let mut response_content = response.message.content.clone();
     const MAX_FETCH_ITERATIONS: u32 = 3;
     let mut fetch_count: u32 = 0;
@@ -4831,7 +6236,11 @@ pub async fn ollama_chat_with_execution(
 
         let page_content = crate::commands::browser::fetch_page_content(&url)
             .map_err(|e| format!("Fetch page failed: {}", e))?;
-        info!("Ollama Chat with Execution: Fetched {} chars from {}", page_content.len(), url);
+        info!(
+            "Ollama Chat with Execution: Fetched {} chars from {}",
+            page_content.len(),
+            url
+        );
 
         // Build follow-up: current messages + assistant's FETCH_URL message + user with page content
         let mut follow_up_messages = messages.clone();
@@ -4852,54 +6261,67 @@ pub async fn ollama_chat_with_execution(
         let follow_up_request = ChatRequest {
             messages: follow_up_messages.clone(),
         };
-        response = ollama_chat(follow_up_request).await
+        response = ollama_chat(follow_up_request)
+            .await
             .map_err(|e| format!("Failed to send follow-up after fetch: {}", e))?;
         response_content = response.message.content.clone();
         messages = follow_up_messages;
-        info!("Ollama Chat with Execution: Received response after fetch ({} chars)", response_content.len());
+        info!(
+            "Ollama Chat with Execution: Received response after fetch ({} chars)",
+            response_content.len()
+        );
     }
 
-    info!("Ollama Chat with Execution: Received response ({} chars)", response_content.len());
-    
+    info!(
+        "Ollama Chat with Execution: Received response ({} chars)",
+        response_content.len()
+    );
+
     // Process response content - handle escaped newlines
     let mut processed_content = response_content.replace("\\n", "\n");
     // Remove "javascript\n" if present
     processed_content = processed_content.replace("javascript\n", "");
-    
+
     // Check if this is a code-assistant response
     let trimmed = processed_content.trim();
-    let is_code_assistant = trimmed.starts_with("ROLE=code-assistant") || 
-                           trimmed.to_lowercase().starts_with("role=code-assistant");
-    
+    let is_code_assistant = trimmed.starts_with("ROLE=code-assistant")
+        || trimmed.to_lowercase().starts_with("role=code-assistant");
+
     // Fallback: Detect JavaScript code patterns even without ROLE=code-assistant prefix
     // This handles cases where Ollama returns code directly
     let looks_like_javascript = if !is_code_assistant {
         let lower = trimmed.to_lowercase();
         // Check for common JavaScript patterns
-        lower.contains("console.log") ||
-        lower.contains("new date()") ||
-        lower.contains("document.") ||
-        lower.contains("window.") ||
-        lower.contains("function") ||
-        lower.contains("=>") ||
-        (lower.contains("(") && lower.contains(")") && 
-         (lower.contains("tostring") || lower.contains("tolocaledate") || 
-          lower.contains("tolocalestring") || lower.contains("getday") ||
-          lower.contains("getdate") || lower.contains("getmonth") ||
-          lower.contains("getfullyear")))
+        lower.contains("console.log")
+            || lower.contains("new date()")
+            || lower.contains("document.")
+            || lower.contains("window.")
+            || lower.contains("function")
+            || lower.contains("=>")
+            || (lower.contains("(")
+                && lower.contains(")")
+                && (lower.contains("tostring")
+                    || lower.contains("tolocaledate")
+                    || lower.contains("tolocalestring")
+                    || lower.contains("getday")
+                    || lower.contains("getdate")
+                    || lower.contains("getmonth")
+                    || lower.contains("getfullyear")))
     } else {
         false
     };
-    
+
     let needs_code_execution = is_code_assistant || looks_like_javascript;
-    
+
     if needs_code_execution {
         if is_code_assistant {
             info!("Ollama Chat with Execution: Detected code-assistant response");
         } else {
-            info!("Ollama Chat with Execution: Detected JavaScript code pattern (fallback detection)");
+            info!(
+                "Ollama Chat with Execution: Detected JavaScript code pattern (fallback detection)"
+            );
         }
-        
+
         // Extract code
         let code = if is_code_assistant {
             // Extract code (everything after the first line if ROLE=code-assistant)
@@ -4907,20 +6329,24 @@ pub async fn ollama_chat_with_execution(
             if lines.len() >= 2 {
                 lines[1..].join("\n").trim().to_string()
             } else {
-                processed_content.replace("ROLE=code-assistant", "").trim().to_string()
+                processed_content
+                    .replace("ROLE=code-assistant", "")
+                    .trim()
+                    .to_string()
             }
         } else {
             // Use the entire content as code (no ROLE prefix)
             trimmed.to_string()
         };
-        
+
         // Remove markdown code block markers
-        let code = code.replace("```javascript", "")
-                       .replace("```js", "")
-                       .replace("```", "")
-                       .trim()
-                       .to_string();
-        
+        let code = code
+            .replace("```javascript", "")
+            .replace("```js", "")
+            .replace("```", "")
+            .trim()
+            .to_string();
+
         // Handle console.log() - extract the expression inside
         // If code is "console.log(expression)", extract just "expression"
         let code = if code.trim_start().to_lowercase().starts_with("console.log(") {
@@ -4950,9 +6376,13 @@ pub async fn ollama_chat_with_execution(
         } else {
             code
         };
-        
-        info!("Ollama Chat with Execution: Extracted code ({} chars):\n{}", code.len(), code);
-        
+
+        info!(
+            "Ollama Chat with Execution: Extracted code ({} chars):\n{}",
+            code.len(),
+            code
+        );
+
         if code.is_empty() {
             return Ok(OllamaChatWithExecutionResponse {
                 needs_code_execution: false,
@@ -4963,7 +6393,7 @@ pub async fn ollama_chat_with_execution(
                 context_message: Some(context_message),
             });
         }
-        
+
         // Return code for execution
         return Ok(OllamaChatWithExecutionResponse {
             needs_code_execution: true,
@@ -4974,7 +6404,7 @@ pub async fn ollama_chat_with_execution(
             context_message: Some(context_message),
         });
     }
-    
+
     // Regular response, no code execution needed
     info!("Ollama Chat with Execution: Regular response (no code execution)");
     Ok(OllamaChatWithExecutionResponse {
@@ -5013,26 +6443,26 @@ pub async fn ollama_chat_continue_with_result(
 
     ensure_cpu_window_open();
 
-    info!("Ollama Chat Continue: Code executed, result: {}", execution_result);
-    
-    let system_prompt = system_prompt
-        .unwrap_or_else(default_non_agent_system_prompt);
-    
+    info!(
+        "Ollama Chat Continue: Code executed, result: {}",
+        execution_result
+    );
+
+    let system_prompt = system_prompt.unwrap_or_else(default_non_agent_system_prompt);
+
     let follow_up_message = format!(
         "I have executed your last codeblocks and the result is: {}\n\nCan you now answer the original question: {}?",
         execution_result,
         original_question
     );
-    
+
     // Build messages array with conversation history
-    let mut messages = vec![
-        crate::ollama::ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt.clone(),
-            images: None,
-        },
-    ];
-    
+    let mut messages = vec![crate::ollama::ChatMessage {
+        role: "system".to_string(),
+        content: system_prompt.clone(),
+        images: None,
+    }];
+
     // Add conversation history if provided (exclude system messages - we already have one)
     if let Some(ref history) = conversation_history {
         for msg in history {
@@ -5041,10 +6471,15 @@ pub async fn ollama_chat_continue_with_result(
                 messages.push(msg.clone());
             }
         }
-        info!("Ollama Chat Continue: Added {} messages from conversation history", 
-              history.iter().filter(|m| m.role == "user" || m.role == "assistant").count());
+        info!(
+            "Ollama Chat Continue: Added {} messages from conversation history",
+            history
+                .iter()
+                .filter(|m| m.role == "user" || m.role == "assistant")
+                .count()
+        );
     }
-    
+
     // Add the conversation flow for this code execution cycle
     messages.push(crate::ollama::ChatMessage {
         role: "user".to_string(),
@@ -5061,55 +6496,61 @@ pub async fn ollama_chat_continue_with_result(
         content: follow_up_message,
         images: None,
     });
-    
-    let chat_request = ChatRequest {
-        messages,
-    };
-    
+
+    let chat_request = ChatRequest { messages };
+
     info!("Ollama Chat Continue: Sending follow-up to Ollama");
-    let response = ollama_chat(chat_request).await
+    let response = ollama_chat(chat_request)
+        .await
         .map_err(|e| format!("Failed to send follow-up: {}", e))?;
-    
+
     let response_content = response.message.content;
-    info!("Ollama Chat Continue: Received response ({} chars)", response_content.len());
-    
+    info!(
+        "Ollama Chat Continue: Received response ({} chars)",
+        response_content.len()
+    );
+
     // Process response content - handle escaped newlines
     let mut processed_content = response_content.replace("\\n", "\n");
     // Remove "javascript\n" if present
     processed_content = processed_content.replace("javascript\n", "");
-    
+
     // Check if Ollama is asking for more code execution (ping-pong)
     let trimmed = processed_content.trim();
-    let is_code_assistant = trimmed.starts_with("ROLE=code-assistant") || 
-                           trimmed.to_lowercase().starts_with("role=code-assistant");
-    
+    let is_code_assistant = trimmed.starts_with("ROLE=code-assistant")
+        || trimmed.to_lowercase().starts_with("role=code-assistant");
+
     // Fallback: Detect JavaScript code patterns even without ROLE=code-assistant prefix
     let looks_like_javascript = if !is_code_assistant {
         let lower = trimmed.to_lowercase();
-        lower.contains("console.log") ||
-        lower.contains("new date()") ||
-        lower.contains("document.") ||
-        lower.contains("window.") ||
-        lower.contains("function") ||
-        lower.contains("=>") ||
-        (lower.contains("(") && lower.contains(")") && 
-         (lower.contains("tostring") || lower.contains("tolocaledate") || 
-          lower.contains("tolocalestring") || lower.contains("getday") ||
-          lower.contains("getdate") || lower.contains("getmonth") ||
-          lower.contains("getfullyear")))
+        lower.contains("console.log")
+            || lower.contains("new date()")
+            || lower.contains("document.")
+            || lower.contains("window.")
+            || lower.contains("function")
+            || lower.contains("=>")
+            || (lower.contains("(")
+                && lower.contains(")")
+                && (lower.contains("tostring")
+                    || lower.contains("tolocaledate")
+                    || lower.contains("tolocalestring")
+                    || lower.contains("getday")
+                    || lower.contains("getdate")
+                    || lower.contains("getmonth")
+                    || lower.contains("getfullyear")))
     } else {
         false
     };
-    
+
     let needs_code_execution = is_code_assistant || looks_like_javascript;
-    
+
     if needs_code_execution {
         if is_code_assistant {
             info!("Ollama Chat Continue: Detected another code-assistant response (ping-pong)");
         } else {
             info!("Ollama Chat Continue: Detected JavaScript code pattern (ping-pong, fallback detection)");
         }
-        
+
         // Extract code
         let code = if is_code_assistant {
             // Extract code (everything after the first line if ROLE=code-assistant)
@@ -5117,20 +6558,24 @@ pub async fn ollama_chat_continue_with_result(
             if lines.len() >= 2 {
                 lines[1..].join("\n").trim().to_string()
             } else {
-                processed_content.replace("ROLE=code-assistant", "").trim().to_string()
+                processed_content
+                    .replace("ROLE=code-assistant", "")
+                    .trim()
+                    .to_string()
             }
         } else {
             // Use the entire content as code (no ROLE prefix)
             trimmed.to_string()
         };
-        
+
         // Remove markdown code block markers
-        let code = code.replace("```javascript", "")
-                       .replace("```js", "")
-                       .replace("```", "")
-                       .trim()
-                       .to_string();
-        
+        let code = code
+            .replace("```javascript", "")
+            .replace("```js", "")
+            .replace("```", "")
+            .trim()
+            .to_string();
+
         // Handle console.log() - extract the expression inside
         // If code is "console.log(expression)", extract just "expression"
         let code = if code.trim_start().to_lowercase().starts_with("console.log(") {
@@ -5160,9 +6605,13 @@ pub async fn ollama_chat_continue_with_result(
         } else {
             code
         };
-        
-        info!("Ollama Chat Continue: Extracted code for re-execution ({} chars):\n{}", code.len(), code);
-        
+
+        info!(
+            "Ollama Chat Continue: Extracted code for re-execution ({} chars):\n{}",
+            code.len(),
+            code
+        );
+
         if code.is_empty() {
             return Ok(OllamaChatContinueResponse {
                 needs_code_execution: false,
@@ -5172,7 +6621,7 @@ pub async fn ollama_chat_continue_with_result(
                 context_message: Some(context_message),
             });
         }
-        
+
         // Return code for execution (ping-pong)
         return Ok(OllamaChatContinueResponse {
             needs_code_execution: true,
@@ -5182,7 +6631,7 @@ pub async fn ollama_chat_continue_with_result(
             context_message: Some(context_message),
         });
     }
-    
+
     // Final answer received
     info!("Ollama Chat Continue: Received final answer (no more code execution needed)");
     Ok(OllamaChatContinueResponse {
@@ -5192,4 +6641,68 @@ pub async fn ollama_chat_continue_with_result(
         final_answer: Some(processed_content),
         context_message: Some(context_message),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_perplexity_verbose_summary, extract_last_prefixed_argument,
+        parse_agent_tool_from_response,
+    };
+
+    #[test]
+    fn perplexity_verbose_summary_zero_results() {
+        let s = build_perplexity_verbose_summary(0, String::new(), 380);
+        assert_eq!(s, "Perplexity: 0 results.");
+    }
+
+    #[test]
+    fn perplexity_verbose_summary_with_titles() {
+        let s = build_perplexity_verbose_summary(3, "El País, El Mundo, ABC".to_string(), 380);
+        assert_eq!(s, "Perplexity: 3 result(s) — El País, El Mundo, ABC");
+    }
+
+    #[test]
+    fn perplexity_verbose_summary_titles_empty_but_n_nonzero() {
+        let s = build_perplexity_verbose_summary(5, String::new(), 380);
+        assert_eq!(s, "Perplexity: 5 result(s) received.");
+    }
+
+    #[test]
+    fn perplexity_verbose_summary_truncated() {
+        let long = "A".repeat(400);
+        let s = build_perplexity_verbose_summary(1, long.clone(), 380);
+        assert!(s.chars().count() <= 380);
+        assert!(s.ends_with('…'));
+        assert!(s.starts_with("Perplexity: 1 result(s) — "));
+    }
+
+    #[test]
+    fn perplexity_verbose_summary_just_under_limit() {
+        let titles = "X, Y, Z";
+        let s = build_perplexity_verbose_summary(3, titles.to_string(), 380);
+        assert_eq!(s, "Perplexity: 3 result(s) — X, Y, Z");
+    }
+
+    #[test]
+    fn extract_last_prefixed_argument_prefers_last_run_cmd_literal() {
+        let question = "Run this command and show me the output: RUN_CMD: cat /etc/hosts";
+        assert_eq!(
+            extract_last_prefixed_argument(question, "RUN_CMD:"),
+            Some("cat /etc/hosts".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_agent_tool_from_response_supports_redmine_api() {
+        assert_eq!(
+            parse_agent_tool_from_response(
+                "REDMINE_API: GET /issues/7209.json?include=journals,attachments"
+            ),
+            Some((
+                "REDMINE_API".to_string(),
+                "GET /issues/7209.json?include=journals,attachments".to_string()
+            ))
+        );
+    }
 }

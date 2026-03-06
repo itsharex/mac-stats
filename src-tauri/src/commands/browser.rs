@@ -20,9 +20,7 @@ pub fn extract_first_url(arg: &str) -> Option<String> {
     let s = arg.trim();
     let start = s.find("https://").or_else(|| s.find("http://"))?;
     let rest = &s[start..];
-    let end = rest
-        .find(|c: char| c.is_whitespace())
-        .unwrap_or(rest.len());
+    let end = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
     let url = rest[..end].trim_end_matches(['.', ',', ';', ':']);
     if url.is_empty() {
         return None;
@@ -69,7 +67,10 @@ pub fn fetch_page_content(url: &str) -> Result<String, String> {
     let resp = client
         .get(url)
         .header("User-Agent", USER_AGENT)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.9")
         .send()
         .map_err(|e| format!("Request failed: {}", e))?;
@@ -78,16 +79,11 @@ pub fn fetch_page_content(url: &str) -> Result<String, String> {
     if !status.is_success() {
         let code = status.as_u16();
         let reason = status.canonical_reason().unwrap_or("");
-        warn!(
-            "Fetch page failed: {} {} for URL {}",
-            code, reason, url
-        );
+        warn!("Fetch page failed: {} {} for URL {}", code, reason, url);
         return Err(format!("HTTP {}: {}", code, reason));
     }
 
-    let body = resp
-        .text()
-        .map_err(|e| format!("Read body: {}", e))?;
+    let body = resp.text().map_err(|e| format!("Read body: {}", e))?;
 
     let body = if body.chars().count() > MAX_BODY_CHARS {
         crate::logging::ellipse(&body, MAX_BODY_CHARS)

@@ -1,20 +1,18 @@
 //! Structured logging module using tracing
-//! 
+//!
 //! This module provides structured logging using the `tracing` crate.
 //! It replaces the hand-rolled logging system with proper structured logging.
 
 use std::path::PathBuf;
-use tracing_subscriber::{
-    fmt,
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter,
-};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod legacy;
 
 // Re-export legacy logging for compatibility during migration
-pub use legacy::{set_verbosity, write_structured_log, write_structured_log_with_verbosity, shorten_file_path_internal, VERBOSITY};
+pub use legacy::{
+    set_verbosity, shorten_file_path_internal, write_structured_log,
+    write_structured_log_with_verbosity, VERBOSITY,
+};
 
 /// Ellipse a string for display: first half + "..." + last half (no truncation of one end).
 /// If `s` has ≤ `max_len` chars, returns `s` unchanged. Otherwise returns
@@ -35,7 +33,7 @@ pub fn ellipse(s: &str, max_len: usize) -> String {
 }
 
 /// Initialize tracing with file and console output
-/// 
+///
 /// The log file path will be determined by the config module (when available).
 /// For now, uses a temporary path that will be replaced in Phase 3.
 pub fn init_tracing(verbosity: u8, log_file_path: Option<PathBuf>) {
@@ -54,8 +52,7 @@ pub fn init_tracing(verbosity: u8, log_file_path: Option<PathBuf>) {
     // At -vv we enable mac_stats=debug but not reqwest/hyper, so monitor checks stay compact.
 
     // Build subscriber with console and file output
-    let registry = tracing_subscriber::registry()
-        .with(filter);
+    let registry = tracing_subscriber::registry().with(filter);
 
     // Add console layer (stderr)
     let console_layer = fmt::layer()
@@ -99,33 +96,26 @@ pub fn init_tracing(verbosity: u8, log_file_path: Option<PathBuf>) {
                 .with_thread_names(false)
                 .with_ansi(false); // No ANSI in files
 
-            registry
-                .with(console_layer)
-                .with(file_layer)
-                .init();
+            registry.with(console_layer).with(file_layer).init();
         } else {
             // Fallback to console only if file creation fails
-            registry
-                .with(console_layer)
-                .init();
+            registry.with(console_layer).init();
         }
     } else {
         // Console only
-        registry
-            .with(console_layer)
-            .init();
+        registry.with(console_layer).init();
     }
 }
 
 /// Set verbosity level (compatibility function)
-/// 
+///
 /// This function updates both the legacy VERBOSITY and tracing filter.
 /// Currently unused but kept for potential future use.
 #[allow(dead_code)]
 pub fn set_verbosity_with_tracing(level: u8) {
     // Update legacy verbosity for compatibility
     legacy::set_verbosity(level);
-    
+
     // Note: Tracing filter is set at init time, so we'd need to reload
     // For now, this is mainly for compatibility during migration
 }

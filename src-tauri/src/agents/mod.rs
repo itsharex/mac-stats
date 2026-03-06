@@ -102,11 +102,7 @@ pub fn load_agents() -> Vec<Agent> {
     } else {
         let list: String = agents
             .iter()
-            .map(|a| {
-                a.slug
-                    .as_deref()
-                    .unwrap_or(a.name.as_str())
-            })
+            .map(|a| a.slug.as_deref().unwrap_or(a.name.as_str()))
             .collect::<Vec<_>>()
             .join(", ");
         info!("Agents: loaded {} from {:?}: {}", agents.len(), dir, list);
@@ -118,7 +114,11 @@ pub fn load_agents() -> Vec<Agent> {
         info!(
             "Agents: shared soul {:?}: {}",
             soul_path,
-            if soul_exists { "present" } else { "missing (will write default on first use)" }
+            if soul_exists {
+                "present"
+            } else {
+                "missing (will write default on first use)"
+            }
         );
     }
 
@@ -166,12 +166,16 @@ pub fn get_agent_dir(id: &str) -> Option<std::path::PathBuf> {
 
 fn load_one_agent(dir: &Path, id: &str) -> Option<Agent> {
     let config_path = dir.join("agent.json");
-    let content = std::fs::read_to_string(&config_path).map_err(|e| {
-        warn!("Agents: could not read {:?}: {}", config_path, e);
-    }).ok()?;
-    let config: AgentConfig = serde_json::from_str(&content).map_err(|e| {
-        warn!("Agents: invalid JSON in {:?}: {}", config_path, e);
-    }).ok()?;
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| {
+            warn!("Agents: could not read {:?}: {}", config_path, e);
+        })
+        .ok()?;
+    let config: AgentConfig = serde_json::from_str(&content)
+        .map_err(|e| {
+            warn!("Agents: invalid JSON in {:?}: {}", config_path, e);
+        })
+        .ok()?;
 
     let skill_path = dir.join("skill.md");
     let skill = std::fs::read_to_string(&skill_path)
@@ -196,7 +200,11 @@ fn load_one_agent(dir: &Path, id: &str) -> Option<Agent> {
             if shared.is_empty() {
                 None
             } else {
-                debug!("Agents: agent {} using shared soul from {:?}", id, Config::soul_file_path());
+                debug!(
+                    "Agents: agent {} using shared soul from {:?}",
+                    id,
+                    Config::soul_file_path()
+                );
                 Some(shared)
             }
         });
@@ -230,7 +238,8 @@ fn load_one_agent(dir: &Path, id: &str) -> Option<Agent> {
         (None, None) => None,
     };
 
-    let combined_prompt = build_combined_prompt(soul.as_deref(), mood.as_deref(), memory.as_deref(), &skill);
+    let combined_prompt =
+        build_combined_prompt(soul.as_deref(), mood.as_deref(), memory.as_deref(), &skill);
 
     let max_tool_iterations = config.max_tool_iterations.unwrap_or(15);
     Some(Agent {
@@ -246,7 +255,12 @@ fn load_one_agent(dir: &Path, id: &str) -> Option<Agent> {
     })
 }
 
-fn build_combined_prompt(soul: Option<&str>, mood: Option<&str>, memory: Option<&str>, skill: &str) -> String {
+fn build_combined_prompt(
+    soul: Option<&str>,
+    mood: Option<&str>,
+    memory: Option<&str>,
+    skill: &str,
+) -> String {
     let mut out = String::new();
     if let Some(s) = soul {
         out.push_str(s);
@@ -272,9 +286,10 @@ pub fn find_agent_by_id_or_name<'a>(agents: &'a [Agent], selector: &str) -> Opti
         return None;
     }
     let slug_match = selector.to_lowercase();
-    if let Some(a) = agents.iter().find(|a| {
-        a.slug.as_ref().map(|s| s.to_lowercase()) == Some(slug_match.clone())
-    }) {
+    if let Some(a) = agents
+        .iter()
+        .find(|a| a.slug.as_ref().map(|s| s.to_lowercase()) == Some(slug_match.clone()))
+    {
         return Some(a);
     }
     let name_match = selector.to_lowercase();
@@ -348,9 +363,7 @@ pub fn resolve_agent_models(agents: &mut [Agent], catalog: &crate::ollama::model
             }
             warn!(
                 "Model resolution: {} -> model '{}' not available, falling back to model_role={:?}",
-                agent_label,
-                model_name,
-                agent.model_role
+                agent_label, model_name, agent.model_role
             );
         }
 
@@ -395,38 +408,34 @@ mod tests {
 
     #[test]
     fn find_agent_by_slug() {
-        let agents = vec![
-            Agent {
-                id: "001".to_string(),
-                name: "General".to_string(),
-                slug: Some("generalist".to_string()),
-                model: None,
-                model_role: None,
-                orchestrator: false,
-                enabled: true,
-                combined_prompt: String::new(),
-                max_tool_iterations: 15,
-            },
-        ];
+        let agents = vec![Agent {
+            id: "001".to_string(),
+            name: "General".to_string(),
+            slug: Some("generalist".to_string()),
+            model: None,
+            model_role: None,
+            orchestrator: false,
+            enabled: true,
+            combined_prompt: String::new(),
+            max_tool_iterations: 15,
+        }];
         assert!(find_agent_by_id_or_name(&agents, "generalist").is_some());
         assert!(find_agent_by_id_or_name(&agents, "Generalist").is_some());
     }
 
     #[test]
     fn find_agent_by_id() {
-        let agents = vec![
-            Agent {
-                id: "001".to_string(),
-                name: "General".to_string(),
-                slug: None,
-                model: None,
-                model_role: None,
-                orchestrator: false,
-                enabled: true,
-                combined_prompt: String::new(),
-                max_tool_iterations: 15,
-            },
-        ];
+        let agents = vec![Agent {
+            id: "001".to_string(),
+            name: "General".to_string(),
+            slug: None,
+            model: None,
+            model_role: None,
+            orchestrator: false,
+            enabled: true,
+            combined_prompt: String::new(),
+            max_tool_iterations: 15,
+        }];
         assert!(find_agent_by_id_or_name(&agents, "001").is_some());
     }
 }

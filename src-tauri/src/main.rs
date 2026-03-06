@@ -7,32 +7,49 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "mac_stats")]
 #[command(about = "macOS system statistics menu bar app")]
-#[command(long_about = "A lightweight system monitor for macOS that displays real-time CPU, GPU, RAM, and disk usage in the menu bar with minimal CPU overhead.")]
+#[command(
+    long_about = "A lightweight system monitor for macOS that displays real-time CPU, GPU, RAM, and disk usage in the menu bar with minimal CPU overhead."
+)]
 struct Args {
     /// Verbose output level (default: 2 = -vv). Use -v for minimal, -vvv for maximum.
     #[arg(short = 'v', action = clap::ArgAction::Count, help = "Verbosity: default -vv (moderate). -v = minimal, -vvv = maximum")]
     verbose: u8,
-    
+
     /// Open CPU window directly at startup (for testing)
-    #[arg(long = "cpu", help = "Open the CPU details window immediately when the app starts")]
+    #[arg(
+        long = "cpu",
+        help = "Open the CPU details window immediately when the app starts"
+    )]
     open_cpu: bool,
-    
+
     /// Open CPU window directly at startup (alternative to --cpu)
-    #[arg(long = "openwindow", help = "Open the CPU details window immediately when the app starts (same as --cpu)")]
+    #[arg(
+        long = "openwindow",
+        help = "Open the CPU details window immediately when the app starts (same as --cpu)"
+    )]
     open_window: bool,
-    
+
     /// Enable detailed frequency logging for debugging
-    #[arg(long = "frequency", help = "Enable detailed logging of CPU frequency readings from IOReport")]
+    #[arg(
+        long = "frequency",
+        help = "Enable detailed logging of CPU frequency readings from IOReport"
+    )]
     frequency: bool,
-    
+
     /// Enable detailed power usage logging for debugging
-    #[arg(long = "power-usage", help = "Enable detailed logging of CPU and GPU power consumption")]
+    #[arg(
+        long = "power-usage",
+        help = "Enable detailed logging of CPU and GPU power consumption"
+    )]
     power_usage: bool,
-    
+
     /// Print changelog to console and exit
-    #[arg(long = "changelog", help = "Display the application changelog and exit")]
+    #[arg(
+        long = "changelog",
+        help = "Display the application changelog and exit"
+    )]
     changelog: bool,
-    
+
     /// Subcommands: task (add, list, show, ...) or agent (test). Run and exit without starting the app.
     #[command(subcommand)]
     cmd: Option<MainCmd>,
@@ -80,7 +97,7 @@ enum AgentCmd {
 
 fn main() {
     let args = Args::parse();
-    
+
     // Set verbosity level (0-3). Default 2 (-vv) so logs are visible when no -v flags given.
     let verbosity = if args.verbose > 3 {
         3
@@ -89,24 +106,24 @@ fn main() {
     } else {
         2
     };
-    
+
     // Initialize tracing (structured logging) using config module
     use mac_stats::config::Config;
     Config::ensure_log_directory().ok(); // Create log directory if needed
     let log_path = Config::log_file_path();
     mac_stats::init_tracing(verbosity, Some(log_path.clone()));
-    
+
     // Also set legacy verbosity for compatibility during migration
     mac_stats::set_verbosity(verbosity);
-    
+
     tracing::info!("mac-stats: verbosity {} (logs: {:?})", verbosity, log_path);
-    
+
     // Set frequency logging flag
     mac_stats::set_frequency_logging(args.frequency);
-    
+
     // Set power usage logging flag
     mac_stats::set_power_usage_logging(args.power_usage);
-    
+
     // If --changelog flag is set, test changelog functionality
     if args.changelog {
         use mac_stats::get_changelog;
@@ -121,7 +138,7 @@ fn main() {
             }
         }
     }
-    
+
     // If a subcommand is used, run it and exit
     if let Some(cmd) = args.cmd {
         let code = match cmd {
@@ -138,7 +155,10 @@ fn main() {
                         .unwrap_or_else(|c| c)
                 })
             }
-            MainCmd::Discord(DiscordCmd::Send { channel_id, message }) => {
+            MainCmd::Discord(DiscordCmd::Send {
+                channel_id,
+                message,
+            }) => {
                 let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
                 rt.block_on(async {
                     match mac_stats::discord::send_message_to_channel(channel_id, &message).await {
@@ -159,26 +179,23 @@ fn main() {
                     mac_stats::config::Config::ensure_defaults();
                     mac_stats::ensure_ollama_agent_ready_at_startup().await;
                     match mac_stats::answer_with_ollama_and_fetch(
-                        &question,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        true,  // allow_schedule
-                        None,
-                        false, // escalation
+                        &question, None, None, None, None, None, None, None, None,
+                        true, // allow_schedule
+                        None, false, // escalation
                         true,  // retry_on_verification_no
                         true,  // from_remote: headless browser
                         None,  // attachment_images_base64
+                        None,  // discord_intermediate
+                        false, // is_verification_retry
                     )
                     .await
                     {
                         Ok(reply) => {
-                            println!("Reply ({} chars):\n{}", reply.text.chars().count(), reply.text);
+                            println!(
+                                "Reply ({} chars):\n{}",
+                                reply.text.chars().count(),
+                                reply.text
+                            );
                             for p in &reply.attachment_paths {
                                 println!("Attachment: {}", p.display());
                             }
@@ -194,7 +211,7 @@ fn main() {
         };
         std::process::exit(code);
     }
-    
+
     // If --cpu or --openwindow flag is set, open window directly after a short delay
     if args.open_cpu || args.open_window {
         mac_stats::run_with_cpu_window()

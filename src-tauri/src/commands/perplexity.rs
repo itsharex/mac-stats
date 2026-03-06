@@ -100,7 +100,9 @@ pub struct PerplexitySearchResponse {
 
 /// Run a Perplexity web search. API key from PERPLEXITY_API_KEY env, .config.env / .env.config, or Keychain.
 #[tauri::command]
-pub async fn perplexity_search(request: PerplexitySearchRequest) -> Result<PerplexitySearchResponse, String> {
+pub async fn perplexity_search(
+    request: PerplexitySearchRequest,
+) -> Result<PerplexitySearchResponse, String> {
     use tracing::debug;
 
     let api_key = get_perplexity_api_key()
