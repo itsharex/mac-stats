@@ -931,7 +931,7 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
         // Short descriptor: when + one-line formats. Full endpoint docs not in prompt; pre-route handles "review ticket N".
         // Time entries: use /time_entries.json with from/to (not /search.json) for spent time / hours this month.
         base.push_str(&format!(
-            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, tickets worked today, create or update issue. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD (optional project_id=ID or user_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time, hours, or tickets worked use /time_entries.json with concrete from/to dates; do not use /search.json. Always .json suffix.",
+            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, tickets worked today, create or update issue. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=100 (optional project_id=ID or user_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time, hours, or tickets worked use /time_entries.json with concrete from/to dates and a large enough limit; do not use /search.json. Always .json suffix.",
             num
         ));
         // Create context (projects, trackers, statuses) only when user might create/update — avoids polluting prompt for simple "review ticket N".
@@ -1106,12 +1106,25 @@ async fn run_skill_ollama_session(
 /// If the agent's response contains DISCORD_API: tool calls, executes them and feeds results back
 /// in a loop (up to max_tool_iterations) so agents like the Discord Expert can do multi-step API work.
 /// Used by the tool loop (AGENT:) and by the agent-test CLI.
+fn build_agent_runtime_context(now: chrono::DateTime<chrono::FixedOffset>) -> String {
+    let local_date = now.format("%Y-%m-%d").to_string();
+    let local_time = now.format("%Y-%m-%d %H:%M:%S %:z").to_string();
+    let utc_now = now.with_timezone(&chrono::Utc);
+    let utc_date = utc_now.format("%Y-%m-%d").to_string();
+    let utc_time = utc_now.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+    format!(
+        "## Runtime context\n\n- Current local date: {}\n- Current local time: {}\n- Current UTC date: {}\n- Current UTC time: {}\n- For date-sensitive tool calls such as Redmine \"today\" queries, use the current UTC date ({}) unless the task explicitly asks for local time.",
+        local_date, local_time, utc_date, utc_time, utc_date
+    )
+}
+
 pub(crate) async fn run_agent_ollama_session(
     agent: &crate::agents::Agent,
     user_message: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> Result<String, String> {
     use tracing::info;
+    let runtime_context = build_agent_runtime_context(chrono::Local::now().fixed_offset());
     info!(
         "Agent: {} ({}) running (model: {:?}, prompt {} chars)",
         agent.name,
@@ -1119,10 +1132,14 @@ pub(crate) async fn run_agent_ollama_session(
         agent.model,
         agent.combined_prompt.chars().count()
     );
+    info!(
+        "Agent: {} ({}) runtime date anchor injected",
+        agent.name, agent.id
+    );
     let mut messages = vec![
         crate::ollama::ChatMessage {
             role: "system".to_string(),
-            content: agent.combined_prompt.clone(),
+            content: format!("{}\n\n{}", agent.combined_prompt, runtime_context),
             images: None,
         },
         crate::ollama::ChatMessage {
@@ -1146,6 +1163,16 @@ pub(crate) async fn run_agent_ollama_session(
         );
 
         if let Some(tool_result) = execute_agent_tool_call(&out, status_tx).await {
+            if !question_explicitly_requests_json(user_message) {
+                if let Some(summary) = extract_redmine_time_entries_summary_for_reply(&tool_result)
+                {
+                    info!(
+                        "Agent: {} ({}) returning direct Redmine time-entry summary",
+                        agent.name, agent.id
+                    );
+                    return Ok(summary);
+                }
+            }
             iteration += 1;
             if iteration >= max_iters {
                 info!(
@@ -1181,6 +1208,39 @@ fn normalize_discord_api_path(path_and_commentary: &str) -> String {
         s
     };
     path_only.to_string()
+}
+
+fn question_explicitly_requests_json(question: &str) -> bool {
+    let q = question.to_lowercase();
+    q.contains("json")
+        || q.contains("machine readable")
+        || q.contains("structured output")
+        || q.contains("structured data")
+}
+
+fn extract_redmine_time_entries_summary_for_reply(tool_result: &str) -> Option<String> {
+    let start = tool_result.find("Derived Redmine time-entry summary")?;
+    let mut summary = &tool_result[start..];
+    for marker in [
+        "\n\nUse this data to answer",
+        "\n\nUse only this Redmine data to continue or answer",
+    ] {
+        if let Some(idx) = summary.find(marker) {
+            summary = &summary[..idx];
+            break;
+        }
+    }
+    let summary = if let Some(idx) = summary.find("\n\nEntry details:\n") {
+        &summary[..idx]
+    } else {
+        summary
+    };
+    let cleaned = summary.trim().to_string();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 /// Execute a tool call found in an agent's response. Supports agent-safe APIs like DISCORD_API and REDMINE_API.
@@ -1253,7 +1313,7 @@ async fn execute_agent_tool_call(
             info!("Agent tool: REDMINE_API {} {}", &method, &path);
             match crate::redmine::redmine_api_request(&method, &path, body.as_deref()).await {
                 Ok(result) => Some(format!(
-                    "REDMINE_API result ({} {}):\n\n{}\n\nUse only this Redmine data to continue or answer the user's question. If this is a ticket review, reply with Summary, Status & completion, Missing, and Final thoughts. If you need more Redmine data, make another REDMINE_API call.",
+                    "REDMINE_API result ({} {}):\n\n{}\n\nUse only this Redmine data to continue or answer the user's question. For time-entry queries, prefer the derived summary and actual ticket list already included above; do not invent ticket ids or subjects. If this is a ticket review, reply with Summary, Status & completion, Missing, and Final thoughts. If you need more Redmine data, make another REDMINE_API call.",
                     &method, &path, result
                 )),
                 Err(e) => Some(format!(
@@ -1851,6 +1911,16 @@ fn is_redmine_review_or_summarize_only(question: &str) -> bool {
     has_redmine_ticket && review_or_summarize && no_mutate
 }
 
+fn is_redmine_relative_day_request(question: &str) -> bool {
+    let q = question.trim().to_lowercase();
+    q.contains("today") || q.contains("yesterday") || q.contains("yestaerday")
+}
+
+fn is_redmine_yesterday_request(question: &str) -> bool {
+    let q = question.trim().to_lowercase();
+    q.contains("yesterday") || q.contains("yestaerday")
+}
+
 fn is_redmine_time_entries_request(question: &str) -> bool {
     let q = question.trim().to_lowercase();
     let mentions_redmine = q.contains("redmine");
@@ -1862,10 +1932,11 @@ fn is_redmine_time_entries_request(question: &str) -> bool {
         || q.contains("tickets worked")
         || q.contains("worked tickets")
         || (q.contains("worked on") && q.contains("month"))
-        || (q.contains("worked on") && q.contains("today"))
-        || (q.contains("work on") && q.contains("today"))
+        || (q.contains("worked on") && is_redmine_relative_day_request(&q))
+        || (q.contains("work on") && is_redmine_relative_day_request(&q))
         || (q.contains("work today") && q.contains("ticket"))
-        || (q.contains("worked") && q.contains("today") && q.contains("ticket"));
+        || (q.contains("work yesterday") && q.contains("ticket"))
+        || (q.contains("worked") && is_redmine_relative_day_request(&q) && q.contains("ticket"));
     mentions_redmine && mentions_time_entries
 }
 
@@ -1877,11 +1948,17 @@ fn is_agent_unavailable_error(error: &str) -> bool {
         || e.contains("503")
 }
 
-fn redmine_time_entries_range(question: &str) -> (String, String) {
+fn redmine_time_entries_range_for_date(
+    question: &str,
+    today: chrono::NaiveDate,
+) -> (String, String) {
     use chrono::Datelike;
 
-    let today = chrono::Local::now().date_naive();
     let q = question.trim().to_lowercase();
+    if is_redmine_yesterday_request(&q) {
+        let day = today.pred_opt().unwrap_or(today).format("%Y-%m-%d").to_string();
+        return (day.clone(), day);
+    }
     if q.contains("today") {
         let day = today.format("%Y-%m-%d").to_string();
         return (day.clone(), day);
@@ -1905,11 +1982,15 @@ fn redmine_time_entries_range(question: &str) -> (String, String) {
     (from, to)
 }
 
+fn redmine_time_entries_range(question: &str) -> (String, String) {
+    redmine_time_entries_range_for_date(question, chrono::Utc::now().date_naive())
+}
+
 fn redmine_direct_fallback_hint(question: &str) -> String {
     if is_redmine_time_entries_request(question) {
         let (from, to) = redmine_time_entries_range(question);
         format!(
-            "Use REDMINE_API directly with concrete dates: REDMINE_API: GET /time_entries.json?from={}&to={}.",
+            "Use REDMINE_API directly with concrete dates: REDMINE_API: GET /time_entries.json?from={}&to={}&limit=100.",
             from, to
         )
     } else if let Some(id) = extract_ticket_id(question) {
@@ -2681,7 +2762,7 @@ pub fn answer_with_ollama_and_fetch(
                     if is_redmine_time_entries_request(q) {
                         let (from, to) = redmine_time_entries_range(q);
                         let rec = format!(
-                            "REDMINE_API: GET /time_entries.json?from={}&to={}",
+                            "REDMINE_API: GET /time_entries.json?from={}&to={}&limit=100",
                             from, to
                         );
                         info!(
@@ -2722,7 +2803,7 @@ pub fn answer_with_ollama_and_fetch(
                 if is_redmine_time_entries_request(question) {
                     let (from, to) = redmine_time_entries_range(question);
                     let rec = format!(
-                        "REDMINE_API: GET /time_entries.json?from={}&to={}",
+                        "REDMINE_API: GET /time_entries.json?from={}&to={}&limit=100",
                         from, to
                     );
                     info!(
@@ -4664,7 +4745,7 @@ pub fn answer_with_ollama_and_fetch(
                                 Ok(result) => {
                                     let mut msg = if path.contains("time_entries") {
                                         format!(
-                                            "Redmine API result:\n\n{}\n\nUse this data to answer the user's question. Summarize the actual time-entry data only: totals, projects or tickets worked, missing data, and any clear next step.",
+                                            "Redmine API result:\n\n{}\n\nUse this data to answer the user's question. The derived summary above already lists the actual tickets worked (if any), totals, users, projects, and entry details. Use that instead of inventing ticket ids or subjects.",
                                             result
                                         )
                                     } else {
@@ -4681,7 +4762,7 @@ pub fn answer_with_ollama_and_fetch(
                                         } else {
                                             if path.contains("time_entries") {
                                                 msg.push_str(
-                                            "\n\nUse this data to answer. If the user asked for \"this month\", use from/to for the current month. If success criteria require JSON format, reply with valid JSON only (e.g. total hours, project breakdown).",
+                                            "\n\nUse this data to answer. If the user asked for tickets worked, list the actual issue ids and subjects from the derived summary. If the user asked for \"this month\", use from/to for the current month. If success criteria require JSON format, reply with valid JSON only (e.g. total hours, ticket list, project breakdown).",
                                         );
                                             } else {
                                                 let id = path
@@ -4862,6 +4943,14 @@ pub fn answer_with_ollama_and_fetch(
                 break;
             }
             let user_message = tool_results.join("\n\n---\n\n");
+            if !question_explicitly_requests_json(question) {
+                if let Some(summary) = extract_redmine_time_entries_summary_for_reply(&user_message)
+                {
+                    info!("Agent router: returning direct Redmine time-entry summary");
+                    response_content = summary;
+                    break;
+                }
+            }
 
             messages.push(crate::ollama::ChatMessage {
                 role: "assistant".to_string(),
@@ -5063,7 +5152,7 @@ pub fn answer_with_ollama_and_fetch(
                             || question.to_lowercase().contains("spent"))
                     {
                         format!(
-                        "Use the correct Redmine API for time entries: REDMINE_API: GET /time_entries.json with from= and to= for the requested period (for example 2026-03-01..2026-03-31 for this month, or the same day for today). Omit optional filters like user_id or project_id unless the user explicitly asked for them. Do not use /search.json for time entries. Then reply with the data or a clear summary.\n\n{}",
+                        "Use the correct Redmine API for time entries: REDMINE_API: GET /time_entries.json with from= and to= for the requested period (for example 2026-03-01..2026-03-31 for this month, or the same day for today) and include limit=100 so the results are not truncated. Omit optional filters like user_id or project_id unless the user explicitly asked for them. Do not use /search.json for time entries. Then reply with the data or a clear summary.\n\n{}",
                         retry_base
                     )
                     } else if !attachment_paths.is_empty() && reason_about_attachments {
@@ -5502,8 +5591,16 @@ fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String,
         }
     }
     for prefix in prefixes {
-        if search.to_uppercase().starts_with(prefix) {
-            let mut arg = search[prefix.len()..].trim().to_string();
+        let tool_name = prefix.trim_end_matches(':');
+        let search_upper = search.to_uppercase();
+        let bare_prefix = format!("{} ", tool_name);
+        if search_upper.starts_with(prefix) || search_upper.starts_with(&bare_prefix) {
+            let arg_start = if search_upper.starts_with(prefix) {
+                prefix.len()
+            } else {
+                tool_name.len()
+            };
+            let mut arg = search[arg_start..].trim().to_string();
             if arg.is_empty()
                 && prefix != "TASK_LIST:"
                 && prefix != "TASK_SHOW:"
@@ -5514,7 +5611,6 @@ fn parse_one_tool_at_line(lines: &[&str], line_index: usize) -> Option<((String,
             {
                 continue;
             }
-            let tool_name = prefix.trim_end_matches(':');
             let tool_name = if tool_name.eq_ignore_ascii_case("SCHEDULER") {
                 "SCHEDULE".to_string()
             } else {
@@ -6718,8 +6814,9 @@ pub async fn ollama_chat_continue_with_result(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_perplexity_verbose_summary, extract_last_prefixed_argument,
+        build_agent_runtime_context, build_perplexity_verbose_summary, extract_last_prefixed_argument,
         parse_agent_tool_from_response, parse_all_tools_from_response,
+        redmine_time_entries_range_for_date,
     };
 
     #[test]
@@ -6795,11 +6892,11 @@ mod tests {
     fn parse_agent_tool_from_response_skips_unsupported_prefix_tool() {
         assert_eq!(
             parse_agent_tool_from_response(
-                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
             ),
             Some((
                 "REDMINE_API".to_string(),
-                "GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
                     .to_string()
             ))
         );
@@ -6809,13 +6906,13 @@ mod tests {
     fn parse_all_tools_from_response_splits_inline_then_chain() {
         assert_eq!(
             parse_all_tools_from_response(
-                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
             ),
             vec![
                 ("RUN_CMD".to_string(), "date +%Y-%m-%d".to_string()),
                 (
                     "REDMINE_API".to_string(),
-                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
                         .to_string()
                 )
             ]
@@ -6826,15 +6923,64 @@ mod tests {
     fn parse_all_tools_from_response_splits_inline_semicolon_chain() {
         assert_eq!(
             parse_all_tools_from_response(
-                "RECOMMEND: RUN_CMD: date; REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                "RECOMMEND: RUN_CMD: date; REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
             ),
             vec![
                 ("RUN_CMD".to_string(), "date".to_string()),
                 (
                     "REDMINE_API".to_string(),
-                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06".to_string()
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100".to_string()
                 )
             ]
+        );
+    }
+
+    #[test]
+    fn parse_tool_from_response_supports_recommend_without_colon() {
+        assert_eq!(
+            parse_tool_from_response(
+                "RECOMMEND: REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
+            ),
+            Some((
+                "REDMINE_API".to_string(),
+                "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
+                    .to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn build_agent_runtime_context_anchors_today_to_local_date() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-03-07T00:15:16+02:00").unwrap();
+        let context = build_agent_runtime_context(now);
+        assert!(context.contains("Current local date: 2026-03-07"));
+        assert!(context.contains("Current UTC date: 2026-03-06"));
+        assert!(context.contains(
+            "For date-sensitive tool calls such as Redmine \"today\" queries, use the current UTC date (2026-03-06)"
+        ));
+    }
+
+    #[test]
+    fn redmine_time_entries_range_for_date_uses_utc_day_for_today_queries() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 3, 6).unwrap();
+        assert_eq!(
+            redmine_time_entries_range_for_date(
+                "Provide me the list of redmine tickets work on today.",
+                today
+            ),
+            ("2026-03-06".to_string(), "2026-03-06".to_string())
+        );
+    }
+
+    #[test]
+    fn redmine_time_entries_range_for_date_uses_previous_utc_day_for_yesterday_queries() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 3, 6).unwrap();
+        assert_eq!(
+            redmine_time_entries_range_for_date(
+                "Give me a list of Redmine tickets worked on yestaerday.",
+                today
+            ),
+            ("2026-03-05".to_string(), "2026-03-05".to_string())
         );
     }
 }
