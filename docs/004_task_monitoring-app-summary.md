@@ -1,23 +1,52 @@
-# Monitoring App – Design & Architecture Summary
+## Global Context
+### mac-stats
+A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, and MCP—all on your Mac. No cloud, no telemetry. Lives in your menu bar—CPU, GPU, RAM, disk at a glance. Real-time, minimal, there when you look. Built with Rust and Tauri.
 
-## Core Vision
+### Installation
+#### DMG (recommended)
+[Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
+
+#### Build from source
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+#### If macOS blocks the app:
+Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a Glance
+### Menu Bar
+- CPU, GPU, RAM, disk at a glance; click to open the details window.
+
+### AI Chat
+- Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+
+### Discord Bot
+- [Discord Bot Documentation](discord-bot.md)
+
+## Tool Agents
+Whenever Ollama is asked to decide which agent to use (planning step in Discord and scheduler flow), the app sends the **complete list of active agents**: the invocable tools below plus the **SCHEDULER** (informational; Ollama can recommend it for recurring or delayed tasks but cannot invoke it with a tool line). Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+
+## Monitoring App
+### Core Vision
 A calm, premium macOS monitoring app focused on *signal over noise*.  
 At-a-glance system health with optional, expandable insights and alerts.
 
-> “A calm, high-fidelity system and service monitor that tells you when something matters — and stays quiet otherwise.”
-
----
-
-## Core UI Principles
+### Core UI Principles
 - **Minimal & Glass-like** macOS aesthetic (dark, translucent, polished)
 - **Calm by default**, details on demand
 - Strong visual hierarchy, no visual competition
 - Everything optional and collapsible
 
----
-
-## Main Dashboard (Always Visible)
-### Three Core Gauges (Hero Metrics)
+### Main Dashboard (Always Visible)
+#### Three Core Gauges (Hero Metrics)
 These define the identity of the app and should never expand beyond three:
 
 1. **Temperature**
@@ -29,9 +58,7 @@ Rules:
 - Simple visuals (bars, subtle motion)
 - No heavy charts in the main view
 
----
-
-## Battery & Power
+### Battery & Power
 - Shown as a **horizontal status strip below the gauges**
 - Not a gauge, not a card
 
@@ -46,9 +73,7 @@ Purpose:
 - Always visible
 - Never dominant
 
----
-
-## External Monitoring (Websites, APIs, Social)
+### External Monitoring (Websites, APIs, Social)
 External monitoring represents a **different mental mode** than hardware.
 
 ### Placement
@@ -68,9 +93,7 @@ Metrics:
 - SSL / HTTP errors
 - Downtime history (optional)
 
----
-
-## Social Monitoring (Mastodon / X)
+### Social Monitoring (Mastodon / X)
 - Treated as external monitors
 - Collapsed summary:
   - “2 new mentions”
@@ -81,8 +104,6 @@ Metrics:
 Notes:
 - Mastodon API is straightforward
 - X (Twitter) API is more restricted and fragile
-
----
 
 ## Local AI Integration (Ollama)
 Support for locally running Ollama instance as an endpoint.
@@ -105,8 +126,6 @@ Support for locally running Ollama instance as an endpoint.
 - Optional API key if using remote Ollama instance
 - Connection status indicator
 
----
-
 ## Alerts & Notifications
 Alerts are essential but **invisible unless configured**.
 
@@ -128,8 +147,6 @@ Alerts are essential but **invisible unless configured**.
 - Battery < 5%
 - Sustained high temperature
 
----
-
 ## Plugin System (Key to Scalability)
 ### Recommended Model: Script-Based Plugins
 Plugins are executable scripts (bash / python) that output JSON.
@@ -150,8 +167,6 @@ Core responsibilities:
 - Parsing
 - Caching
 - Alerts
-
----
 
 ## Security & Credentials Management
 
@@ -188,8 +203,6 @@ The following features require secure credential storage:
 - Logging must mask or exclude sensitive data
 - Network traffic should use HTTPS/TLS for all external communications
 
----
-
 ## Visualization Strategy
 - **SVG / CSS** for core UI and gauges
 - **D3.js only in detail views**
@@ -198,8 +211,6 @@ The following features require secure credential storage:
   - Distributions
 - Avoid heavy visuals in the main dashboard
 
----
-
 ## What NOT to Add (For Now)
 To avoid bloat and loss of focus:
 - Productivity scoring
@@ -207,8 +218,6 @@ To avoid bloat and loss of focus:
 - Finance / health dashboards
 - Social analytics
 - AI-driven “life dashboards”
-
----
 
 ## Long-Term Direction
 - Modular system (like Home Assistant / Grafana / Uptime Kuma)
@@ -220,8 +229,6 @@ To avoid bloat and loss of focus:
   - Alerts
   - UI
 
----
-
 ## Final Guiding Rule
 If a feature is:
 - Not glanceable
@@ -229,3 +236,10 @@ If a feature is:
 - Not calm
 
 → It goes behind a click or into a plugin.
+
+## Open tasks:
+- Re-evaluate plugin system for better performance and security
+- Implement a more robust and user-friendly settings interface
+- Enhance the plugin ecosystem to support more advanced features
+- Review and refine the alert system for better accuracy and customization options
+- Investigate and fix the issue with Gatekeeper blocking the app

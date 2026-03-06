@@ -1,15 +1,66 @@
-# Browser automation (BROWSER_* tools)
+## Global Context
+### README.md snippets
+#### mac-stats
 
-BROWSER_NAVIGATE, BROWSER_CLICK, BROWSER_INPUT, and BROWSER_SCREENSHOT use **Chrome** via the Chrome DevTools Protocol (CDP) on port **9222**.
+**The AI agent that just gets it done. All local.**
 
-## What mac-stats needs to use the browser
+[![GitHub release](https://img.shields.io/github/v/release/raro42/mac-stats?include_prereleases&style=flat-square)](https://github.com/raro42/mac-stats/releases/latest)
 
+A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, and MCP—all on your Mac. No cloud, no telemetry. Lives in your menu bar—CPU, GPU, RAM, disk at a glance. Real-time, minimal, there when you look. Built with Rust and Tauri.
+
+<img src="screens/data-poster.png" alt="mac-stats Data Poster theme" width="500">
+
+📋 [Changelog](CHANGELOG.md) · 📸 [Screenshots & themes](screens/README.md)
+
+---
+
+## Install
+### DMG (recommended)
+[Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
+
+### Build from source
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+### If macOS blocks the app
+Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+---
+
+## At a Glance
+### Menu Bar
+- **CPU, GPU, RAM, disk at a glance; click to open the details window.**
+
+### AI Chat
+- **Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.**
+
+### Discord Bot
+- **Discord bot functionality, including FETCH_URL and BRAVE_SEARCH.**
+
+---
+
+## Tool Agents (what Ollama can invoke)
+### Invocation
+Whenever Ollama is asked to decide which agent to use (planning step in Discord and scheduler flow), the app sends the **complete list of active agents**: the invocable tools below plus the **SCHEDULER** (informational; Ollama can recommend it for recurring or delayed tasks but cannot invoke it with a tool line). Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+### Agents
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+
+---
+
+## Browser Automation (BROWSER_* tools)
+### Requirements
 1. **Chrome installed**
    - **macOS:** `/Applications/Google Chrome.app` (standard install).
    - **Linux:** `google-chrome` on PATH.
 
-2. **Chrome on port 9222** — either:
-
+2. **Chrome on port 9222**
    - **You start Chrome:** run Chrome with remote debugging so mac-stats can attach:
      ```bash
      /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
@@ -23,12 +74,17 @@ BROWSER_NAVIGATE, BROWSER_CLICK, BROWSER_INPUT, and BROWSER_SCREENSHOT use **Chr
    - If Chrome is not installed at the path above, install it or create a symlink; mac-stats does not install Chrome.
    - After a timeout or crash, mac-stats clears the cached session; the next BROWSER_* use will reconnect or relaunch.
 
-## Summary
+### Cookie consent and screenshots
+When the user asks to remove or dismiss a cookie consent banner and take a screenshot, the planning prompt instructs the model to include **BROWSER_CLICK** on the consent button (using the Elements list from BROWSER_NAVIGATE) **before** BROWSER_SCREENSHOT. Pre-routing to NAVIGATE + SCREENSHOT is skipped when the question mentions cookie/consent/banner so the planner can add the click step.
 
+### Summary
 | Requirement | What mac-stats does |
 |------------|----------------------|
 | Chrome on 9222 | If port is free, **launches** Chrome with `--remote-debugging-port=9222` (macOS/Linux). If port is in use, **connects** to existing Chrome. |
 | Chrome not installed | Cannot launch; you must install Chrome and/or start it manually on 9222. |
 | Connection dies (timeout, crash) | Session is cleared on error; next use will reconnect to 9222 or relaunch. |
 
-See also: `docs/026_light_browser_agent_plan_DONE.md`, `src-tauri/src/bin/test_cdp_browser.rs`.
+## Open tasks:
+- Investigate why some users are unable to launch Chrome on port 9222.
+- Improve the documentation for BROWSER_* tools to better explain the connection process.
+- Consider adding a feature to automatically launch Chrome if it's not already running on port 9222.

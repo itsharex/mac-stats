@@ -1,10 +1,42 @@
 # mac-stats Documentation
 
+## Global Context
+
+A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, and MCP—all on your Mac. No cloud, no telemetry. Lives in your menu bar—CPU, GPU, RAM, disk at a glance. Real-time, minimal, there when you look. Built with Rust and Tauri.
+
+## Install
+
+### DMG (recommended)
+[Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
+
+### Build from source:
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+### If macOS blocks the app:
+Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a Glance
+
+- **Menu bar** — CPU, GPU, RAM, disk at a glance; click to open the details window.
+- **AI chat** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+- **Discord**
+
+## Tool Agents (what Ollama can invoke)
+
+Whenever Ollama is asked to decide which agent to use (planning step in Discord and scheduler flow), the app sends the **complete list of active agents**: the invocable tools below plus the **SCHEDULER** (informational; Ollama can recommend it for recurring or delayed tasks but cannot invoke it with a tool line). Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+
 ## CPU Optimization Task Suite
 
 This folder contains comprehensive CPU optimization analysis and implementation tasks for reducing mac-stats CPU usage from ~1% (window open) to ~0.6-0.8%.
-
----
 
 ## Quick Start
 
@@ -14,8 +46,6 @@ This folder contains comprehensive CPU optimization analysis and implementation 
 2. Choose a phase (Phase 1 recommended for quick wins)
 3. Track progress using the task docs (000, 001, 002) and phase table below
 4. Implement: Reference the detailed task documents
-
----
 
 ## Documents Overview
 
@@ -61,11 +91,6 @@ This folder contains comprehensive CPU optimization analysis and implementation 
 - Task F6: Window cleanup listeners (5 lines)
 - Task F7: Optimize process list DOM (25 lines)
 
-### ✅ Tracking progress
-Use the phase table below and the task docs (000, 001, 002) to track which tasks are done. Take before/after measurements with `scripts/measure_performance.sh`.
-
----
-
 ## Phase Overview
 
 | Phase | Duration | Tasks | CPU Reduction | Risk | Status |
@@ -75,8 +100,6 @@ Use the phase table below and the task docs (000, 001, 002) to track which tasks
 | **3: Refactoring** | 1-2 hrs | 3 tasks (20-40 lines each) | -2.5-3% | ⭐⭐ Medium | Ready |
 | **4: Advanced** | 2-4 hrs | 3 tasks (specialized) | -1-1.5% | ⭐⭐ Medium | Ready |
 | **Total** | ~8 hrs | **15 tasks** | **-18-24%** | ⭐⭐ Medium | **Go** |
-
----
 
 ## File Structure
 
@@ -89,16 +112,14 @@ docs/
 └── data-poster-charts-backend.md        ← (Unrelated)
 ```
 
----
-
 ## Quick Decision Tree
 
 **Q: How much time do I have?**
 
-- **5 minutes**: Do Phase 1 only (5 one-line changes, -12-18% CPU) ✅
-- **30 minutes**: Phase 1 + 2 (-15% CPU) ✅
-- **2 hours**: Phase 1 + 2 + 3 (-20% CPU) ✅✅
-- **Full day**: All phases 1-4 (-20-24% CPU) ✅✅✅
+- **5 minutes**: Do Phase 1 only (5 one-line changes, -12-18% CPU) 
+- **30 minutes**: Phase 1 + 2 (-15% CPU) 
+- **2 hours**: Phase 1 + 2 + 3 (-20% CPU) 
+- **Full day**: All phases 1-4 (-20-24% CPU) 
 
 **Q: How risky are these changes?**
 
@@ -110,8 +131,6 @@ docs/
 **Q: What's the biggest improvement?**
 
 Tasks 1-3 (interval adjustments) save -12-18% CPU with just 5 one-line changes.
-
----
 
 ## Getting Started: Step-by-Step
 
@@ -162,29 +181,27 @@ git commit -m "Optimize CPU: phases 1-3 (-20%)"
 git push
 ```
 
----
-
 ## Code Examples
 
 ### Phase 1 Example (5-second fix)
 ```rust
-// File: src-tauri/src/lib.rs:409
-// Before:
+# File: src-tauri/src/lib.rs:409
+# Before:
 .map(|t| t.elapsed().as_secs() >= 15)
 
-// After:
+# After:
 .map(|t| t.elapsed().as_secs() >= 20)
 ```
 
 ### Phase 3 Example (40-line refactor)
 ```javascript
-// File: src-tauri/dist/cpu.js:414-448
-// Before: Update all metrics every 1 second
+# File: src-tauri/dist/cpu.js:414-448
+# Before: Update all metrics every 1 second
 function scheduleDOMUpdate() {
     // Updates load, uptime, power...
 }
 
-// After: Split into fast (1s) and slow (5s)
+# After: Split into fast (1s) and slow (5s)
 function scheduleDOMUpdate() {
     // Fast metrics only
 }
@@ -192,8 +209,6 @@ function updateSlowMetrics() {
     // Slow metrics every 5s
 }
 ```
-
----
 
 ## Testing & Validation
 
@@ -214,7 +229,7 @@ cargo build --release
 ### Detailed Test
 ```bash
 # Enable verbose logging
-./target/release/mac_stats --cpu -vvv
+./target/release/mac-stats --cpu -vvv
 
 # Watch debug output
 tail -f ~/.mac-stats/debug.log
@@ -228,7 +243,7 @@ tail -f ~/.mac-stats/debug.log
 ### DevTools Test (Frontend)
 ```bash
 # Open app
-./target/release/mac_stats --cpu
+./target/release/mac-stats --cpu
 
 # Open DevTools: F12
 # Performance tab: Record 30 seconds
@@ -237,8 +252,6 @@ tail -f ~/.mac-stats/debug.log
 # - No long tasks
 # - DOM updates efficient
 ```
-
----
 
 ## Common Questions
 
@@ -263,8 +276,6 @@ A: No. Phase 1 alone gives good improvement with minimal effort. Phases 2-4 are 
 **Q: Will these changes affect app features?**
 A: No. These are performance-only optimizations. All features unchanged.
 
----
-
 ## Document Statistics
 
 - **Total lines**: 2,015
@@ -273,8 +284,6 @@ A: No. These are performance-only optimizations. All features unchanged.
 - **Checklist items**: 80+ verification points
 - **Code examples**: 20+ before/after comparisons
 - **Testing procedures**: 15+ test scenarios
-
----
 
 ## Related Documentation
 
@@ -285,30 +294,19 @@ A: No. These are performance-only optimizations. All features unchanged.
 - **What others do & plan**: [`034_what_others_do_and_plan.md`](034_what_others_do_and_plan.md) — research and proposed priorities
 - **Memory and topic handling**: [`035_memory_and_topic_handling.md`](035_memory_and_topic_handling.md) — log review, OpenClaw/Hermes, topic-aware compaction and user reset
 
----
-
 ## Status
 
 | Component | Status |
 |-----------|--------|
-| Backend analysis | ✅ Complete |
-| Frontend analysis | ✅ Complete |
-| Task documentation | ✅ Complete |
-| Code examples | ✅ Complete |
-| Testing procedures | ✅ Complete |
-| Checklist | ✅ Complete |
+| Backend analysis | 
+| Frontend analysis | 
+| Task documentation | 
+| Code examples | 
+| Testing procedures | 
+| Checklist | 
 
-**All documents ready for implementation.**
+## Open tasks:
 
----
-
-## Next Steps
-
-1. ✅ Read [`000_task_optimize_summary.md`](000_task_optimize_summary.md)
-2. ✅ Choose your phase
-3. ✅ Start Phase 1 (5 minutes!)
-4. ✅ Use the phase table and task docs to track
-5. ✅ Reference task documents for code details
-
-**Ready to optimize? Start with Phase 1!**
-
+- Questionable logic in Phase 1
+- Missing features in Phase 2
+- Pending items for Phase 3 and 4

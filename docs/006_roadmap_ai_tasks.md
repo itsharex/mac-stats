@@ -1,30 +1,68 @@
-# AI Tasks Roadmap: Web, Mail, WhatsApp, Google Docs
+# mac-stats
 
-## Phase 1: Web navigation and extraction (implemented)
+## Overview
 
-- **Backend fetch**: Tauri command `fetch_page(url)` in `src-tauri/src/commands/browser.rs`. Server-side GET with timeout (15s) and same SSL policy as website monitors. Returns body as text (max 500k chars).
-- **Tool protocol**: Ollama can request a page fetch by replying with exactly one line: `FETCH_URL: <full URL>`. The app fetches the page and sends the content back to Ollama; the model then answers the user (e.g. "navigate to www.amvara.de and retrieve the phone number").
-- **Flow**: Handled inside `ollama_chat_with_execution`: after each Ollama response, if `FETCH_URL:` is present, we fetch the URL, append the page content to the conversation, and call Ollama again (up to 3 fetch iterations).
-- **Docs**: See agents.md and CLAUDE.md for where Ollama + fetch is documented.
+mac-stats is a local AI agent for macOS that provides a range of features, including:
 
-## Phase 2 and beyond: Mail, WhatsApp, Google Docs (roadmap only)
+* CPU, GPU, RAM, and disk usage monitoring
+* Ollama chat and Discord bot functionality
+* Task runner and scheduler
+* MCP (Model-Driven Predictive) integration
 
-These are separate integrations, not "browser" in the same sense.
+## Installation
 
-- **Mail**: e.g. IMAP/OAuth (Apple Mail, Gmail) via a dedicated module; credentials in Keychain; Ollama could get tool actions like `READ_MAIL_FOLDER:inbox` and the app returns summarized content.
-- **WhatsApp**: WhatsApp Business API (official) or unofficial APIs; same pattern: secure credentials, dedicated commands, optional tool protocol so Ollama can request "last N chats" or "send message" with user confirmation.
-- **Google Docs**: Google APIs (OAuth), read/list documents; dedicated backend commands + tool protocol.
-- **Common pattern**: Each integration = new Tauri commands + optional Keychain credentials + a convention for Ollama to request an action (e.g. `ACTION=READ_MAIL`, `ACTION=WHATSAPP_RECENT`, `ACTION=GDOCS_LIST`) and the app returns structured text/JSON to Ollama for the model to summarize or act.
-- **No implementation yet**; add step by step when needed.
+### DMG (Recommended)
 
-## Discord agent (implemented)
+Download the latest release from [GitHub](https://github.com/raro42/mac-stats/releases/latest) and drag the app to the Applications folder.
 
-- **Module**: `src-tauri/src/discord/mod.rs` (Serenity client, EventHandler for DMs and @mentions).
-- **Credentials**: Discord Bot Token in Keychain (`discord_bot_token`); configure via Settings in the app.
-- **Reply pipeline**: Discord handler uses the shared "answer with Ollama + fetch" API so replies can use Ollama and FETCH_URL when answering (see docs/007_discord_agent.md).
+### Build from Source
 
-## Ollama connection / session handling (improvement, deferred)
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
 
-- **Current behaviour**: A single `OllamaClient` (config + one `reqwest::Client`) is stored when the user configures Ollama. For **chat** (`send_ollama_chat_messages` in `commands/ollama.rs`), only the **config** (endpoint, model, API key) is read from that client; a **new** `reqwest::Client` is created per request and used for the POST. So we do not reuse the stored HTTP client or its connection pool for chat. Other Ollama operations (list models, etc.) also often construct a new client per call.
-- **Ollama API**: Stateless; each `POST /api/chat` is independent (full `messages` in the body). There is no server-side "session"; "session" on our side means reusing the same TCP/HTTP connections and config.
-- **Intended improvement**: Use the stored `OllamaClient`'s `client` (or a single shared `reqwest::Client`) inside `send_ollama_chat_messages` and other Ollama call paths instead of building a new client each time, so connections to local (or remote) Ollama are reused. Deferred for now; no implementation planned yet.
+## At a Glance
+
+* **Menu Bar**: Displays CPU, GPU, RAM, and disk usage at a glance. Click to open the details window.
+* **AI Chat**: Ollama chat and Discord bot functionality.
+* **Discord Agent**: Handles Discord DMs and @mentions.
+
+## Tool Agents
+
+Ollama can invoke the following tool agents:
+
+* **FETCH_URL**: Fetches a web page's body as text.
+* **BRAVE_SEARCH**: Performs a web search via Brave Search API.
+* **RUN_JS**: Executes JavaScript code.
+
+## AI Tasks Roadmap
+
+### Phase 1: Web Navigation and Extraction
+
+* **Backend Fetch**: Tauri command `fetch_page(url)` in `src-tauri/src/commands/browser.rs`.
+* **Tool Protocol**: Ollama can request a page fetch by replying with exactly one line: `FETCH_URL: <full URL>`.
+* **Flow**: Handled inside `ollama_chat_with_execution`.
+
+### Phase 2 and Beyond
+
+* **Mail**: IMAP/OAuth integration via a dedicated module.
+* **WhatsApp**: WhatsApp Business API or unofficial APIs.
+* **Google Docs**: Google APIs (OAuth) integration.
+
+## Discord Agent
+
+* **Module**: `src-tauri/src/discord/mod.rs`.
+* **Credentials**: Discord Bot Token in Keychain (`discord_bot_token`).
+* **Reply Pipeline**: Discord handler uses the shared "answer with Ollama + fetch" API.
+
+## Ollama Connection / Session Handling
+
+* **Current Behaviour**: A single `OllamaClient` is stored when the user configures Ollama.
+* **Intended Improvement**: Use the stored `OllamaClient`'s `client` inside `send_ollama_chat_messages` and other Ollama call paths.
+
+## Open tasks:
+
+* Investigate improving Ollama connection / session handling.
+* Implement Mail, WhatsApp, and Google Docs integrations.
+* Review and refine the AI tasks roadmap.

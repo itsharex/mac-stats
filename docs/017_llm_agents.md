@@ -1,86 +1,118 @@
-# LLM Agents (directory-based, per-agent model and prompt)
+# mac-stats: Local AI Agent for macOS
 
-This document describes **LLM agents**: directory-based entities under `~/.mac-stats/agents/` with their own **model**, **skill**, optional **mood** and **soul**, and optional **orchestrator** role. They are distinct from the **SKILL** tool (simple prompt overlays in `~/.mac-stats/skills/`). Use LLM agents when you need a per-agent model and a combined identity (soul + mood + skill).
+## Overview
+A local AI agent for macOS with:
+- **Menu bar monitoring**: CPU, GPU, RAM, disk usage
+- **AI capabilities**: Ollama chat, Discord bot, task runner, scheduler
+- **No cloud/telemetry**: All operations run locally
+- **Themes**: Data Poster (default), customizable
 
-## Path and layout
+[![GitHub release](https://img.shields.io/github/v/release/raro42/mac-stats?include_prereleases&style=flat-square)](https://github.com/raro42/mac-stats/releases/latest)
 
-- **Path**: `~/.mac-stats/agents/` (see `Config::agents_dir()` in `config/mod.rs`).
-- **Per agent**: One subdirectory per agent: `agent-<id>/` (e.g. `agent-001`, `agent-002`).
+---
 
-| File         | Purpose                                                                 |
-| ------------ | ----------------------------------------------------------------------- |
-| **agent.json** | Required. `{ "name": "...", "slug": "...", "model": "...", "model_role": "...", "orchestrator": true/false, "enabled": true/false }`. `model` optional (explicit model name). `model_role` optional (resolved from catalog at load time). See **Model and model_role** below. |
-| **skill.md**   | Required. What the agent is good at (system-prompt overlay).            |
-| **mood.md**   | Optional. Mood / tone / additional context.                            |
-| **soul.md**   | Optional. “Soul” of the agent (identity, principles).                   |
-| **testing.md**| Required for `mac_stats agent test`. Test prompts (one per `## ` section or whole file). |
+## Installation
+**Recommended:**  
+[Download latest release](https://github.com/raro42/mac-stats/releases/latest) → Drag to Applications
 
-**Combined prompt** for an agent: concatenate in order **soul → mood → skill**. Empty files are skipped.
+**From source:**
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+# Or one-liner: curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run
+```
 
-**Model and model_role**: You can set either **`model`** (exact Ollama model name) or **`model_role`** (resolved at startup from the local model list). If both are set and `model` is available, it is used. **`model_role`** values (see `ollama/models.rs` and `docs/030_agent_model_assignment_plan_DONE.md`):
+**If blocked by Gatekeeper:**  
+Right-click DMG → **Open**, or run:  
+`xattr -rd com.apple.quarantine /Applications/mac-stats.app`
 
-| Role | Picks |
-|------|--------|
-| `code` | Best code-oriented model (name/family: coder, code). Fallback: general. |
-| `general` | Best general-purpose model (medium size preferred). |
-| `small` / `cheap` | Smallest eligible local model (fast, low resource). |
-| `vision` | First vision/multimodal model (llava, pixtral, etc.). Fallback: general. |
-| `thinking` / `reasoning` | First reasoning model (deepseek-r1, thinking, etc.). Fallback: general. |
-| `expensive` | Largest eligible local model. |
+---
 
-Models are classified from Ollama’s `/api/tags` (name, family, parameter size). **Only local models are chosen** for role resolution; cloud is used only when you explicitly set it (e.g. `model: "qwen3.5:cloud"` in agent.json or as default).
+## Core Features
+- **Menu bar**: Click to open detailed metrics window
+- **AI chat**: Ollama integration (via app or Discord)
+- **Discord bot**: Message parsing, agent routing
+- **Task automation**: Scheduler, command execution
+- **Real-time monitoring**: CPU/GPU/RAM/disk metrics
 
-**Naming**: Agent **id** comes from the directory (`agent-001` → id `"001"`). **Name** and optional **slug** come from `agent.json`. **Slug** is a short natural-language identifier (e.g. `humble-coder`, `senior-coder`) used for display and for **AGENT: <selector>** resolution: match by **slug** (case-insensitive) first, then by **name**, then by **id**.
+---
 
-## AGENT tool (Ollama tool loop)
+## Agent System
 
-When at least one enabled agent exists, the app adds an **AGENT** tool to the list Ollama sees:
+### Tool Agents (Ollama Invokable)
+| Agent         | Command              | Purpose                          |
+|---------------|----------------------|----------------------------------|
+| FETCH_URL     | `FETCH_URL: <URL>`   | Fetch web page content           |
+| BRAVE_SEARCH  | `BRAVE_SEARCH: <q>`  | Web search via Brave API         |
+| RUN_JS        | `RUN_JS: <code>`     | Execute JavaScript in CPU window |
 
-- **Invocation**: `AGENT: <id or name or slug> [optional task]`
-- **Behaviour**: The app runs that agent in a **separate Ollama session**: system prompt = agent’s combined prompt (soul + mood + skill), user message = task or current question, model = agent’s `model` or default. The result is injected back so the main model (e.g. orchestrator) can use it.
+**Implementation**:  
+- `commands/browser.rs` for FETCH_URL  
+- `commands/brave.rs` for BRAVE_SEARCH  
+- JavaScript execution in CPU window
 
-**Orchestrator**: One or more agents can have `"orchestrator": true` in `agent.json`. Their `skill.md` typically instructs them to delegate via **AGENT: <id or name> <task>** when a specialized agent is needed. When the orchestrator outputs `AGENT: 002 write a hello world`, the app runs agent `002` and returns its reply to the orchestrator. The orchestrator (e.g. agent-000) should include a **Router API Commands** section in its `skill.md` so it can ask and use all router tools (AGENT, FETCH_URL, TASK_*, SCHEDULE, RUN_CMD, OLLAMA_API, etc.); see `docs/agent_000_router_commands_snippet.md` for a copy-paste snippet.
+---
 
-## Entry-point agent override (Discord)
+### LLM Agents (Directory-Based)
+**Location**: `~/.mac-stats/agents/`  
+Each agent has:
+- `agent.json`: Model, role, orchestrator status
+- `skill.md`: System prompt (task-specific)
+- `mood.md`: Tone/context
+- `soul.md`: Identity/principles
+- `testing.md`: Test prompts
 
-- **Discord**: A message can start with `agent: 001` or `agent: General` (same style as `model:`, `skill:`). The app resolves the selector to an agent and passes it as **agent_override** into `answer_with_ollama_and_fetch`. The **first** response is then made by that agent (its model + combined prompt); the tool list still includes **AGENT:** so the orchestrator (or that agent) can call other agents.
+**Model Roles** (resolved at startup):
+| Role       | Description                     |
+|------------|---------------------------------|
+| `code`     | Code-oriented model (coder, etc)|
+| `general`  | General-purpose model           |
+| `small`    | Smallest/local model            |
+| `vision`   | Multimodal model (LLaVA, etc)   |
+| `thinking` | Reasoning model (DeepSeek, etc) |
+| `expensive`| Largest/local model             |
 
-## Agent test CLI
+**Orchestrator Agents**:
+- Delegate tasks to specialized agents via `AGENT: <id>`  
+- Must include "Router API Commands" in `skill.md`
 
-- **Command**: `mac_stats agent test <selector> [path]`
-- **Behaviour**: Resolves the agent by id/slug/name, reads test prompts from `path` or from `~/.mac-stats/agents/agent-<id>/testing.md`, and runs each prompt through that agent’s session (same as AGENT tool). Each agent **must** have a `testing.md` when using the default path.
+---
 
-## Rust API (for context)
+## Default Agents
+Pre-installed agents (editable by user):
+| ID         | Name               | Role                     |
+|------------|--------------------|--------------------------|
+| `000`      | Orchestrator       | Routes to specialists    |
+| `001`      | General Assistant  | General Q&A              |
+| `002`      | Coder              | Code generation          |
+| `003`      | Generalist         | Fast replies             |
+| `004`      | Discord Expert     | Discord API specialist   |
+| `005`      | Task Runner        | Task file execution      |
 
-- **Module**: `src-tauri/src/agents/mod.rs` (and `agents/cli.rs`, `agents/watch.rs`).
-- **Types**: `Agent { id, name, slug, model, orchestrator, enabled, combined_prompt }`, `AgentConfig` (from agent.json).
-- **Functions**: `load_agents() -> Vec<Agent>`, `find_agent_by_id_or_name(agents, selector) -> Option<&Agent>`, `load_all_agents()`, `get_agent_dir(id)`.
-- **Execution**: `commands/ollama.rs` → `run_agent_ollama_session(agent, user_message, status_tx)`; tool loop handles `AGENT:` and calls it.
+---
 
-## Default agents
+## Agent Testing
+```bash
+mac_stats agent test <selector> [path]
+```
+- Resolves agent by ID/name/slug
+- Uses `testing.md` for prompts
+- Simulates `AGENT:` tool invocation
 
-Four agents ship as defaults, embedded in the binary via `include_str!` from `src-tauri/defaults/agents/`. On first launch (or if missing), `Config::ensure_defaults()` writes them to `~/.mac-stats/agents/`:
+---
 
-| Dir | Name | Slug | model_role (resolved at startup) | Role |
-|-----|------|------|----------------------------------|------|
-| `agent-000` | Orchestrator | `orchestrator` | `thinking` | Routes to specialists; uses reasoning model when available |
-| `agent-001` | General Assistant | `general-purpose-mommy` | `general` | General-purpose Q&A |
-| `agent-002` | Coder | `senior-coder` | `code` | Code generation; uses code model when available |
-| `agent-003` | Generalist | `humble-generalist` | `small` | Fast replies; smallest local model |
-| `agent-004` | Discord Expert | `discord-expert` | `cheap` | Discord API specialist; fast model |
-| `agent-005` | Task Runner | `scheduler` | `general` | Task file execution; general model |
+## SKILL vs LLM Agents
+| Feature         | SKILL                     | LLM Agent                     |
+|-----------------|---------------------------|-------------------------------|
+| Model           | Shared default model      | Per-agent model               |
+| Prompt          | Simple overlay            | Combined soul/mood/skill prompt |
+| Use Case        | Lightweight tasks         | Complex workflows, delegation |
 
-Each includes `agent.json`, `skill.md`, and `testing.md`. Users can edit any file — `ensure_defaults()` never overwrites existing files. To reset an agent to defaults, delete its directory and restart.
+---
 
-The default source files live in `src-tauri/defaults/agents/` and are easy to edit in the repo (clean Markdown diffs).
-
-## Relationship to SKILL
-
-- **SKILL** (see `docs/016_skill_agent.md`): Simple prompt overlays in `~/.mac-stats/skills/` (e.g. `skill-1-summarize.md`). No per-skill model; one default model, skill content as system prompt. Use for lightweight, single-session tasks.
-- **LLM agents**: Richer entities with optional per-agent model, soul, mood, and skill. Use when you need different models or a clear identity (orchestrator vs specialists) and delegation via **AGENT:**.
-
-## References
-
-- **Plan**: LLM agent orchestration with skill/mood/soul and per-agent models.
-- **All agents overview**: `docs/100_all_agents.md`
-- **Discord**: `docs/007_discord_agent.md` (agent override: `agent: 001`)
+## Open tasks:
+- Clarify `model_role` resolution logic
+- Add documentation for `AGENT: <selector> [task]` syntax
+- Implement missing `orchestrator` routing examples
+- Define fallback behavior for cloud model roles
+- Add CLI command for agent reset/defaults
+- Document `testing.md` format requirements

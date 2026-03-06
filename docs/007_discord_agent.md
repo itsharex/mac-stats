@@ -1,4 +1,31 @@
-# Discord Agent (Gateway + HTTP API)
+## Install
+
+- **DMG (recommended):** [Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
+- **Build from source:**
+  ```bash
+  git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+  ```
+
+  Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+- **If macOS blocks the app:** Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a glance
+
+- **Menu bar** — CPU, GPU, RAM, disk at a glance; click to open the details window.
+- **AI chat** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+
+## 1. Tool agents (what Ollama can invoke)
+
+Whenever Ollama is asked to decide which agent to use (planning step in Discord and scheduler flow), the app sends the **complete list of active agents**: the invocable tools below plus the **SCHEDULER** (informational; Ollama can recommend it for recurring or delayed tasks but cannot invoke it with a tool line). Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+
+## 2. Discord Agent (Gateway + HTTP API)
 
 mac-stats can run a Discord bot that connects via the **Gateway** and responds to **DMs** and **@mentions**. Replies use the Ollama agent pipeline and can call the **Discord HTTP API** (list servers, channels, members, get user info, send messages). The bot records the message author’s display name and passes it to Ollama so it can address the user by name.
 
@@ -15,34 +42,29 @@ mac-stats can run a Discord bot that connects via the **Gateway** and responds t
    - Or from devtools: `invoke('configure_discord', { token: 'YOUR_TOKEN' })`.
 5. **Clearing the token**: Use **Clear token** in Settings (removes from Keychain). Env and .config.env are not cleared by the app. To fully disconnect, restart mac-stats.
 
-## Tauri commands
+## 3. Tauri commands
 
 - **`configure_discord(token: Option<string>)`**  
   Set token (store in Keychain) or clear it. Pass `null` to remove. When a token is saved, the gateway starts immediately. (Env and .config.env are read automatically; use this to persist from the UI.)
 - **`is_discord_configured()`**  
   Returns `true` if a token is available (from env, .config.env, or Keychain). Does not reveal the token.
 
-## Behavior
+## 4. Behavior
 
 - Listens for **direct messages** to the bot and for **messages that @mention the bot** in guilds.
 - Ignores the bot’s own messages and messages that don’t mention it (in guilds).
 - Replies using the **“answer with Ollama + tools”** pipeline: planning step (RECOMMEND) then execution with FETCH_URL, BRAVE_SEARCH, RUN_CMD, MCP, **DISCORD_API**, etc. (see `docs/100_all_agents.md`).
 - When you message the bot, it records your **display name** and tells Ollama “You are talking to **&lt;name&gt;** (user id: …)” so replies can be personalized. Names are cached for reuse in the session.
 
-### Faster model for Discord (optional)
+## 5. Faster model for Discord (optional)
 
 When no channel or message overrides the model, the app uses a default. To get **faster replies** (e.g. for browser/screenshot flows), set **OLLAMA_FAST_MODEL** in env or `~/.mac-stats/.config.env` (e.g. `OLLAMA_FAST_MODEL=qwen2.5:1.5b` or `qwen2.5:latest`). The agent router will use that model for planning and tool runs. **OLLAMA_MODEL** still overrides the UI/default elsewhere when set.
 
-### Session reset and memory (clear context)
+## 6. Session reset and memory (clear context)
 
 To **start a fresh conversation** in a channel (clear prior context), say a phrase that means "clear session" or "new topic" — the bot clears the session for that channel and replies without old context. **Phrases are matched in any language** (substring, case-insensitive).
 
-**Configurable (like OpenClaw's resetTriggers, but in an MD file):** The list of phrases is loaded from **`~/.mac-stats/session_reset_phrases.md`** — one phrase per line; lines starting with `#` are comments. Edit this file to add or remove phrases. If the file is missing, the app writes a default at first run. No JSON; the MD file is easy to edit without breaking syntax. Default content includes examples in English, German, Spanish, French, Italian, Portuguese, and Dutch.
-
-
-See `docs/035_memory_and_topic_handling.md` for topic-aware compaction and when prior context is dropped automatically (e.g. new topic).
-
-## Discord API (HTTP)
+## 7. Discord API (HTTP)
 
 When a request comes **from Discord**, the agent router adds a **DISCORD_API** tool so Ollama can call Discord’s REST API. This is only available in the Discord context (not in the scheduler or CPU-window chat).
 
@@ -72,7 +94,7 @@ Ollama invokes the Discord API by replying with exactly one line:
 
 Only **GET** is allowed for general read endpoints. **POST** is allowed only for `/channels/{channel_id}/messages`. Heavy use may hit Discord’s rate limits; see [Discord rate limits](https://discord.com/developers/docs/topics/rate-limits).
 
-## SCHEDULE and REMOVE_SCHEDULE (reminders and recurring tasks)
+## 8. SCHEDULE and REMOVE_SCHEDULE (reminders and recurring tasks)
 
 The agent can add entries to `~/.mac-stats/schedules.json` via the **SCHEDULE** tool. When a schedule is added from Discord, the agent is given a **schedule ID** (e.g. `discord-1770648842`) and is instructed to tell the user so they can remove it later. When the scheduler runs a task and posts the result to Discord, the message includes the schedule ID (e.g. `[Schedule: discord-1770648842]`) for context.
 
@@ -88,7 +110,7 @@ To remove a schedule, the user can say e.g. **"Remove schedule: discord-17706488
 
 - **Remove:** `REMOVE_SCHEDULE: <schedule-id>` — e.g. `REMOVE_SCHEDULE: discord-1770648842`. The agent invokes this when the user asks to remove, delete, or cancel a schedule and provides the ID (or the user said e.g. "Remove schedule: discord-1770648842").
 
-## Understanding servers, users, channels, guilds
+## 9. Understanding servers, users, channels, guilds
 
 - **Servers (guilds)**  
   Use `GET /users/@me/guilds` to see which servers the bot is in. Each guild has an `id` and `name`.
@@ -121,7 +143,7 @@ To remove a schedule, the user can say e.g. **"Remove schedule: discord-17706488
 
   `id` is the Discord user id (snowflake) as a string. Optional: `display_name` (override), `notes`, `timezone`, `extra` (key-value). Ollama can read the file via `RUN_CMD: cat ~/.mac-stats/user-info.json` if needed.
 
-## Message prefixes (optional)
+## 10. Message prefixes (optional)
 
 You can put **optional leading lines** in your message to override model, parameters, or skill for that request only. These lines are stripped before the question is sent to Ollama.
 
@@ -135,70 +157,13 @@ You can put **optional leading lines** in your message to override model, parame
 | `verbose` or `verbose: true` | (on its own line) | Show status/thinking messages in the channel for this request. |
 | `verbose: false` | (on its own line) | Hide status messages for this request (default in channels). |
 
-**Verbose default by context:** For **direct messages (DMs)** the app defaults to **verbose** (you see “Asking Ollama…”, “Executing plan…”, etc.). For **channel** messages it defaults to **non-verbose**. You can override in `~/.mac-stats/discord_channels.json` with top-level keys: `"default_verbose_for_dm": true` (default) and `"default_verbose_for_channel": false` (default). Omit them to keep these defaults; set to `false`/`true` to change. A `verbose` or `verbose: false` line in the message overrides the config for that request.
-
-Example message:
-
-```
-model: llama3.2
-skill: code
-Write a small Python function to compute factorial.
-```
-
-See **Ollama context, model/params, and skills** in `docs/012_ollama_context_skills.md` for details.
-
-## Security
+## 11. Security
 
 - Token is resolved from **DISCORD_BOT_TOKEN** env, then **.config.env** (cwd or `~/.mac-stats/.config.env`), then **Keychain** (service `com.raro42.mac-stats`, account `discord_bot_token`). Using env or .config.env avoids Keychain entirely.
 - The token is never logged or exposed in the UI or in error messages.
 - **DISCORD_API** uses the same bot token and only allows **GET** (read) and **POST** to `/channels/{id}/messages` (send message). Other write operations are not exposed.
 
-## Using .config.env or DISCORD_BOT_TOKEN (no Keychain needed)
-
-You can run the Discord gateway **without Keychain** by using the environment or a config file. The app checks in order: `DISCORD_BOT_TOKEN` env → `.config.env` in current directory → `~/.mac-stats/.config.env` → Keychain.
-
-1. **Option A – .config.env in project (development)**  
-   In `src-tauri/.config.env` add one line:
-   ```bash
-   DISCORD-USER1-TOKEN=your_bot_token_here
-   ```
-   Or:
-   ```bash
-   DISCORD_BOT_TOKEN=your_bot_token_here
-   ```
-   Run from **src-tauri** so the current directory contains `.config.env`:
-   ```bash
-   cd src-tauri && cargo run -- --cpu -v
-   ```
-   You should see logs: `Discord: Token from .config.env (current dir)`, then `Token found, spawning gateway thread`, then `Bot connected as …`.
-
-2. **Option B – Run script (exports env from .config.env)**  
-   ```bash
-   ./scripts/run_with_discord_token.sh --dev
-   ```
-   The script reads `src-tauri/.config.env` and sets `DISCORD_BOT_TOKEN`; the app uses it and never touches Keychain.
-
-3. **Option C – ~/.mac-stats/.config.env (any working directory)**  
-   Create `~/.mac-stats/.config.env` with the same line format. The app will use it regardless of where you start the process.
-
-**Keychain (optional):**  
-If you use **Save token** in the app, the token is stored in Keychain. If the OS never prompts for Keychain access or Keychain blocks, use Option A, B, or C instead. For Keychain troubleshooting (unlock, allow prompt), see **Granting the app access to Keychain** below.
-
-**Keychain test (store + read back):**
-```bash
-cd src-tauri && cargo run --bin test_discord_keychain -- .config.env
-```
-Only needed if you rely on Keychain. If it hangs after "Token length: N chars", use env or .config.env instead.
-
-## Granting the app access to Keychain (optional)
-
-Only needed if you use **Save token** in the app. mac-stats stores that token in the **login** keychain. If Keychain is locked or the app was never allowed, storage can block or fail.
-
-1. **Unlock the login keychain** in Keychain Access (select **login** → unlock with macOS password).
-2. **Run the app from Terminal** so any "X wants to access keychain" dialog is visible; click **Always Allow**.
-3. If the OS never shows the dialog, use **.config.env or DISCORD_BOT_TOKEN** (see above) and skip Keychain.
-
-## Testing the Discord connection
+## 12. Testing the Discord connection
 
 To verify the token without running the full app, use the test binary (reads from `.config.env` or `DISCORD_BOT_TOKEN`):
 
@@ -213,9 +178,7 @@ With a valid token you should see in the output:
 
 You can pass a custom env file path: `cargo run --bin test_discord_connect -- path/to/.config.env`.
 
-To test the **DISCORD_API** tool, send the bot a message in Discord such as: “What servers are you in?” or “List the channels in this server.” (The bot must be in the server and have access to the channel.)
-
-## Debugging “Save token”
+## 13. Debugging “Save token”
 
 If clicking **Save token** does nothing or the app stalls:
 
@@ -237,7 +200,7 @@ If clicking **Save token** does nothing or the app stalls:
    - `Discord: Token stored (restart app to connect)`
    If these lines never appear, the click is not reaching the Rust command (e.g. invoke not available or handler not attached). If they appear and the UI still hangs, the hang is after the command (e.g. alert or refresh).
 
-## Testing the pipeline without Discord
+## 14. Testing the pipeline without Discord
 
 To run the same Ollama+tools pipeline as a Discord DM (planning, tool loop, **headless** browser) without sending a real message:
 
@@ -247,3 +210,18 @@ cd src-tauri
 ```
 
 Requires **Ollama** running and configured (env `OLLAMA_HOST` or `~/.mac-stats/.config.env`). The app ensures defaults and initializes the Ollama client before running. Reply and any attachment paths (e.g. screenshots under `~/.mac-stats/screenshots/`) are printed to stdout. Logs: `~/.mac-stats/debug.log` (e.g. `grep -E "headless|BROWSER_NAVIGATE|screenshot" ~/.mac-stats/debug.log`).
+
+## Open tasks:
+
+- Investigate why `SCHEDULE` and `REMOVE_SCHEDULE` commands don't work as expected.
+- Improve the documentation for `~/.mac-stats/schedules.json` and `~/.mac-stats/user-info.json`.
+- Consider adding a feature to automatically update `~/.mac-stats/user-info.json` when a user's display name changes.
+- Look into using a more robust caching mechanism for `~/.mac-stats/user-info.json`.
+- Investigate the possibility of using a more efficient data structure for `~/.mac-stats/schedules.json`.
+- Consider adding a feature to allow users to customize the behavior of the `SCHEDULE` and `REMOVE_SCHEDULE` commands.
+- Improve the error handling for cases where the Discord API is unavailable.
+- Investigate the possibility of using a more secure method for storing the Discord bot token.
+- Consider adding a feature to allow users to view the logs for the Discord bot.
+- Improve the documentation for the `test_discord_connect` binary.
+- Investigate the possibility of using a more efficient method for testing the Discord connection.
+- Consider adding a feature to allow users to customize the behavior of the `test_discord_connect` binary.

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.30] - 2026-03-06
+
+### Added
+- **Redmine time-entry prompts for “today”** — The Redmine agent, planner prompt, and Ollama router now support “worked on today / tickets worked today” with direct same-day `REDMINE_API: GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD` calls.
+- **Docs for recent backend behavior** — Added follow-up docs for Redmine review hallucination fixes, prompt/tool scaling, review-only Redmine behavior, project rename planning, and sending finished task summaries back to Discord.
+
+### Changed
+- **Redmine time-entry execution** — Time-entry calls no longer default to `user_id=me`; optional filters are only added when explicitly needed, and the planner/router now prefer directly executable date-ranged Redmine calls instead of chaining `RUN_CMD` just to derive dates.
+- **Agent-safe tool parsing** — Specialist agent tool parsing now reuses the main router’s normalization so inline chains and `RECOMMEND:` wrappers are handled more reliably for agent-safe tools like `REDMINE_API`.
+- **Documentation refresh** — Large cleanup and rewrite across README and docs to better match current code, defaults, session/memory behavior, browser automation, Redmine flows, and agent capabilities.
+
 ## [0.1.29] - 2026-03-06
 
 ### Added

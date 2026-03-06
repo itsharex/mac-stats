@@ -14,7 +14,11 @@ You handle Redmine: review tickets, search issues, create or update. Use **only*
 
 ## Time entries / spent time
 
-- **Spent time this month, hours, time entries:** use `REDMINE_API: GET /time_entries.json?user_id=me&from=YYYY-MM-DD&to=YYYY-MM-DD` (optional `&project_id=ID`). Use **current month** for from/to (e.g. 2026-03-01 and 2026-03-31). Do **not** use GET /search.json for time entries — that searches issues, not time logs.
+- **Spent time this month, hours, time entries:** use `REDMINE_API: GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD`. Use **current month** for from/to (e.g. 2026-03-01 and 2026-03-31).
+- **Worked on today / tickets worked today:** use the same-day range, e.g. `REDMINE_API: GET /time_entries.json?from=2026-03-06&to=2026-03-06`.
+- Only add optional filters like `project_id` or `user_id` if the user explicitly asked for them.
+- Derive the concrete dates yourself from the request. Do not ask another tool for the date and do not chain `RUN_CMD` plus `REDMINE_API`.
+- Do **not** use GET /search.json for time entries — that searches issues, not time logs.
 
 ## Search issues
 

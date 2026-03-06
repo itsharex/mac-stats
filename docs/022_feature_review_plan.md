@@ -1,13 +1,36 @@
-# Feature Review Plan — `feat/agents-discord-mcp-scheduler` branch
+# mac-stats
 
-**Date:** 2026-02-19  
-**Branch:** `feat/agents-discord-mcp-scheduler` (up-to-date with remote)  
-**Build:** Compiles cleanly (`cargo check` passes, no warnings)  
-**Uncommitted changes:** 19 files modified, 2 new files (+422 / -115 lines)
+## Install
 
----
+### DMG (recommended):
+[Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
 
-## 1. Scope of uncommitted changes
+### Build from source:
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+### If macOS blocks the app:
+Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a glance
+
+- **Menu bar** — CPU, GPU, RAM, disk at a glance; click to open the details window.
+- **AI chat** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+- **Discord**
+
+## 1. Tool agents (what Ollama can invoke)
+
+Whenever Ollama is asked to decide which agent to use (planning step in Discord and scheduler flow), the app sends the **complete list of active agents**: the invocable tools below plus the **SCHEDULER** (informational; Ollama can recommend it for recurring or delayed tasks but cannot invoke it with a tool line). Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In `CPU window`: executed in `src-tauri/dist/ollama.js` |
+
+## 2. Scope of uncommitted changes
 
 The diff on top of the last commit (844c4bc) contains **10 distinct features/improvements**. This review plan covers each one.
 
@@ -24,9 +47,7 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 | F9 | **Toggle CPU window** (refactor + new Tauri command) | `ui/status_bar.rs`, `commands/window.rs` | Low |
 | F10 | **Background monitor checks** (`run_due_monitor_checks`) | `commands/monitors.rs` | Medium |
 
----
-
-## 2. Review plan — per feature
+## 3. Review plan — per feature
 
 ### F1: Session memory for Discord
 
@@ -149,9 +170,7 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - [ ] Verify that `check_monitor()` saves stats to disk after each check (existing behaviour — confirm not regressed).
 - [ ] Edge case: monitors with `check_interval_secs = 0` — would this run every cycle? Confirm there's a minimum.
 
----
-
-## 3. Integration review
+## 4. Integration review
 
 | Area | What to verify |
 |------|----------------|
@@ -162,9 +181,7 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 | **Soul path** | Unified to `~/.mac-stats/agents/soul.md`. Users with a customized `~/.mac-stats/agent/soul.md` need to move it. |
 | **`run_due_monitor_checks` caller** | Verify it's wired to a background thread. If not, it's dead code. |
 
----
-
-## 4. Manual testing plan
+## 5. Manual testing plan
 
 ### Smoke tests (15 min)
 
@@ -191,19 +208,19 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 
 ---
 
-## 5. Decisions needed before commit
+## 6. Decisions needed before commit
 
 | # | Decision | Options |
 |---|----------|---------|
 | D1 | **Session file format change** — old files won't load after restart | (a) Add backward compat to also search old naming, (b) Accept break (users lose old session context), (c) Write migration |
 | D2 | **Finished task dedup** — should `TASK_CREATE` be allowed when an existing task with same topic+id is `finished`? | (a) Allow (re-create), (b) Block (current behaviour), (c) Block but suggest a new id |
-| D3 | **`ellipse()` in FETCH_URL** — changes truncation marker from `[truncated]` to `...` | (a) Keep `...` (cleaner), (b) Use `... [content truncated]` (clearer for LLM) |
+| D3 | **`ellipse()` in FETCH_URL`** — changes truncation marker from `[truncated]` to `...` | (a) Keep `...` (cleaner), (b) Use `... [content truncated]` (clearer for LLM) |
 | D4 | **`run_due_monitor_checks` wiring** — is it called? | (a) Wire to background thread, (b) Remove if premature |
 | D5 | **Soul path naming** — `agent/` vs `agents/` was confusing | RESOLVED: consolidated to `~/.mac-stats/agents/soul.md` only |
 
 ---
 
-## 6. Suggested commit strategy
+## 7. Suggested commit strategy
 
 Given the 10 features span different concerns, consider splitting into 2-3 atomic commits:
 
@@ -215,7 +232,7 @@ Or commit all at once with a descriptive message covering the highlights.
 
 ---
 
-## 7. Post-review additions (0.1.14)
+## 8. Post-review additions (0.1.14)
 
 After the initial feature review and merge to main, the following changes were made on top of 0.1.13:
 
@@ -226,6 +243,26 @@ After the initial feature review and merge to main, the following changes were m
 | F13 | **Tauri prompt API** — `list_prompt_files`, `save_prompt_file` commands | `commands/agents.rs`, `lib.rs` | Low |
 | F14 | **RUN_CMD retry loop** — AI-corrected retries (up to 3) on command failure | `commands/ollama.rs` | Medium |
 | F15 | **Tool parsing improvements** — strip numbered-list prefixes, multi-RECOMMEND, arg truncation | `commands/ollama.rs` | Low |
-| F16 | **Empty response fallback** — use raw tool output when Ollama returns empty | `commands/ollama.rs` | Low |
 
 See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for details.
+
+---
+
+## Open tasks:
+
+### Questionable logic:
+
+* Is the `try_lock()` usage in `run_due_monitor_checks()` safe? Should it be `lock()` instead?
+* Is the `VERBOSITY` atomic set by CLI `-v`/`-vv`/`-vvv` flags and the new `set_chat_verbosity` consistent across all logging macros?
+* Is the `run_due_monitor_checks` function called somewhere? Should it be wired to a background thread?
+
+### Missing features:
+
+* Externalized prompts (F11) — are they properly synced to `src/ollama.js`?
+* Default agents shipped (F12) — are they properly registered in `lib.rs`?
+* Tauri prompt API (F13) — are the `list_prompt_files` and `save_prompt_file` commands properly implemented?
+
+### Pending items:
+
+* Review and merge `docs/023_externalized_prompts_DONE.md` — is it complete and accurate?
+* Update `CHANGELOG.md` (0.1.14) to reflect the new features and changes.

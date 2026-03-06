@@ -1,8 +1,38 @@
-# Task Agent (task files and loop until finished)
+## Installation
+
+### DMG (recommended)
+[Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
+
+### Build from source
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+### If macOS blocks the app:
+Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a Glance
+
+- **Menu bar** — CPU, GPU, RAM, disk at a glance; click to open the details window.
+- **AI chat** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+- **Discord bot** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+
+## Tool Agents (what Ollama can invoke)
+
+Whenever Ollama is asked to decide which agent to use, the app sends the complete list of active agents. Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+
+## Task Agent (task files and loop until finished)
 
 The task agent lets you work on tasks stored as Markdown files under `~/.mac-stats/task/`. All task logic lives in the **task** module (`task/mod.rs`, `task/runner.rs`, `task/review.rs`, `task/cli.rs`). Ollama and the scheduler call into the task module; they do not contain task file I/O or business rules.
 
-## Overview
+### Overview
 
 - **Task directory**: `~/.mac-stats/task/`
 - **File naming**: `task-<date-time>-<status>.md`
@@ -25,8 +55,6 @@ mac_stats assign <id> <agent>          # Assign to scheduler|discord|cpu|default
 mac_stats append <id> <content>        # Append feedback block
 ```
 
-Example: `mac_stats add foo 1 "Hello"` then `mac_stats list`, `mac_stats show 1`, `mac_stats status 1 wip`, `mac_stats assign 1 scheduler`, `mac_stats remove 1`.
-
 ## Tools (Ollama invocations)
 
 | Tool | Invocation | Purpose |
@@ -40,42 +68,7 @@ Example: `mac_stats add foo 1 "Hello"` then `mac_stats list`, `mac_stats show 1`
 | **TASK_ASSIGN** | `TASK_ASSIGN: <path or id> <agent_id>` | Reassign task to `scheduler`, `discord`, `cpu`, or `default`. Appends "Reassigned to X." |
 | **TASK_SLEEP** | `TASK_SLEEP: <path or id> until <ISO datetime>` | Set status to `paused` and write `## Paused until: <datetime>`. Review loop will auto-resume after that time. |
 
-- **Path or task id**: Full path under `~/.mac-stats/task/`, the task filename (e.g. `task-20260222-140215-open.md`), or the short id/topic from the file (e.g. `1`, `research`); the app resolves by filename, then by `## Id:` or `## Topic:` in file (prefers `open`, then `wip`).
-- **Assignee**: Every task has an assignee (default `default`). The **review loop** only works on tasks assigned to `scheduler` or `default`. Use TASK_ASSIGN so Discord-assigned tasks are not picked by the background loop.
-- **Discord / natural language**: When a user says "close the task", "finish", "mark done", or "cancel" a task (e.g. in Discord), the agent instructions tell the LLM to reply with **TASK_STATUS: &lt;id&gt; finished** (success) or **TASK_STATUS: &lt;id&gt; unsuccessful** (failed), not `wip`. This is defined in `commands/ollama.rs` in `build_agent_descriptions` so the model reliably closes the task instead of leaving it in progress.
-
-## Task file format
-
-- **Content**: Free-form Markdown. In-file lines:
-  - `## Assigned: scheduler` — who owns the task (scheduler, discord, cpu, default).
-  - `## Topic: <topic>` — topic (e.g. research, refactor-api); used for listing and resolve by topic.
-  - `## Id: <id>` — short id (e.g. 1, 2); used for resolve by id.
-  - `## Paused until: 2025-02-10T09:00:00` — resume after this time (review loop clears and reopens).
-  - `## Depends: id1, id2` — task is only **ready** when all listed tasks are finished or unsuccessful.
-  - `## Sub-tasks: id1, id2` — parent cannot be set to `finished` until all sub-tasks are finished or unsuccessful.
-- **Sections**: `## Feedback` (appended by TASK_APPEND with timestamp).
-
-## Task review loop (every 1 minute)
-
-- **Entry point**: `task/review.rs` — `spawn_review_thread()` at app startup.
-- **Interval**: Review runs every **1 minute** so tasks are looked at at least once per minute (configurable via `REVIEW_INTERVAL_SECS` in `review.rs`).
-- **Behaviour** each cycle:
-  1. **Close stale WIP**: Any task in `wip` last modified more than **30 minutes** ago is set to **unsuccessful** and a note appended.
-  2. **Resume paused**: Any task in `paused` with `## Paused until: <datetime>` where now >= datetime is renamed to `open` and the paused-until line is removed.
-  3. **Work on open tasks**: Pick open tasks that are **assigned to scheduler or default**, **ready** (all `## Depends:` satisfied), up to **3 tasks per cycle**, each with up to **20 iterations** via `task::runner::run_task_until_finished`. If max iterations is reached without `finished`, the task is auto-closed as **unsuccessful**.
-
-**Why aren’t my tasks being worked on?** The review loop only picks tasks that are (1) status **open**, (2) **assigned to `scheduler` or `default`** (tasks assigned to `discord` or `cpu` are skipped), and (3) **ready** (no unmet `## Depends:`). If you have many open tasks but none are picked, check assignees: `mac_stats list --all` shows `(assigned: …)`; reassign with `mac_stats assign <id> scheduler` or via **TASK_ASSIGN: &lt;id&gt; scheduler**. The app logs each cycle: "Task scan: open=…" and, when no task is picked, either "none assigned to scheduler/default" or "none are ready (check ## Depends:)".
-
-## Task loop (run until finished)
-
-- **Entry point**: Scheduler (`TASK:` or `TASK_RUN: <path or id>` in `schedules.json`) or the task review loop.
-- **Implementation**: `task/runner.rs` — `run_task_until_finished(path, max_iterations)`:
-  1. If status is already `finished` or `unsuccessful`, return immediately.
-  2. Loop: read task, send to Ollama with instructions to use TASK_APPEND/TASK_STATUS, run tool loop, re-read path. Stop when status is `finished`.
-  3. If max iterations reached, set status to **unsuccessful** and append "Max iterations reached; closed as unsuccessful."
-- **Scheduler**: Resolves path and calls `task::runner::run_task_until_finished(path, 10)`. If `reply_to_channel_id` is set, sends "Working on task '...' now." and the final result to that Discord channel.
-
-## Module layout
+## Module Layout
 
 - **task/mod.rs**: Core — create, read, append, set_status, resolve_path, list, format_list, assignee, paused_until, depends_on, is_ready, sub_tasks, all_sub_tasks_closed, delete_task, show_task_content.
 - **task/runner.rs**: `run_task_until_finished(path, max_iterations)` — loop that calls Ollama and re-reads task until finished or max iterations (then auto-close as unsuccessful).
@@ -84,8 +77,7 @@ Example: `mac_stats add foo 1 "Hello"` then `mac_stats list`, `mac_stats show 1`
 - **commands/ollama.rs**: Thin — parses TASK_* tool lines and calls one task function per tool; no task file I/O.
 - **scheduler/mod.rs**: For TASK:/TASK_RUN:, resolves path and calls `task::runner::run_task_until_finished(path, 10)`.
 
-## References
-
-- **All agents:** `docs/100_all_agents.md`
-- **RUN_CMD:** `docs/011_local_cmd_agent.md` (read task files with cat/grep)
-- **Scheduler:** `docs/009_scheduler_agent.md`
+## Open tasks:
+- Questionable logic: 
+- Missing features: 
+- Pending items:

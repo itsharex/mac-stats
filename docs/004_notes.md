@@ -1,163 +1,142 @@
-# Implementation Notes - Monitoring App v0.1.0
+## mac-stats
+
+### Overview
+
+mac-stats is a local AI agent for macOS that provides a range of features, including:
+
+* Ollama chat and Discord bot
+* Task runner and scheduler
+* MCP (Mac Performance Counter) monitoring
+* CPU, GPU, RAM, and disk at a glance
+
+### Installation
+
+#### DMG (Recommended)
+
+1. Download the latest release from [GitHub](https://github.com/raro42/mac-stats/releases/latest)
+2. Drag the app to the Applications folder
+
+#### Build from Source
+
+1. Clone the repository: `git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run`
+2. Or use the one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run`
+
+#### Gatekeeper Configuration
+
+If macOS blocks the app, follow these steps:
+
+1. Right-click the DMG and select **Open**
+2. Confirm the installation
+
+Or, after installation:
+
+1. Run `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a Glance
+
+### Menu Bar
+
+* Displays CPU, GPU, RAM, and disk usage at a glance
+* Click to open the details window
+
+### AI Chat
+
+* Ollama chat in the app or via Discord
+* Supports FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, and MCP
+
+### Discord Bot
+
+* Integrates with Discord to provide a chat interface for Ollama
+
+## Tool Agents
+
+Whenever Ollama is asked to decide which agent to use, the app sends the complete list of active agents. Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS) | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
 
 ## Implementation Status
 
 ### Completed Backend Modules
 
 1. **Security Module** (`src/security/mod.rs`)
-   - Keychain integration for secure credential storage
-   - Store, retrieve, delete credentials
-   - List credentials (partial - needs proper Keychain API for account extraction)
-   - Uses `security-framework` crate with proper error handling
-
+	* Keychain integration for secure credential storage
+	* Store, retrieve, delete credentials
+	* List credentials (partial - needs proper Keychain API for account extraction)
+	* Uses `security-framework` crate with proper error handling
 2. **Monitors Module** (`src/monitors/`)
-   - Website monitoring (HTTP/HTTPS checks, response times, SSL verification)
-   - Social monitoring (Mastodon mentions, Twitter placeholder)
-   - Monitor status tracking and history
-
+	* Website monitoring (HTTP/HTTPS checks, response times, SSL verification)
+	* Social monitoring (Mastodon mentions, Twitter placeholder)
+	* Monitor status tracking and history
 3. **Alerts Module** (`src/alerts/`)
-   - Rule-based alert system
-   - Alert rules: SiteDown, NewMentions, BatteryLow, TemperatureHigh, CpuHigh, Custom
-   - Alert channels: Telegram, Slack, Mastodon, Signal (placeholder)
-   - Cooldown mechanism to prevent spam
-
+	* Rule-based alert system
+	* Alert rules: SiteDown, NewMentions, BatteryLow, TemperatureHigh, CpuHigh, Custom
+	* Alert channels: Telegram, Slack, Mastodon, Signal (placeholder)
+	* Cooldown mechanism to prevent spam
 4. **Plugins Module** (`src/plugins/mod.rs`)
-   - Script-based plugin system (bash/python)
-   - JSON output contract
-   - Scheduling and execution
-   - Plugin validation
-
+	* Script-based plugin system (bash/python)
+	* JSON output contract
+	* Scheduling and execution
+	* Plugin validation
 5. **Ollama Module** (`src/ollama/mod.rs`)
-   - Local LLM integration
-   - Chat interface
-   - Model listing
-   - Connection checking
-
-6. **Tauri Commands** (`src/commands/`)
-   - All backend functionality exposed as Tauri commands
-   - Proper error handling and serialization
+	* Local LLM integration
+	* Chat interface
+	* Model listing
+	* Connection checking
 
 ### Known Issues / TODOs
 
 1. **Security Module**
-   - `list_credentials()` function needs proper Keychain API implementation to extract account names
-   - Currently returns empty vector - needs implementation using Keychain Services API
-
+	* `list_credentials()` function needs proper Keychain API implementation to extract account names
+	* Currently returns empty vector - needs implementation using Keychain Services API
 2. **Plugin System**
-   - Timeout handling not fully implemented (std::process::Command doesn't have timeout)
-   - Should use tokio or crossbeam for proper timeout handling
-   - Plugin script execution could be improved with better error messages
-
+	* Timeout handling not fully implemented (std::process::Command doesn't have timeout)
+	* Should use tokio or crossbeam for proper timeout handling
+	* Plugin script execution could be improved with better error messages
 3. **Monitor System**
-   - Monitor state persistence not implemented (in-memory only)
-   - Should persist to disk (JSON/TOML config file)
-   - Monitor scheduling/background checking not implemented yet
-
+	* Monitor state persistence not implemented (in-memory only)
+	* Should persist to disk (JSON/TOML config file)
+	* Monitor scheduling/background checking not implemented yet
 4. **Alert System**
-   - Alert channel registration not exposed via Tauri commands
-   - Need to add commands for registering Telegram/Slack/Mastodon channels
-   - Alert evaluation needs to be called periodically (background task)
-
+	* Alert channel registration not exposed via Tauri commands
+	* Need to add commands for registering Telegram/Slack/Mastodon channels
+	* Alert evaluation needs to be called periodically (background task)
 5. **Ollama Integration**
-   - Stream support not implemented (currently only non-streaming chat)
-   - Could add streaming for better UX
-
+	* Stream support not implemented (currently only non-streaming chat)
+	* Could add streaming for better UX
 6. **UI Implementation**
-   - Frontend UI not yet updated to show new dashboard
-   - Need to create:
-     - 3 core gauges (Temperature, CPU Usage, CPU Frequency)
-     - Battery & Power status strip
-     - Collapsible External/Monitors section
-     - Settings UI for adding monitors, configuring alerts
-     - Ollama chat interface
+	* Frontend UI not yet updated to show new dashboard
+	* Need to create:
+		+ 3 core gauges (Temperature, CPU Usage, CPU Frequency)
+		+ Battery & Power status strip
+		+ Collapsible External/Monitors section
+		+ Settings UI for adding monitors, configuring alerts
+		+ Ollama chat interface
 
-### Architecture Decisions
+## Open tasks:
 
-1. **State Management**: Using `OnceLock` for global state (monitors, alerts, plugins, ollama)
-   - In production, should use proper state management (e.g., Tauri state, database)
-   - Current implementation is in-memory only
+### Security Module
+* Implement `list_credentials()` function using Keychain Services API
 
-2. **Error Handling**: Using `anyhow` for error handling throughout
-   - Tauri commands return `Result<T, String>` for serialization
-   - Internal functions use `anyhow::Result`
+### Plugin System
+* Implement proper timeout handling using tokio or crossbeam
 
-3. **Security**: All credentials stored in macOS Keychain
-   - Never exposed in logs, UI, or files
-   - Proper error handling for missing credentials
+### Monitor System
+* Implement monitor state persistence using JSON/TOML config file
 
-4. **Plugin Contract**: JSON-based output
-   - Simple and language-agnostic
-   - Easy to validate and parse
-   - Low barrier for developers
+### Alert System
+* Add commands for registering Telegram/Slack/Mastodon channels
 
-### Build Process Note
+### Ollama Integration
+* Implement stream support for better UX
 
-**Important**: Tauri serves files from the `dist/` directory, but source files are in `src/`. 
-
-To sync files for development, run:
-```bash
-./scripts/sync-dist.sh
-```
-
-Or manually copy files:
-```bash
-mkdir -p dist
-cp src/*.html src/*.css src/*.js dist/
-cp -r src/assets dist/
-```
-
-The `dist/` directory is gitignored as it's a build output.
-
-### Next Steps
-
-1. **UI Implementation** (Priority) ✅ COMPLETE
-   - ✅ Update frontend HTML/CSS/JS to show new dashboard
-   - ✅ Implement 3 core gauges with SVG
-   - ✅ Add battery/power status strip
-   - ✅ Create collapsible sections for external monitors
-   - ⏳ Add settings UI (basic placeholder implemented)
-
-2. **Background Tasks**
-   - Implement monitor checking scheduler
-   - Implement alert evaluation scheduler
-   - Implement plugin execution scheduler
-
-3. **Persistence**
-   - Save monitor configurations to disk
-   - Save alert configurations to disk
-   - Save plugin configurations to disk
-   - Load on startup
-
-4. **Testing**
-   - Test all Tauri commands
-   - Test Keychain operations
-   - Test monitor checking
-   - Test alert evaluation
-   - Test plugin execution
-
-### Questions / Findings
-
-1. **Keychain API**: The `list_credentials()` function needs more research on proper Keychain Services API usage to extract account names from items.
-
-2. **Plugin Timeout**: Need to decide on approach for plugin timeout - tokio spawn with timeout, or use a different approach.
-
-3. **Monitor Scheduling**: Should monitors be checked in a single background thread, or separate threads per monitor? Current design allows for both.
-
-4. **Alert Channel Registration**: Should channels be registered via Tauri commands, or configured in a config file? Currently designed for programmatic registration.
-
-5. **UI Framework**: Current UI is vanilla HTML/CSS/JS. Should we consider a framework (React, Vue, Svelte) for better state management?
-
-### Dependencies Added
-
-- `reqwest` - HTTP client for website monitoring and API calls
-- `tokio` - Async runtime (for future async operations)
-- `security-framework` / `security-framework-sys` - macOS Keychain integration
-- `chrono` - Date/time handling
-- `url` - URL parsing and validation
-- `anyhow` - Error handling
-- `toml` - TOML parsing (for plugin configs)
-
-### Version
-
-- Updated to 0.1.0 (major milestone)
-- Branch: `feature/monitoring-app-0.1.0`
+### UI Implementation
+* Update frontend UI to show new dashboard
+* Implement 3 core gauges with SVG
+* Add battery/power status strip
+* Create collapsible sections for external monitors
+* Implement settings UI for adding monitors, configuring alerts
+* Implement Ollama chat interface

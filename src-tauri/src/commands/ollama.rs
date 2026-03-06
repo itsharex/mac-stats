@@ -931,7 +931,7 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
         // Short descriptor: when + one-line formats. Full endpoint docs not in prompt; pre-route handles "review ticket N".
         // Time entries: use /time_entries.json with from/to (not /search.json) for spent time / hours this month.
         base.push_str(&format!(
-            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, create or update issue. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?user_id=me&from=YYYY-MM-DD&to=YYYY-MM-DD (optional project_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time or hours this month use /time_entries.json with current-month from/to; do not use /search.json. Always .json suffix.",
+            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, tickets worked today, create or update issue. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD (optional project_id=ID or user_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time, hours, or tickets worked use /time_entries.json with concrete from/to dates; do not use /search.json. Always .json suffix.",
             num
         ));
         // Create context (projects, trackers, statuses) only when user might create/update — avoids polluting prompt for simple "review ticket N".
@@ -1266,33 +1266,24 @@ async fn execute_agent_tool_call(
     }
 }
 
-/// Parse agent tool calls from an agent's response content.
+/// Parse agent-safe tool calls from an agent response.
+///
+/// This reuses the main router's tool normalization so specialist agents still work
+/// when the model wraps the tool in `RECOMMEND:` or emits an inline chain such as
+/// `RUN_CMD: ... then REDMINE_API ...`. Unsupported tools are ignored; the first
+/// allowed agent-safe tool is returned.
 fn parse_agent_tool_from_response(content: &str) -> Option<(String, String)> {
-    let prefixes = ["DISCORD_API:", "REDMINE_API:"];
-    for line in content.lines() {
-        let line = line.trim();
-        let mut search = line;
-        loop {
-            if search.len() >= 2 && search.as_bytes()[0].is_ascii_digit() {
-                let rest = search.trim_start_matches(|c: char| c.is_ascii_digit());
-                if rest.starts_with(". ") || rest.starts_with(") ") || rest.starts_with(": ") {
-                    search = rest[2..].trim();
-                } else {
-                    break;
-                }
-            } else if search.starts_with("- ") || search.starts_with("* ") {
-                search = search[2..].trim();
-            } else {
-                break;
+    let normalized = normalize_inline_tool_sequences(content);
+    let lines: Vec<&str> = normalized.lines().collect();
+    let mut idx = 0;
+    while idx < lines.len() {
+        if let Some(((tool, arg), next)) = parse_one_tool_at_line(&lines, idx) {
+            if tool == "DISCORD_API" || tool == "REDMINE_API" {
+                return Some((tool, arg));
             }
-        }
-        for prefix in prefixes {
-            if search.to_uppercase().starts_with(prefix) {
-                let arg = search[prefix.len()..].trim().to_string();
-                if !arg.is_empty() {
-                    return Some((prefix.trim_end_matches(':').to_string(), arg));
-                }
-            }
+            idx = next;
+        } else {
+            idx += 1;
         }
     }
     None
@@ -1870,14 +1861,31 @@ fn is_redmine_time_entries_request(question: &str) -> bool {
         || q.contains("time logs")
         || q.contains("tickets worked")
         || q.contains("worked tickets")
-        || (q.contains("worked on") && q.contains("month"));
+        || (q.contains("worked on") && q.contains("month"))
+        || (q.contains("worked on") && q.contains("today"))
+        || (q.contains("work on") && q.contains("today"))
+        || (q.contains("work today") && q.contains("ticket"))
+        || (q.contains("worked") && q.contains("today") && q.contains("ticket"));
     mentions_redmine && mentions_time_entries
 }
 
-fn current_month_redmine_range() -> (String, String) {
+fn is_agent_unavailable_error(error: &str) -> bool {
+    let e = error.to_lowercase();
+    e.contains("busy or unavailable")
+        || e.contains("timed out")
+        || e.contains("timeout")
+        || e.contains("503")
+}
+
+fn redmine_time_entries_range(question: &str) -> (String, String) {
     use chrono::Datelike;
 
     let today = chrono::Local::now().date_naive();
+    let q = question.trim().to_lowercase();
+    if q.contains("today") {
+        let day = today.format("%Y-%m-%d").to_string();
+        return (day.clone(), day);
+    }
     let from = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
         .unwrap_or(today)
         .format("%Y-%m-%d")
@@ -1895,6 +1903,24 @@ fn current_month_redmine_range() -> (String, String) {
         .format("%Y-%m-%d")
         .to_string();
     (from, to)
+}
+
+fn redmine_direct_fallback_hint(question: &str) -> String {
+    if is_redmine_time_entries_request(question) {
+        let (from, to) = redmine_time_entries_range(question);
+        format!(
+            "Use REDMINE_API directly with concrete dates: REDMINE_API: GET /time_entries.json?from={}&to={}.",
+            from, to
+        )
+    } else if let Some(id) = extract_ticket_id(question) {
+        format!(
+            "Use REDMINE_API directly: REDMINE_API: GET /issues/{}.json?include=journals,attachments.",
+            id
+        )
+    } else {
+        "Use REDMINE_API directly with the correct concrete endpoint for this request."
+            .to_string()
+    }
 }
 
 fn user_explicitly_asked_for_screenshot(question: &str) -> bool {
@@ -2653,13 +2679,13 @@ pub fn answer_with_ollama_and_fetch(
                     Some(rec)
                 } else if crate::redmine::is_configured() {
                     if is_redmine_time_entries_request(q) {
-                        let (from, to) = current_month_redmine_range();
+                        let (from, to) = redmine_time_entries_range(q);
                         let rec = format!(
-                            "REDMINE_API: GET /time_entries.json?user_id=me&from={}&to={}",
+                            "REDMINE_API: GET /time_entries.json?from={}&to={}",
                             from, to
                         );
                         info!(
-                            "Agent router: pre-routed to REDMINE_API for current-month time entries ({}..{})",
+                            "Agent router: pre-routed to REDMINE_API for time entries ({}..{})",
                             from, to
                         );
                         Some(rec)
@@ -2694,13 +2720,13 @@ pub fn answer_with_ollama_and_fetch(
             } else if crate::redmine::is_configured() {
                 let q_lower = question.to_lowercase();
                 if is_redmine_time_entries_request(question) {
-                    let (from, to) = current_month_redmine_range();
+                    let (from, to) = redmine_time_entries_range(question);
                     let rec = format!(
-                        "REDMINE_API: GET /time_entries.json?user_id=me&from={}&to={}",
+                        "REDMINE_API: GET /time_entries.json?from={}&to={}",
                         from, to
                     );
                     info!(
-                        "Agent router: pre-routed to REDMINE_API for current-month time entries ({}..{})",
+                        "Agent router: pre-routed to REDMINE_API for time entries ({}..{})",
                         from, to
                     );
                     Some(rec)
@@ -2872,6 +2898,8 @@ pub fn answer_with_ollama_and_fetch(
             }
         };
 
+        let normalized_recommendation = normalize_inline_tool_sequences(&recommendation);
+
         // Fast path: if the recommendation already contains a parseable tool call, execute it
         // directly instead of asking Ollama a second time to regurgitate the same tool line.
         let direct_tool = parse_tool_from_response(&recommendation);
@@ -2914,9 +2942,9 @@ pub fn answer_with_ollama_and_fetch(
                 content: question_for_plan_and_exec.clone(),
                 images: attachment_images_base64.clone(),
             });
-            // Use full recommendation when it contains multiple tools (e.g. BROWSER_NAVIGATE + BROWSER_SCREENSHOT)
-            let synthetic = if recommendation.contains('\n') {
-                recommendation.clone()
+            // Preserve normalized multi-tool chains so the executor can run them step by step.
+            let synthetic = if normalized_recommendation.contains('\n') {
+                normalized_recommendation.clone()
             } else {
                 format!("{}: {}", tool, arg)
             };
@@ -2964,7 +2992,11 @@ pub fn answer_with_ollama_and_fetch(
             // synthesize the tool call so the tool loop can execute it.
             if n == 0 {
                 if let Some((tool, arg)) = parse_tool_from_response(&recommendation) {
-                    let synthetic = format!("{}: {}", tool, arg);
+                    let synthetic = if normalized_recommendation.contains('\n') {
+                        normalized_recommendation.clone()
+                    } else {
+                        format!("{}: {}", tool, arg)
+                    };
                     info!("Agent router: empty response — falling back to tool from recommendation: {}", crate::logging::ellipse(&synthetic, 80));
                     (msgs, synthetic)
                 } else {
@@ -3019,6 +3051,7 @@ pub fn answer_with_ollama_and_fetch(
                         .join(", ")
                 );
             }
+            let multi_tool_turn = tools.len() > 1;
             let mut done_claimed: Option<bool> = None;
             let mut tool_results: Vec<String> = Vec::with_capacity(tools.len());
             for (tool, arg) in tools {
@@ -3747,6 +3780,11 @@ pub fn answer_with_ollama_and_fetch(
                                         agent.slug.as_deref().map_or(false, |s| {
                                             s.eq_ignore_ascii_case("discord-expert")
                                         }) || agent.id == "004";
+                                    let is_redmine_agent = agent
+                                        .slug
+                                        .as_deref()
+                                        .map_or(false, |s| s.eq_ignore_ascii_case("redmine"))
+                                        || agent.id == "006";
                                     if is_discord_expert {
                                         if let Some(channel_id) = discord_reply_channel_id {
                                             send_status("Fetching Discord guild/channel context…");
@@ -3798,10 +3836,20 @@ pub fn answer_with_ollama_and_fetch(
                                         }
                                         Err(e) => {
                                             info!("Agent router: AGENT session failed: {}", e);
-                                            format!(
+                                            if is_redmine_agent && is_agent_unavailable_error(&e) {
+                                                format!(
+                                    "Agent \"{}\" ({}) failed: {}.\n\nRe-plan this request without AGENT: redmine. {} Do not use FETCH_URL and do not reply with only another RUN_CMD.",
+                                    agent.name,
+                                    agent.id,
+                                    e,
+                                    redmine_direct_fallback_hint(question)
+                                )
+                                            } else {
+                                                format!(
                                     "Agent \"{}\" ({}) failed: {}. Answer without this result.",
                                     agent.name, agent.id, e
                                 )
+                                            }
                                         }
                                     }
                                 }
@@ -3986,6 +4034,13 @@ pub fn answer_with_ollama_and_fetch(
                                             "Agent router: RUN_CMD failed (attempt {}): {}",
                                             attempt, e
                                         );
+                                        if multi_tool_turn {
+                                            last_output = format!(
+                                        "RUN_CMD failed in a multi-step plan: {}.\n\nRe-plan the full task from here. Keep the request in the correct tool domain. If Redmine data is still needed, use REDMINE_API directly with concrete parameters. Do not reply with only another RUN_CMD.",
+                                        e
+                                    );
+                                            break;
+                                        }
                                         if attempt >= MAX_CMD_RETRIES {
                                             last_output = format!(
                                         "RUN_CMD failed after {} retries: {}.\n\nAnswer the user's question only (e.g. explain that the export or command failed). Do not include Redmine time entries, summaries, or other tool output that is unrelated to this request.",
@@ -4790,9 +4845,10 @@ pub fn answer_with_ollama_and_fetch(
                     false
                 };
 
+                let is_multi_tool_run_cmd_error = tool == "RUN_CMD"
+                    && user_message.starts_with("RUN_CMD failed in a multi-step plan");
                 tool_results.push(user_message);
-
-                if is_browser_error {
+                if is_browser_error || is_multi_tool_run_cmd_error {
                     info!(
                         "Agent router: {} returned an error, aborting remaining tools in this turn",
                         tool
@@ -5007,7 +5063,7 @@ pub fn answer_with_ollama_and_fetch(
                             || question.to_lowercase().contains("spent"))
                     {
                         format!(
-                        "Use the correct Redmine API for time entries: REDMINE_API: GET /time_entries.json with from= and to= for the **current month** (e.g. 2026-03-01..2026-03-31). Optionally include project_id= or user_id=me. Do not use /search.json for time entries. Then reply with the data or a clear summary.\n\n{}",
+                        "Use the correct Redmine API for time entries: REDMINE_API: GET /time_entries.json with from= and to= for the requested period (for example 2026-03-01..2026-03-31 for this month, or the same day for today). Omit optional filters like user_id or project_id unless the user explicitly asked for them. Do not use /search.json for time entries. Then reply with the data or a clear summary.\n\n{}",
                         retry_base
                     )
                     } else if !attachment_paths.is_empty() && reason_about_attachments {
@@ -5593,9 +5649,24 @@ fn truncate_search_query_arg(arg: &str) -> String {
         .to_string()
 }
 
+fn normalize_inline_tool_sequences(content: &str) -> String {
+    static INLINE_TOOL_CHAIN_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = INLINE_TOOL_CHAIN_RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)(?:\b(?:then|and then|after that|afterward|afterwards|next|finally)\b|;|->)\s+(FETCH_URL|BRAVE_SEARCH|BROWSER_SCREENSHOT|BROWSER_NAVIGATE|BROWSER_CLICK|BROWSER_INPUT|BROWSER_SCROLL|BROWSER_EXTRACT|BROWSER_SEARCH_PAGE|PERPLEXITY_SEARCH|RUN_JS|SKILL|AGENT|RUN_CMD|SCHEDULE|SCHEDULER|REMOVE_SCHEDULE|LIST_SCHEDULES|TASK_LIST|TASK_SHOW|TASK_APPEND|TASK_STATUS|TASK_CREATE|TASK_ASSIGN|TASK_SLEEP|OLLAMA_API|MCP|PYTHON_SCRIPT|DISCORD_API|CURSOR_AGENT|REDMINE_API|MEMORY_APPEND|MASTODON_POST|DONE)(?::)?\s+",
+        )
+        .expect("inline tool chain regex must compile")
+    });
+    re.replace_all(content, |caps: &regex::Captures| {
+        format!("\n{}: ", &caps[1].to_ascii_uppercase())
+    })
+    .into_owned()
+}
+
 /// Parse one of FETCH_URL:, BRAVE_SEARCH:, RUN_JS:, SCHEDULE:/SCHEDULER:, MCP:, PYTHON_SCRIPT: from assistant content (first match only).
 fn parse_tool_from_response(content: &str) -> Option<(String, String)> {
-    let lines: Vec<&str> = content.lines().collect();
+    let normalized = normalize_inline_tool_sequences(content);
+    let lines: Vec<&str> = normalized.lines().collect();
     parse_one_tool_at_line(&lines, 0).map(|(pair, _)| pair)
 }
 
@@ -5607,7 +5678,8 @@ const MAX_BROWSER_TOOLS_PER_RUN: u32 = 15;
 const MAX_TOOLS_PER_RESPONSE: usize = 5;
 
 fn parse_all_tools_from_response(content: &str) -> Vec<(String, String)> {
-    let lines: Vec<&str> = content.lines().collect();
+    let normalized = normalize_inline_tool_sequences(content);
+    let lines: Vec<&str> = normalized.lines().collect();
     let mut out = Vec::with_capacity(MAX_TOOLS_PER_RESPONSE);
     let mut idx = 0;
     while idx < lines.len() && out.len() < MAX_TOOLS_PER_RESPONSE {
@@ -6647,7 +6719,7 @@ pub async fn ollama_chat_continue_with_result(
 mod tests {
     use super::{
         build_perplexity_verbose_summary, extract_last_prefixed_argument,
-        parse_agent_tool_from_response,
+        parse_agent_tool_from_response, parse_all_tools_from_response,
     };
 
     #[test]
@@ -6703,6 +6775,66 @@ mod tests {
                 "REDMINE_API".to_string(),
                 "GET /issues/7209.json?include=journals,attachments".to_string()
             ))
+        );
+    }
+
+    #[test]
+    fn parse_agent_tool_from_response_supports_recommend_wrapper() {
+        assert_eq!(
+            parse_agent_tool_from_response(
+                "RECOMMEND: REDMINE_API: GET /issues/7209.json?include=journals,attachments"
+            ),
+            Some((
+                "REDMINE_API".to_string(),
+                "GET /issues/7209.json?include=journals,attachments".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_agent_tool_from_response_skips_unsupported_prefix_tool() {
+        assert_eq!(
+            parse_agent_tool_from_response(
+                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+            ),
+            Some((
+                "REDMINE_API".to_string(),
+                "GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                    .to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_all_tools_from_response_splits_inline_then_chain() {
+        assert_eq!(
+            parse_all_tools_from_response(
+                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+            ),
+            vec![
+                ("RUN_CMD".to_string(), "date +%Y-%m-%d".to_string()),
+                (
+                    "REDMINE_API".to_string(),
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+                        .to_string()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_all_tools_from_response_splits_inline_semicolon_chain() {
+        assert_eq!(
+            parse_all_tools_from_response(
+                "RECOMMEND: RUN_CMD: date; REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06"
+            ),
+            vec![
+                ("RUN_CMD".to_string(), "date".to_string()),
+                (
+                    "REDMINE_API".to_string(),
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06".to_string()
+                )
+            ]
         );
     }
 }

@@ -1,12 +1,52 @@
-# Ollama API – Full coverage in mac-stats
+# mac-stats
+
+## Global Context
+
+A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, and MCP—all on your Mac. No cloud, no telemetry. Lives in your menu bar—CPU, GPU, RAM, disk at a glance. Real-time, minimal, there when you look. Built with Rust and Tauri.
+
+## Install
+
+### DMG (recommended)
+
+*   [Download latest release](https://github.com/raro42/mac-stats/releases/latest) → drag to Applications.
+
+### Build from source
+
+```bash
+git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
+```
+
+Or one-liner:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/refs/heads/main/run -o run && chmod +x run && ./run
+```
+
+### If macOS blocks the app
+
+Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Right-click the DMG → **Open**, then confirm. Or after install: `xattr -rd com.apple.quarantine /Applications/mac-stats.app`
+
+## At a Glance
+
+-   **Menu bar** — CPU, GPU, RAM, disk at a glance; click to open the details window.
+-   **AI chat** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
+-   **Discord** — [Discord bot](https://github.com/raro42/mac-stats/discord-bot)
+
+## Tool Agents (What Ollama Can Invoke)
+
+Whenever Ollama is asked to decide which agent to use (planning step in Discord and scheduler flow), the app sends the **complete list of active agents**: the invocable tools below plus the **SCHEDULER** (informational; Ollama can recommend it for recurring or delayed tasks but cannot invoke it with a tool line). Ollama invokes tools by replying with exactly one line in the form `TOOL_NAME: <argument>`.
+
+| Agent | Invocation | Purpose | Implementation |
+|-------|------------|---------|----------------|
+| **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
+| **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+
+## Ollama API – Full Coverage in mac-stats
 
 This document describes the **Ollama HTTP API** operations exposed by mac-stats via Tauri commands and the shared `ollama` module. All operations use the **configured Ollama endpoint** (same as chat, Discord agent, and scheduler). Reference: [Ollama API](https://docs.ollama.com/api/tags) (list models), [get version](https://docs.ollama.com/api-reference/get-version.md), [embed](https://docs.ollama.com/api/embed.md), [pull](https://docs.ollama.com/api/pull.md), [delete](https://docs.ollama.com/api/delete.md), [ps](https://docs.ollama.com/api/ps.md).
 
-**Agent tool:** The LLM (Ollama) can invoke these operations itself via the **OLLAMA_API** agent. In the Discord, scheduler, and CPU-window agent flows, the model is given the OLLAMA_API tool and can reply with e.g. `OLLAMA_API: list_models`, `OLLAMA_API: version`, `OLLAMA_API: pull llama3.2`, `OLLAMA_API: embed nomic-embed-text some text`, etc. See §5 below for the invocation format.
-
----
-
-## 1. List models
+## List Models
 
 | Command | API | Description |
 |--------|-----|-------------|
@@ -15,18 +55,14 @@ This document describes the **Ollama HTTP API** operations exposed by mac-stats 
 
 Frontend can use `list_ollama_models_full` for model management UIs (size, family, quantization).
 
----
-
-## 2. Version and running models
+## Version and Running Models
 
 | Command | API | Description |
 |--------|-----|-------------|
 | `get_ollama_version` | GET /api/version | Returns Ollama server version string. |
 | `list_ollama_running_models` | GET /api/ps | Returns models currently **loaded in memory** (model name, size, digest, details, expires_at, size_vram, context_length). |
 
----
-
-## 3. Pull, delete, load, unload
+## Pull, Delete, Load, Unload
 
 | Command | API | Description |
 |--------|-----|-------------|
@@ -37,9 +73,7 @@ Frontend can use `list_ollama_models_full` for model management UIs (size, famil
 
 Load/unload: Models load on first use (chat/generate/embed). Explicit load reduces latency for the next request; unload frees VRAM when a model is no longer needed.
 
----
-
-## 4. Embeddings
+## Embeddings
 
 | Command | API | Description |
 |--------|-----|-------------|
@@ -47,9 +81,7 @@ Load/unload: Models load on first use (chat/generate/embed). Explicit load reduc
 
 Use for semantic search, RAG, or similarity. Requires an embedding-capable model (e.g. `nomic-embed-text`, `mxbai-embed-large`).
 
----
-
-## 5. OLLAMA_API agent (tool for the LLM)
+## OLLAMA_API Agent (Tool for the LLM)
 
 When using the agent loop (Discord, scheduler, CPU window with tools), the model sees the **OLLAMA_API** agent and can invoke it by replying with exactly one line:
 
@@ -68,9 +100,7 @@ When using the agent loop (Discord, scheduler, CPU window with tools), the model
 
 Example lines: `OLLAMA_API: list_models`, `OLLAMA_API: version`, `OLLAMA_API: pull llama3.2`, `OLLAMA_API: embed nomic-embed-text hello world`, `OLLAMA_API: unload llama3.2`.
 
----
-
-## 6. Tauri command summary
+## Tauri Command Summary
 
 All commands require Ollama to be **configured** (`configure_ollama`). They use the same endpoint and (if set) API key from Keychain.
 
@@ -86,18 +116,26 @@ All commands require Ollama to be **configured** (`configure_ollama`). They use 
 | `unload_ollama_model` | `model: String` | `()` |
 | `load_ollama_model` | `model: String`, `keep_alive?: String` | `()` |
 
----
-
-## 7. Code locations
+## Code Locations
 
 - **Types and client:** `src-tauri/src/ollama/mod.rs` — `ListResponse`, `ModelSummary`, `VersionResponse`, `PsResponse`, `EmbedInput`, `EmbedRequest`, `EmbedResponse`; `OllamaClient::list_models_full`, `get_version`, `list_running_models`, `pull_model`, `delete_model`, `generate_embeddings`, `unload_model`, `load_model`.
 - **Tauri commands:** `src-tauri/src/commands/ollama.rs` — commands above; each clones config from the global client, builds a temporary `OllamaClient`, and calls the corresponding method.
 - **Registration:** `src-tauri/src/lib.rs` — all commands registered in `tauri::generate_handler![]`.
 
----
-
-## 8. References
+## References
 
 - **Ollama API index:** https://docs.ollama.com/llms.txt  
 - **Context/skills (model, temperature, num_ctx):** `docs/012_ollama_context_skills.md`  
 - **All agents overview:** `docs/100_all_agents.md`
+
+## Open tasks:
+
+- Questionable logic:
+    -   How does the app handle cases where the Ollama API is not configured?
+    -   What happens when the user tries to pull or delete a model that is not available?
+- Missing features:
+    -   Support for more advanced model features (e.g., model fine-tuning, model export)
+    -   Integration with other AI tools or platforms
+- Pending items:
+    -   Improve the user interface for model management and configuration
+    -   Enhance the performance and efficiency of the Ollama API

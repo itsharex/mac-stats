@@ -57,12 +57,13 @@ All settings live under `~/.mac-stats/`:
 ├── config.json            # Window decorations, scheduler interval, ollamaChatTimeoutSecs, browserViewportWidth/Height
 ├── .config.env            # Secrets (Discord, Mastodon, API keys, Perplexity) — never commit ;-)
 ├── discord_channels.json  # Per-channel modes (mention_only, all_messages, having_fun)
-├── escalation_patterns.md # Phrases that trigger “try harder” (e.g. “think harder”, “you are stupid”); user-editable, auto-adds when you complain
 ├── schedules.json         # Cron and one-shot tasks
 ├── user-info.json         # Per-user details (Discord id → display_name, notes, timezone)
 ├── agents/                # LLM agents (orchestrator, coder, etc.), soul.md, memory.md
-├── prompts/               # Editable planning_prompt.md, execution_prompt.md
-├── skills/                # skill-<n>-<topic>.md for different agent personalities
+│   ├── escalation_patterns.md   # Phrases that trigger “try harder”; user-editable, auto-adds when you complain
+│   ├── session_reset_phrases.md # Phrases that clear session (e.g. “new topic”, “reset”)
+│   ├── prompts/           # planning_prompt.md, execution_prompt.md
+│   └── skills/            # skill-<n>-<topic>.md for different agent personalities
 ├── task/                  # Task files (TASK_LIST, TASK_CREATE, TASK_STATUS)
 ├── scripts/               # PYTHON_SCRIPT output
 ├── session/               # Conversation sessions (compacted to memory)
@@ -91,13 +92,13 @@ Binary name `mac_stats`; app shows as **mac-stats**. From repo root unless noted
 ### AI & agents (Ollama, local)
 - **Chat** — In the app window or via Discord. Code execution (JS), **FETCH_URL**, **BRAVE_SEARCH**, **PERPLEXITY_SEARCH** (optional; API key in env, `.config.env`, or Keychain/Settings), **RUN_CMD** (allowlisted), **MASTODON_POST** (toot from the agent), retry and correction.
 - **Completion verification** — We extract 1–3 success criteria at the start and ask “Did we satisfy the request?” at the end; if not, we append a disclaimer. Heuristic: “screenshot requested but none attached” → note. See [docs/025_expectation_check_design_DONE.md](docs/025_expectation_check_design_DONE.md).
-- **Escalation / “try harder”** — Edit `escalation_patterns.md` (see config tree); one phrase per line. When your message matches one, we run a stronger pass (+10 tool steps). New phrases you use get auto-added.
+- **Escalation / “try harder”** — Edit `~/.mac-stats/agents/escalation_patterns.md`; one phrase per line. When your message matches one, we run a stronger pass (+10 tool steps). New phrases you use get auto-added.
 - **Memory** — Global and per-agent `memory.md`; **MEMORY_APPEND**; session compaction writes lessons to memory.
 - **Discord bot** — Optional. @mentions, DMs, or having_fun mode (your Mac chats with other bots when bored); per-channel model/agent. Full Ollama + tools.
 - **Tasks** — `~/.mac-stats/task/` with **TASK_LIST**, **TASK_CREATE**, **TASK_STATUS**, assignees, scheduler loop.
 - **Scheduler** — Cron or one-shot (`~/.mac-stats/schedules.json`); tasks through Ollama; optional Discord reply channel.
 - **MCP** — Tools from any MCP server (HTTP/SSE or stdio).
-- **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Local models by role; cloud only when you configure it ([design](docs/030_agent_model_assignment_plan_DONE.md)). Editable prompts in `~/.mac-stats/prompts/` and `soul.md`.
+- **Agents** — Multiple LLM agents under `~/.mac-stats/agents/` (orchestrator, coder, Discord expert, etc.); **AGENT:** delegates. Local models by role; cloud only when you configure it ([design](docs/030_agent_model_assignment_plan_DONE.md)). Editable prompts in `~/.mac-stats/agents/prompts/` and `soul.md` in `agents/`.
 - **cursor-agent** — When the [Cursor Agent CLI](https://cursor.com) is on PATH, agents can delegate via **CURSOR_AGENT:** or **RUN_CMD: cursor-agent**; see [docs/012_cursor_agent_tasks.md](docs/012_cursor_agent_tasks.md).
 - **PYTHON_SCRIPT** — Ollama can run Python under `~/.mac-stats/scripts/` (disable with `ALLOW_PYTHON_SCRIPT=0`).
 
