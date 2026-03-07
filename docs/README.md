@@ -253,6 +253,18 @@ tail -f ~/.mac-stats/debug.log
 # - DOM updates efficient
 ```
 
+### Agent test (regression)
+Run an agent with prompts from its `testing.md` (e.g. Redmine). Each prompt has a **45s default timeout** so a stuck model fails fast instead of hanging. Override via `MAC_STATS_AGENT_TEST_TIMEOUT_SECS` or `config.json` `agentTestTimeoutSecs` (5–300).
+
+```bash
+cd src-tauri
+./target/release/mac_stats agent test redmine
+# Or with custom test file:
+./target/release/mac_stats agent test redmine /path/to/testing.md
+```
+
+Requires Ollama running. Logs: `~/.mac-stats/debug.log`. See also [007_discord_agent.md](007_discord_agent.md) (§14) for the Discord-style pipeline without Discord.
+
 ## Common Questions
 
 **Q: Can I mix tasks from different phases?**

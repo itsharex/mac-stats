@@ -211,6 +211,16 @@ cd src-tauri
 
 Requires **Ollama** running and configured (env `OLLAMA_HOST` or `~/.mac-stats/.config.env`). The app ensures defaults and initializes the Ollama client before running. Reply and any attachment paths (e.g. screenshots under `~/.mac-stats/screenshots/`) are printed to stdout. Logs: `~/.mac-stats/debug.log` (e.g. `grep -E "headless|BROWSER_NAVIGATE|screenshot" ~/.mac-stats/debug.log`).
 
+## 15. Agent test (regression path)
+
+To run a single agent with prompts from its `testing.md` (no Discord, no router):
+
+```bash
+./target/release/mac_stats agent test <selector> [path]
+```
+
+Example: `./target/release/mac_stats agent test redmine` runs the Redmine agent’s test prompts from `~/.mac-stats/agents/agent-006-redmine/testing.md`. Each prompt is limited by a **per-prompt timeout** (default 45s); if the model doesn’t respond in time, the run fails with a clear message instead of hanging. Override: env `MAC_STATS_AGENT_TEST_TIMEOUT_SECS` or config.json `agentTestTimeoutSecs` (5–300). Useful as a regression check after changes to agents or Ollama integration.
+
 ## Open tasks:
 
 - Improve the documentation for `~/.mac-stats/schedules.json` and `~/.mac-stats/user-info.json`.
