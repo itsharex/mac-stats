@@ -2861,6 +2861,19 @@ fn first_image_as_base64(paths: &[PathBuf]) -> Option<String> {
 /// Returns (satisfied, optional reason when not satisfied).
 /// When we have image attachment(s) and a local vision model, sends the first image and asks "Does this image satisfy the request?"; otherwise text-only verification.
 /// When page_content_from_browser is Some (e.g. from BROWSER_EXTRACT), it is included so the verifier can check requested text against JS-rendered content (SPAs).
+/// Returns the verification-prompt block when the last news search had only hub/landing pages and the request is news-like; otherwise "".
+fn verification_news_hub_only_block(news_search_was_hub_only: Option<bool>, question: &str) -> &'static str {
+    const HUB_ONLY_BLOCK: &str = "The search results given to the assistant for this news request were only hub/landing/tag/standings pages (no concrete article links). If the assistant's answer presents them as complete recent news articles, reply NO and state that article-grade sources were not found.\n\n";
+    if news_search_was_hub_only == Some(true) && is_news_query(question) {
+        HUB_ONLY_BLOCK
+    } else {
+        ""
+    }
+}
+
+/// Returns (satisfied, optional reason when not satisfied).
+/// When we have image attachment(s) and a local vision model, sends the first image and asks "Does this image satisfy the request?"; otherwise text-only verification.
+/// When page_content_from_browser is Some (e.g. from BROWSER_EXTRACT), it is included so the verifier can check requested text against JS-rendered content (SPAs).
 /// When news_search_was_hub_only is Some(true), the verifier must not accept an answer that presents hub/landing/tag/standings pages as complete recent news.
 async fn verify_completion(
     question: &str,
@@ -2916,11 +2929,8 @@ async fn verify_completion(
     } else {
         String::new()
     };
-    let news_hub_only_block = if news_search_was_hub_only == Some(true) && is_news_query(question) {
-        "The search results given to the assistant for this news request were only hub/landing/tag/standings pages (no concrete article links). If the assistant's answer presents them as complete recent news articles, reply NO and state that article-grade sources were not found.\n\n"
-    } else {
-        ""
-    };
+    let news_hub_only_block =
+        verification_news_hub_only_block(news_search_was_hub_only, question);
     let verification_tail = if screenshot_requested {
         "Did we fully satisfy the request (including any requested screenshot/file attachment)? Reply YES or NO. If NO, on the next line add one sentence: what's missing."
     } else {
@@ -7949,6 +7959,7 @@ mod tests {
         redmine_time_entries_range_for_date, sanitize_success_criteria,
         score_search_result_for_news, shape_perplexity_results_for_question,
         summarize_response_for_verification, truncate_text_on_line_boundaries,
+        verification_news_hub_only_block,
     };
 
     #[test]
@@ -8473,5 +8484,33 @@ mod tests {
         assert!(shaped
             .iter()
             .all(|r| !is_likely_article_like_result(&r.title, &r.url, &r.snippet)));
+    }
+
+    #[test]
+    fn verification_news_hub_only_block_included_when_hub_only_and_news_query() {
+        let block = verification_news_hub_only_block(Some(true), "what's the latest news on Barcelona?");
+        assert!(!block.is_empty());
+        assert!(block.contains("hub/landing/tag/standings"));
+        assert!(block.contains("article-grade sources were not found"));
+    }
+
+    #[test]
+    fn verification_news_hub_only_block_empty_when_not_news_query() {
+        assert_eq!(
+            verification_news_hub_only_block(Some(true), "what is 2+2?"),
+            ""
+        );
+    }
+
+    #[test]
+    fn verification_news_hub_only_block_empty_when_not_hub_only() {
+        assert_eq!(
+            verification_news_hub_only_block(Some(false), "latest headlines"),
+            ""
+        );
+        assert_eq!(
+            verification_news_hub_only_block(None, "latest headlines"),
+            ""
+        );
     }
 }

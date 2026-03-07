@@ -62,7 +62,8 @@ When the user asks to search the web (e.g. Perplexity) and to visit URLs or get 
 
 1. **Truncates the search query** so the API gets only the query (e.g. "spanish newspaper websites"), not the rest of the plan (e.g. "then BROWSER_NAVIGATE: ..."). Truncation uses separators: ` then `, ` and then `, ` → `, `BROWSER_NAVIGATE:`, `BROWSER_SCREENSHOT:`, etc., and a 150-character cap.
 2. **Runs Perplexity search** and gets results with URLs.
-3. **If the question asked for screenshots** (e.g. "screenshot", "visit", "send me … in Discord"), the app **auto-visits** the first 5 result URLs and **takes a screenshot** of each, then attaches them in Discord.
+3. **For news-style queries**, results are scored and labeled as **article-like** vs **hub/landing page** (tag pages, section pages, standings, homepages). If the first pass returns only hub/landing pages, the app retries with a refined query. If the final result set still has no article-like items, the tool output states that article-grade results were not found and instructs the model not to present hub pages as a complete news answer; completion verification is then told that the search was hub-only and must not accept a confident news summary from those sources.
+4. **If the question asked for screenshots** (e.g. "screenshot", "visit", "send me … in Discord"), the app **auto-visits** the first 5 result URLs and **takes a screenshot** of each, then attaches them in Discord.
 
 ## Feedback
 

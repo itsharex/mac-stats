@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Agent test per-prompt timeout** — `mac_stats agent test` now enforces a 45s (configurable) timeout per prompt so a stuck or overloaded model fails fast instead of hanging. Config: `agentTestTimeoutSecs` in config.json or env `MAC_STATS_AGENT_TEST_TIMEOUT_SECS`. Regression tests added for timeout behavior and `testing.md` prompt parsing.
 - **Agent test regression path in docs** — Documented how to run `mac_stats agent test <selector>` as a regression path in `docs/README.md` (Testing & Validation) and `docs/007_discord_agent.md` (§15), including timeout and override.
+- **News hub-only verification tests** — Unit tests for `verification_news_hub_only_block`: hub-only block included when search was hub-only and question is news-like; empty when not news query or when not hub-only.
 
 ### Fixed
 - **Agent test hang** — The Redmine (and any other) agent test no longer blocks indefinitely on the first Ollama call; the harness aborts the prompt task and returns a clear timeout error with override instructions.
