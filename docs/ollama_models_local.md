@@ -96,8 +96,3 @@ Review of `ollama list` with rough purpose and size. Exclude the large 30B-class
 *(Generated from local `ollama list` and `ollama show <model>`.)*
 
 ---
-
-### Pending Items
-* Update README.md with more detailed installation instructions
-* Improve documentation for new users
-* Investigate better ways to handle Gatekeeper blocking

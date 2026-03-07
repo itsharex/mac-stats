@@ -82,10 +82,7 @@ This document describes how mac-stats uses **per-model context window size**, **
 
 ## Open tasks:
 
-- Questionable logic:
-  - How does the app handle cases where the model is not available or the context size is unknown?
-- Missing features:
-  - How does the app handle cases where the user wants to use a custom model or configuration?
-- Pending items:
-  - Implement a more robust error handling system for the Ollama agent.
-  - Improve the performance of the FETCH_URL tool by using a more efficient algorithm for content reduction.
+- Document how the app behaves when the selected model is unavailable or its context size is unknown.
+- Document how custom model and configuration overrides should work in the skill/context flow.
+- Improve Ollama error handling in the skill/context pipeline.
+- Improve `FETCH_URL` content reduction performance.

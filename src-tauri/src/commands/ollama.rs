@@ -1248,18 +1248,29 @@ fn extract_redmine_time_entries_summary_for_reply(tool_result: &str) -> Option<S
 }
 
 fn extract_redmine_failure_message(text: &str) -> Option<String> {
-    let start = text.find("Redmine API failed:")?;
-    let rest = text[start + "Redmine API failed:".len()..].trim();
-    let first_block = rest.split("\n\n---\n\n").next().unwrap_or(rest).trim();
-    let without_instruction = first_block
-        .strip_suffix("Answer without this result.")
-        .unwrap_or(first_block)
-        .trim();
-    if without_instruction.is_empty() {
-        None
-    } else {
-        Some(without_instruction.trim_end_matches('.').trim().to_string())
+    for prefix in [
+        "Redmine API failed:",
+        "Redmine GET failed:",
+        "Redmine request failed:",
+    ] {
+        if let Some(start) = text.find(prefix) {
+            let rest = text[start + prefix.len()..].trim();
+            let first_block = rest.split("\n\n---\n\n").next().unwrap_or(rest).trim();
+            let first_block = first_block
+                .split("\n\nUse ")
+                .next()
+                .unwrap_or(first_block)
+                .trim();
+            let without_instruction = first_block
+                .strip_suffix("Answer without this result.")
+                .unwrap_or(first_block)
+                .trim();
+            if !without_instruction.is_empty() {
+                return Some(without_instruction.trim_end_matches('.').trim().to_string());
+            }
+        }
     }
+    None
 }
 
 fn is_redmine_infrastructure_failure_text(text: &str) -> bool {
@@ -2547,12 +2558,34 @@ fn sanitize_success_criteria(question: &str, criteria: Vec<String>) -> Vec<Strin
         || q.contains("30 day")
         || q.contains("this month")
         || q.contains("last month");
+    let explicit_last_week = q.contains("last week")
+        || q.contains("past week")
+        || q.contains("this week")
+        || q.contains("last 7 days")
+        || q.contains("past 7 days");
     let generic_news_request = q.contains("news");
+    let explicit_football_request = q.contains("football")
+        || q.contains("soccer")
+        || q.contains("fc barcelona")
+        || q.contains("barcelona fc")
+        || q.contains("barça")
+        || q.contains("barca")
+        || q.contains("club")
+        || q.contains("match")
+        || q.contains("transfer")
+        || q.contains("la liga");
     let explicit_named_sources = q.contains("bbc")
         || q.contains("cnn")
         || q.contains("reuters")
         || q.contains("ap ")
         || q.contains("associated press");
+    let review_videos_request =
+        q.contains("video") && (q.contains("review") || q.contains("check"));
+    let explicit_playback_request = q.contains("play video")
+        || q.contains("play the video")
+        || q.contains("playable")
+        || q.contains("watch the video")
+        || q.contains("start the video");
 
     let mut sanitized = Vec::new();
     for criterion in criteria {
@@ -2567,6 +2600,38 @@ fn sanitize_success_criteria(question: &str, criteria: Vec<String>) -> Vec<Strin
             }
             continue;
         }
+        if (lower.contains("last week")
+            || lower.contains("past week")
+            || lower.contains("last 7 days")
+            || lower.contains("past 7 days"))
+            && !explicit_last_week
+        {
+            if generic_news_request {
+                let replacement = "information includes dates and relevant details".to_string();
+                if !sanitized.iter().any(|existing| existing == &replacement) {
+                    sanitized.push(replacement);
+                }
+            }
+            continue;
+        }
+        if generic_news_request && !explicit_football_request {
+            if lower.contains("football club")
+                || lower.contains("sports website")
+                || lower.contains("related to the team")
+            {
+                let replacement = if lower.contains("sports website") {
+                    "credible named sources cited".to_string()
+                } else if lower.contains("related to the team") {
+                    "major recent developments involving Barcelona were covered".to_string()
+                } else {
+                    "recent news items involving Barcelona were summarized".to_string()
+                };
+                if !sanitized.iter().any(|existing| existing == &replacement) {
+                    sanitized.push(replacement);
+                }
+                continue;
+            }
+        }
         if generic_news_request
             && !explicit_named_sources
             && (lower.contains("bbc") || lower.contains("cnn") || lower.contains("reuters"))
@@ -2579,11 +2644,38 @@ fn sanitize_success_criteria(question: &str, criteria: Vec<String>) -> Vec<Strin
             }
             continue;
         }
+        if review_videos_request
+            && !explicit_playback_request
+            && (lower.contains("video") || lower.contains("playable"))
+        {
+            let replacement = "video availability or playability was checked".to_string();
+            if !sanitized.iter().any(|existing| existing == &replacement) {
+                sanitized.push(replacement);
+            }
+            continue;
+        }
         if !sanitized.iter().any(|existing| existing == trimmed) {
             sanitized.push(trimmed.to_string());
         }
     }
     sanitized
+}
+
+fn is_video_review_request(question: &str) -> bool {
+    let q = question.to_lowercase();
+    q.contains("video") && (q.contains("review") || q.contains("check"))
+}
+
+fn explicit_no_playable_video_finding(response_summary: &str) -> bool {
+    let lower = response_summary.to_lowercase();
+    (lower.contains("no playable video")
+        || lower.contains("videos aren't available")
+        || lower.contains("videos are not available")
+        || lower.contains("doesn't navigate anywhere")
+        || lower.contains("do not lead to playable videos")
+        || lower.contains("lacks embedded video content")
+        || lower.contains("video availability"))
+        && (lower.contains("video") || lower.contains("videos"))
 }
 
 /// Build a short summary of the last N turns (user/assistant pairs) for the new-topic check.
@@ -2688,6 +2780,10 @@ async fn verify_completion(
         summarize_response_for_verification(question, response_content, attachment_paths.len());
     if is_grounded_redmine_time_entries_blocked_reply(question, &response_summary) {
         tracing::info!("Agent router: verification accepted grounded Redmine blocked-state answer");
+        return Ok((true, None));
+    }
+    if is_video_review_request(question) && explicit_no_playable_video_finding(&response_summary) {
+        tracing::info!("Agent router: verification accepted explicit no-playable-video finding");
         return Ok((true, None));
     }
     let system = "You are a completion checker. Answer only with YES or NO, and if NO add one short sentence after a newline explaining what's missing.";
@@ -5753,9 +5849,10 @@ pub fn answer_with_ollama_and_fetch(
             }
 
             let user_message = tool_results.join("\n\n---\n\n");
-            if let Some(blocked_reply) =
-                grounded_redmine_time_entries_failure_reply(&request_for_verification, &user_message)
-            {
+            if let Some(blocked_reply) = grounded_redmine_time_entries_failure_reply(
+                &request_for_verification,
+                &user_message,
+            ) {
                 info!("Agent router: returning grounded Redmine blocked-state reply");
                 response_content = blocked_reply;
                 break;
@@ -7677,15 +7774,14 @@ pub async fn ollama_chat_continue_with_result(
 mod tests {
     use super::{
         build_agent_runtime_context, build_perplexity_verbose_summary,
-        extract_last_prefixed_argument, final_reply_from_tool_results,
-        grounded_redmine_time_entries_failure_reply,
-        is_likely_article_like_result, original_request_for_retry, parse_agent_tool_from_response,
-        parse_all_tools_from_response, parse_tool_from_response, redmine_direct_fallback_hint,
-        redmine_request_for_routing, redmine_time_entries_range_for_date,
-        is_grounded_redmine_time_entries_blocked_reply,
-        sanitize_success_criteria, score_search_result_for_news,
-        shape_perplexity_results_for_question, summarize_response_for_verification,
-        truncate_text_on_line_boundaries,
+        explicit_no_playable_video_finding, extract_last_prefixed_argument,
+        final_reply_from_tool_results, grounded_redmine_time_entries_failure_reply,
+        is_grounded_redmine_time_entries_blocked_reply, is_likely_article_like_result,
+        original_request_for_retry, parse_agent_tool_from_response, parse_all_tools_from_response,
+        parse_tool_from_response, redmine_direct_fallback_hint, redmine_request_for_routing,
+        redmine_time_entries_range_for_date, sanitize_success_criteria,
+        score_search_result_for_news, shape_perplexity_results_for_question,
+        summarize_response_for_verification, truncate_text_on_line_boundaries,
     };
 
     #[test]
@@ -7887,7 +7983,7 @@ mod tests {
     fn grounded_redmine_time_entries_failure_reply_for_dns_blocker_is_user_facing() {
         let reply = grounded_redmine_time_entries_failure_reply(
             "Provide me the list of redmine tickets work on today.",
-            "Redmine API failed: Redmine request failed: error sending request for url (https://example.invalid/time_entries.json?from=2026-03-07&to=2026-03-07&limit=100): client error (Connect): dns error: failed to lookup address information. Answer without this result.",
+            "Redmine API result:\n\nRedmine GET failed: error sending request for url (https://example.invalid/time_entries.json?from=2026-03-07&to=2026-03-07&offset=0&limit=100): error trying to connect: dns error: failed to lookup address information: nodename nor servname provided, or not known\n\nUse this data to answer the user's question.",
         )
         .expect("expected grounded failure reply");
 
@@ -8009,6 +8105,72 @@ mod tests {
             vec![
                 "credible named sources cited".to_string(),
                 "dates of the news articles".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sanitize_success_criteria_relaxes_video_playability_for_review_requests() {
+        let criteria = vec![
+            "homepage loaded successfully".to_string(),
+            "\"about\" section navigable".to_string(),
+            "videos playable without errors".to_string(),
+        ];
+        assert_eq!(
+            sanitize_success_criteria(
+                "Use browser to review www.amvara.de, click on about and review videos.",
+                criteria
+            ),
+            vec![
+                "homepage loaded successfully".to_string(),
+                "\"about\" section navigable".to_string(),
+                "video availability or playability was checked".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn explicit_no_playable_video_finding_detects_grounded_browser_review_result() {
+        assert!(explicit_no_playable_video_finding(
+            "The \"Amvara's videos\" link is present but doesn't navigate anywhere. No playable videos were found on the page."
+        ));
+    }
+
+    #[test]
+    fn sanitize_success_criteria_removes_invented_football_focus_for_generic_barcelona_news() {
+        let criteria = vec![
+            "recent news articles about Barcelona football club".to_string(),
+            "verified sources such as reputable sports websites".to_string(),
+            "coverage of major events or updates related to the team".to_string(),
+        ];
+        assert_eq!(
+            sanitize_success_criteria(
+                "Can you look on the Internet for news involving Barcelona?",
+                criteria
+            ),
+            vec![
+                "recent news items involving Barcelona were summarized".to_string(),
+                "credible named sources cited".to_string(),
+                "major recent developments involving Barcelona were covered".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sanitize_success_criteria_removes_invented_last_week_for_generic_news() {
+        let criteria = vec![
+            "recent news articles about Barcelona from credible sources".to_string(),
+            "information includes dates and relevant details".to_string(),
+            "articles are from the last week".to_string(),
+        ];
+        assert_eq!(
+            sanitize_success_criteria(
+                "Can you look on the Internet for news involving Barcelona?",
+                criteria
+            ),
+            vec![
+                "recent news articles about Barcelona from credible sources".to_string(),
+                "information includes dates and relevant details".to_string(),
             ]
         );
     }

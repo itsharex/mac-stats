@@ -97,9 +97,6 @@ This achieves the goal of "minimizing CPU usage to the absolute max" while maint
 
 ### Open tasks:
 
-* Questionable logic:
-	+ Is the `fetch_page_content` function blocking the main thread?
-* Missing features:
-	+ Is there a way to improve the theme switching animation?
-* Pending items:
-	+ Is there a way to further optimize the process list DOM updates?
+- Verify whether `fetch_page_content` blocks the main thread in any frontend-triggered path.
+- Improve the theme switching animation if it can be done without increasing CPU usage.
+- Further optimize process list DOM updates.

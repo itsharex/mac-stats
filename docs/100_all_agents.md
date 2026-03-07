@@ -50,12 +50,9 @@ Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Righ
 - **Rust:** `discord/mod.rs` (EventHandler) → `commands::ollama::answer_with_ollama_and_fetch(question, ..., model_override, options_override, skill_content)`. Token from env, `.config.env`, or Keychain (see 007).
 
 ## Open tasks:
-- Questionable logic: 
-  - How does the `fetch_page_content` function handle CORS errors?
-  - Is the `run_local_command` function secure against shell injection attacks?
-- Missing features:
-  - Support for more advanced Python script execution (e.g. with a Python IDE)
-  - Integration with more external tools (e.g. clipboard managers, file managers)
-- Pending items:
-  - Implement a more robust way to handle MCP server errors
-  - Improve the user interface for scheduling tasks
+- Document how `fetch_page_content` behaves around CORS-related user expectations.
+- Review whether `run_local_command` is sufficiently hardened against shell-injection-style misuse.
+- Consider support for more advanced Python-script execution workflows.
+- Consider whether additional external tool integrations belong in the agent layer.
+- Implement more robust handling for MCP server errors.
+- Improve the user interface for scheduling tasks.

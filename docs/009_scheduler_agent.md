@@ -80,13 +80,10 @@
 ---
 
 ## 🛠️ Open tasks:
-- **No UI for schedules** – Manual editing of `schedules.json` (no v1 UI)
-- **Missing features:**
-  - Scheduler UI for editing/creating schedules
-  - Support for multiple API keys
-  - Enhanced error handling for tool invocations
-- **Questionable logic:**
-  - Cron time interpretation in local time vs. UTC
-  - Deduplication logic for identical `cron` + `task` pairs
+- Add a scheduler UI for creating and editing schedules instead of relying on manual `schedules.json` edits.
+- Consider support for multiple API keys in scheduler-driven tool flows.
+- Improve error handling for scheduler tool invocations.
+- Clarify whether cron expressions should be interpreted in local time or UTC.
+- Review deduplication behavior for identical `cron` + `task` pairs.
 
 ---

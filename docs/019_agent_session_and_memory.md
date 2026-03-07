@@ -90,13 +90,8 @@ So: **session context** = the list of prior messages in the **main** conversatio
 
 ## Open tasks:
 
-- Questionable logic:
-  - Is the `session_memory` implementation correct and efficient?
-  - Are the `answer_with_ollama_and_fetch` and `run_agent_ollama_session` functions correctly handling the `conversation_history` parameter?
-- Missing features:
-  - Implementing long-term memory (semantic facts) is not in the current scope.
-  - There is no clear plan for how to handle the `conversation_history` cap.
-- Pending items:
-  - Review the `session_memory` implementation for potential performance improvements.
-  - Investigate the possibility of using a more efficient data structure for storing conversation history.
-  - Consider adding a mechanism for users to manually edit or update their long-term memory.
+- Review whether the `session_memory` implementation is correct and efficient.
+- Verify that `answer_with_ollama_and_fetch` and `run_agent_ollama_session` handle `conversation_history` consistently.
+- Define the plan for handling the `conversation_history` cap.
+- Review whether the current conversation-history storage structure should be optimized.
+- Consider adding a mechanism for users to manually edit or update their long-term memory.

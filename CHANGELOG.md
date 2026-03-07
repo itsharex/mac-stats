@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.32] - 2026-03-06
+
+### Changed
+- **Docs backlog cleanup** — Normalized active `Open tasks` sections into concrete backlog bullets, removed stale placeholder TODOs from historical docs, and cleaned completed docs so `_DONE` files no longer advertise unfinished work.
+
+### Fixed
+- **Completion criteria sanitization** — Generic news requests and browser-based video review requests now reject invented verification criteria more aggressively, which reduces retries that drift into unrelated football/source requirements or fake “playable video” expectations.
+- **Redmine failure parsing** — Grounded Redmine error handling now recognizes more backend failure text forms (`Redmine API failed`, `Redmine GET failed`, `Redmine request failed`) so blocked-state replies stay user-facing even when the raw error wording differs.
+
 ### Added
 - **Request-local retry guards for Discord/Ollama runs** — Verification retries now carry the original user request and sanitized success criteria explicitly so unrelated prior task context does not leak into fresh requests.
 - **News/search result shaping** — News-style Perplexity results are now ranked, deduplicated by domain, annotated as `article-like` vs `hub/landing page`, and retried with a refined query when the first pass only returns weak landing pages.

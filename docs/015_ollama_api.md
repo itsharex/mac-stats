@@ -130,12 +130,7 @@ All commands require Ollama to be **configured** (`configure_ollama`). They use 
 
 ## Open tasks:
 
-- Questionable logic:
-    -   How does the app handle cases where the Ollama API is not configured?
-    -   What happens when the user tries to pull or delete a model that is not available?
-- Missing features:
-    -   Support for more advanced model features (e.g., model fine-tuning, model export)
-    -   Integration with other AI tools or platforms
-- Pending items:
-    -   Improve the user interface for model management and configuration
-    -   Enhance the performance and efficiency of the Ollama API
+- Document how the app behaves when the Ollama API is not configured.
+- Document what happens when the user tries to pull or delete a model that does not exist.
+- Improve the user interface for model management and configuration.
+- Consider support for more advanced model-management features such as fine-tuning or export.

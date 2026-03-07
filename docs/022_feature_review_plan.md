@@ -250,19 +250,11 @@ See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for deta
 
 ## Open tasks:
 
-### Questionable logic:
-
-* Is the `try_lock()` usage in `run_due_monitor_checks()` safe? Should it be `lock()` instead?
-* Is the `VERBOSITY` atomic set by CLI `-v`/`-vv`/`-vvv` flags and the new `set_chat_verbosity` consistent across all logging macros?
-* Is the `run_due_monitor_checks` function called somewhere? Should it be wired to a background thread?
-
-### Missing features:
-
-* Externalized prompts (F11) — are they properly synced to `src/ollama.js`?
-* Default agents shipped (F12) — are they properly registered in `lib.rs`?
-* Tauri prompt API (F13) — are the `list_prompt_files` and `save_prompt_file` commands properly implemented?
-
-### Pending items:
-
-* Review and merge `docs/023_externalized_prompts_DONE.md` — is it complete and accurate?
-* Update `CHANGELOG.md` (0.1.14) to reflect the new features and changes.
+- Verify whether `try_lock()` in `run_due_monitor_checks()` is the right behavior or whether it should use `lock()`.
+- Verify that the `VERBOSITY` atomic used by CLI flags and `set_chat_verbosity` is consistent across all logging macros.
+- Confirm that `run_due_monitor_checks()` is actually wired into a background thread or scheduler.
+- Verify that externalized prompts (F11) are properly synced to `src/ollama.js`.
+- Verify that default agents shipped in F12 are properly registered in `lib.rs`.
+- Verify that the Tauri prompt API (F13) commands `list_prompt_files` and `save_prompt_file` are correctly implemented.
+- Review `docs/023_externalized_prompts_DONE.md` and merge any missing details back into this plan if needed.
+- Update `CHANGELOG.md` to reflect the reviewed features and changes.
