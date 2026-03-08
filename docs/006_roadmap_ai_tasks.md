@@ -7,7 +7,7 @@ mac-stats is a local AI agent for macOS that provides a range of features, inclu
 * CPU, GPU, RAM, and disk usage monitoring
 * Ollama chat and Discord bot functionality
 * Task runner and scheduler
-* MCP (Model-Driven Predictive) integration
+* MCP integration
 
 ## Installation
 
@@ -30,19 +30,24 @@ Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/ref
 
 ## Tool Agents
 
-Ollama can invoke the following tool agents:
+Ollama invokes tools by replying with one line: `TOOL_NAME: <argument>`. The app sends the full list of active agents (including **SCHEDULER** as informational only). Implemented tools include:
 
-* **FETCH_URL**: Fetches a web page's body as text.
-* **BRAVE_SEARCH**: Performs a web search via Brave Search API.
-* **RUN_JS**: Executes JavaScript code.
+* **FETCH_URL**: Fetch a web page's body as text (server-side, no CORS). `commands/browser.rs`.
+* **BRAVE_SEARCH**: Web search via Brave Search API. `commands/brave.rs`; requires `BRAVE_API_KEY`.
+* **PERPLEXITY_SEARCH**: Perplexity API search; results injected for Ollama to summarize.
+* **RUN_CMD**: Run allowlisted shell commands (e.g. `ps`, `wc`, `uptime`, `cursor-agent`). See `docs/033_docs_vs_code_review.md` for allowlist.
+* **RUN_JS**: Execute JavaScript (e.g. in CPU window).
+* **BROWSER_SCREENSHOT**: Open URL via CDP, save PNG to `~/.mac-stats/screenshots/`; used by Discord and chat.
+* **SCHEDULER**: Informational; Ollama can recommend recurring/one-shot tasks; actual add/remove via SCHEDULE / REMOVE_SCHEDULE.
+
+For the full table and invocation details, see **docs/README.md** (Tool Agents) and **docs/007_discord_agent.md**.
 
 ## AI Tasks Roadmap
 
-### Phase 1: Web Navigation and Extraction
+### Phase 1: Web Navigation and Extraction (done)
 
-* **Backend Fetch**: Tauri command `fetch_page(url)` in `src-tauri/src/commands/browser.rs`.
-* **Tool Protocol**: Ollama can request a page fetch by replying with exactly one line: `FETCH_URL: <full URL>`.
-* **Flow**: Handled inside `ollama_chat_with_execution`.
+* **Backend Fetch**: Tauri command `fetch_page` in `src-tauri/src/commands/browser.rs`; `FETCH_URL: <url>` in chat and Discord.
+* **BROWSER_SCREENSHOT**: CDP-based screenshot to `~/.mac-stats/screenshots/`; invoked via `BROWSER_SCREENSHOT: <url>`.
 
 ### Phase 2 and Beyond
 
@@ -66,4 +71,3 @@ Ollama can invoke the following tool agents:
 See **006-feature-coder/FEATURE-CODER.md** for the current FEAT backlog. Remaining items:
 
 * Implement Mail, WhatsApp, and Google Docs integrations.
-* Review and refine the AI tasks roadmap.
