@@ -26,7 +26,7 @@ use headless_chrome::LaunchOptions;
 use regex::Regex;
 use serde::Deserialize;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 // ---------------------------------------------------------------------------
 // Browser state for BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_INPUT
@@ -292,6 +292,88 @@ pub fn get_interactables(tab: &headless_chrome::Tab) -> Result<Vec<Interactable>
     Ok(interactables)
 }
 
+/// Try to find and click a cookie-reject / only-necessary button on the current page. Called automatically after BROWSER_NAVIGATE.
+/// Patterns are loaded from ~/.mac-stats/agents/cookie_reject_patterns.md (user-editable for translation or extra sites).
+/// Returns true if a matching element was clicked, false otherwise. Logs at INFO (and DEBUG for details) so it is visible in logs and verbose mode.
+fn try_dismiss_cookie_banner(tab: &headless_chrome::Tab) -> Result<bool, String> {
+    let patterns = crate::config::Config::load_cookie_reject_patterns();
+    let interactables = get_interactables(tab)?;
+    let label_lower = |i: &Interactable| -> String {
+        let s = if !i.text.is_empty() {
+            i.text.as_str()
+        } else if let Some(ref p) = i.placeholder {
+            p.as_str()
+        } else {
+            ""
+        };
+        s.to_lowercase()
+    };
+    for i in &interactables {
+        let lower = label_lower(i);
+        let lower_trim = lower.trim();
+        if lower_trim.is_empty() {
+            continue;
+        }
+        let matched = patterns.iter().any(|pat| {
+            let p = pat.trim().to_lowercase();
+            !p.is_empty() && (lower_trim.contains(&p) || lower_trim == p)
+        });
+        if matched {
+            info!(
+                "Browser agent [CDP]: attempting to dismiss cookie banner (clicking element [{}] '{}')",
+                i.index,
+                i.text.chars().take(50).collect::<String>()
+            );
+            debug!(
+                "Browser agent [CDP]: cookie banner — matched pattern, index {} text {:?}",
+                i.index, i.text
+            );
+            let click_js = format!(
+                r#"
+(function() {{
+  var sel = 'a, button, input, textarea, [role="button"], [onclick], [type="submit"]';
+  var nodes = document.querySelectorAll(sel);
+  var visible = [];
+  for (var i = 0; i < nodes.length; i++) {{
+    var el = nodes[i];
+    var rect = el.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) continue;
+    var style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+    visible.push(el);
+  }}
+  var idx = {};
+  if (idx >= 1 && idx <= visible.length) {{
+    visible[idx - 1].click();
+    return 'clicked';
+  }}
+  return 'index out of range (max ' + visible.length + ')';
+}})()
+"#,
+                i.index
+            );
+            if let Err(e) = tab.evaluate(&click_js, false) {
+                warn!(
+                    "Browser agent [CDP]: cookie banner click failed: {}",
+                    e
+                );
+                return Ok(false);
+            }
+            std::thread::sleep(Duration::from_millis(700));
+            info!(
+                "Browser agent [CDP]: cookie banner dismissed (clicked element [{}])",
+                i.index
+            );
+            return Ok(true);
+        }
+    }
+    debug!(
+        "Browser agent [CDP]: cookie banner — no consent control found (checked {} elements)",
+        interactables.len()
+    );
+    Ok(false)
+}
+
 /// Get current browser state (URL, title, interactables). Call after navigate or after click/input.
 pub fn get_browser_state(tab: &headless_chrome::Tab) -> Result<BrowserState, String> {
     let current_url = tab.get_url();
@@ -443,6 +525,55 @@ fn fetch_page_and_extract_phones_with_browser(
 /// Cached browser session: (Browser, last_used, was_headless). Dropped when idle longer than browser_idle_timeout_secs.
 static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant, bool)>>> = OnceLock::new();
 
+/// Mutex held for the entire "create new browser" path so only one thread can launch at a time (avoids multiple Chrome PIDs from races).
+static LAUNCH_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn launch_mutex() -> &'static Mutex<()> {
+    LAUNCH_MUTEX.get_or_init(|| Mutex::new(()))
+}
+
+/// Command-line signature for headless Chrome launched by the headless_chrome crate (temp profile dir).
+const HEADLESS_CHROME_PROFILE_SIGNATURE: &str = "rust-headless-chrome-profile";
+
+/// Kill Chrome processes that were spawned by mac-stats (headless_chrome crate) and are no longer tracked.
+/// Such orphans can appear after races or crashes. Call before launching a new headless Chrome so we don't accumulate processes.
+pub fn kill_orphaned_browser_processes() {
+    #[cfg(unix)]
+    {
+        // pgrep -f matches full command line; find Chrome with our temp profile path.
+        let output = match Command::new("pgrep")
+            .args(["-f", HEADLESS_CHROME_PROFILE_SIGNATURE])
+            .output()
+        {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::debug!(
+                    "Browser agent: pgrep for orphaned Chrome failed ({}), skipping cleanup",
+                    e
+                );
+                return;
+            }
+        };
+        if !output.status.success() {
+            // No matching processes (pgrep exits 1 when no match)
+            return;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let pids: Vec<&str> = stdout.trim().split_whitespace().collect();
+        for pid_str in pids {
+            if let Ok(pid) = pid_str.parse::<i32>() {
+                if pid > 0 {
+                    let _ = Command::new("kill").arg(pid.to_string()).status();
+                    info!(
+                        "Browser agent [CDP]: killed orphaned headless Chrome PID {}",
+                        pid
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Last page's element list (index, label) for status messages. Set after each navigate/click/input so "Clicking element 7 (Accept all)…" can show the label.
 static LAST_ELEMENT_LABELS: OnceLock<Mutex<Option<Vec<(u32, String)>>>> = OnceLock::new();
 /// Last browser state text shown to the model. Used to re-ground retries after browser-step failures.
@@ -576,6 +707,7 @@ where
 }
 
 /// Get or create a browser; reuse if last use was within idle timeout and preference matches, else close and create new.
+/// Only one thread can be in the "create new browser" path at a time (LAUNCH_MUTEX) to avoid multiple Chrome PIDs from races.
 fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     let timeout_secs = crate::config::Config::browser_idle_timeout_secs();
     let prefer_headless = PREFER_HEADLESS.load(Ordering::Relaxed);
@@ -607,6 +739,28 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     }
     *guard = None;
     drop(guard);
+
+    // Serialize creation so only one thread launches at a time; kill orphaned headless Chrome before launching.
+    let _launch_guard = launch_mutex().lock().map_err(|e| e.to_string())?;
+    // Re-check session after acquiring launch lock (another thread may have created it).
+    {
+        let guard = browser_session().lock().map_err(|e| e.to_string())?;
+        let now = Instant::now();
+        if let Some((ref browser, last_used, was_headless)) = guard.as_ref() {
+            if now.duration_since(*last_used).as_secs() < timeout_secs
+                && *was_headless == prefer_headless
+            {
+                info!(
+                    "Browser agent [CDP]: reusing session after launch lock (another thread created it)"
+                );
+                return Ok(browser.clone());
+            }
+        }
+    }
+
+    if prefer_headless {
+        kill_orphaned_browser_processes();
+    }
     let browser = if prefer_headless {
         info!(
             "Browser agent [CDP]: user requested headless — launching headless Chrome (no visible window)"
@@ -716,9 +870,20 @@ fn navigate_and_get_state_inner(url: &str) -> Result<String, String> {
         std::thread::sleep(Duration::from_secs(2));
     }
     std::thread::sleep(Duration::from_millis(1500));
-    let state = get_browser_state(&tab).inspect_err(|e| {
+    let mut state = get_browser_state(&tab).inspect_err(|e| {
         clear_browser_session_on_error(e);
     })?;
+    // Auto-dismiss cookie banner so the user doesn't have to ask. Visible in logs and verbose mode.
+    debug!(
+        "Browser agent [CDP]: checking for cookie banner after navigate to {}",
+        url_normalized
+    );
+    if let Ok(true) = try_dismiss_cookie_banner(&tab) {
+        std::thread::sleep(Duration::from_millis(500));
+        if let Ok(refreshed) = get_browser_state(&tab) {
+            state = refreshed;
+        }
+    }
     let snapshot = format_browser_state_for_llm(&state);
     set_last_element_labels(
         state

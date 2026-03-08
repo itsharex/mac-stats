@@ -6,6 +6,36 @@
 use std::path::PathBuf;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+/// If we haven't rotated today (UTC), copy debug.log to debug.log_sic and truncate debug.log.
+/// State is stored in ~/.mac-stats/.debug_log_last_rotated (YYYY-MM-DD). Called once at init.
+fn rotate_debug_log_if_due(log_path: &std::path::Path) {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let state_path = crate::config::Config::debug_log_last_rotated_path();
+    let sic_path = crate::config::Config::debug_log_sic_path();
+    let already_rotated = std::fs::read_to_string(&state_path)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .as_ref()
+        .map(|s| s == &today)
+        .unwrap_or(false);
+    if already_rotated {
+        return;
+    }
+    if log_path.exists() {
+        if std::fs::copy(log_path, &sic_path).is_err() {
+            return;
+        }
+    }
+    if let Ok(f) = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(log_path)
+    {
+        let _ = f.sync_all();
+    }
+    let _ = std::fs::write(&state_path, today);
+}
+
 mod legacy;
 
 // Re-export legacy logging for compatibility during migration
@@ -67,6 +97,9 @@ pub fn init_tracing(verbosity: u8, log_file_path: Option<PathBuf>) {
         if let Some(parent) = log_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
+
+        // Daily rotation: copy debug.log to debug.log_sic and truncate (once per calendar day, UTC)
+        rotate_debug_log_if_due(&log_path);
 
         // Rotate: if log file exceeds 10 MB, truncate to avoid unbounded growth
         const MAX_LOG_BYTES: u64 = 10 * 1024 * 1024;

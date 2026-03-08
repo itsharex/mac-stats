@@ -136,7 +136,7 @@ pub fn session_reset_instruction_with_date_utc() -> String {
     let now = chrono::Utc::now();
     let date_time = now.format("%Y-%m-%d %H:%M UTC");
     format!(
-        "A new session was started. Current date/time: {}. Execute your Session Startup: read soul, user-info, and daily memory for today and yesterday; in main session also read MEMORY. Then respond to the user.",
+        "A new session was started. Current date/time: {}. Execute your Session Startup: read soul, user-info, and daily memory for today and yesterday; in main session also read MEMORY. Then greet the user briefly.",
         date_time
     )
 }

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Discord platform formatting** — When replying in Discord, the system prompt includes "Platform formatting (Discord)": no markdown tables (use bullet lists), wrap links in `<>` to suppress embeds. Keeps messages readable and reduces embed clutter.
+- **Discord group channel guidance** — For guild channels (having_fun, all_messages, mention_only): when to speak, at most one substantive reply per message (no triple-tap), and do not expose the user's private context in the channel. Documented in `docs/007_discord_agent.md`.
+- **REACT: emoji in having_fun** — When the model replies with only `REACT: <emoji>` (e.g. `REACT: 👍`), the bot adds that emoji as a reaction to the last user message and does not send text. One reaction per message; group-chat guidance explains when to use it.
+- **Cookie banner auto-dismiss** — After `BROWSER_NAVIGATE`, the browser agent looks for a button/link whose text matches patterns in `~/.mac-stats/agents/cookie_reject_patterns.md` (user-editable, one pattern per line; default includes "reject all", "ablehnen", "only necessary", etc.) and clicks it to dismiss the cookie banner. New default file `src-tauri/defaults/cookie_reject_patterns.md`.
+- **Lean Chrome processes** — Serialized browser creation via `LAUNCH_MUTEX` so only one thread can launch headless Chrome at a time (avoids multiple Chrome PIDs from races). On startup, orphaned headless Chrome processes (from previous runs or races) are killed via `kill_orphaned_browser_processes()`. Plan doc: `docs/032_chrome_helper_processes_plan.md`.
+- **Daily log rotation** — Once per calendar day (UTC), `debug.log` is copied to `debug.log_sic` and truncated. Last rotation date stored in `~/.mac-stats/.debug_log_last_rotated`. Config paths: `Config::debug_log_sic_path()`, `Config::debug_log_last_rotated_path()`.
+
+### Changed
+- **Session reset instruction** — Session startup text now says "greet the user briefly" instead of "respond to the user" for a shorter first reply.
+- **Having_fun group-chat guidance** — Having_fun (and idle thoughts) now include explicit guidance: know when to speak, one response per message, use REACT when a full reply isn't needed, participate without dominating.
+
 ## [0.1.38] - 2026-03-08
 
 ### Added

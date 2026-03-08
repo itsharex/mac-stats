@@ -889,6 +889,16 @@ IMPORTANT: For Discord tasks, prefer **AGENT: discord-expert** — it fetches gu
 If calling directly: use DISCORD_API: GET <path> (NOT FETCH_URL — FETCH_URL has no Discord token and will get 401).
 Guild/channel data: GET /users/@me/guilds (bot's servers), GET /guilds/{guild_id}/channels (channels in a server). Also: GET /guilds/{guild_id}/members/search?query=name, POST /channels/{channel_id}/messages {"content":"..."}"#;
 
+/// Platform-specific formatting for Discord. Injected when the reply target is Discord so the model avoids tables and wraps links.
+const DISCORD_PLATFORM_FORMATTING: &str = r#"
+
+**Platform formatting (Discord):** Your reply will be shown in Discord. (1) Do not use markdown tables; use bullet lists instead so the message renders cleanly. (2) For links, wrap them in angle brackets to suppress embeds, e.g. <https://example.com>."#;
+
+/// Group-channel guidance when replying in a Discord guild channel (having_fun / all_messages): when to speak, one reply, don't dominate.
+const DISCORD_GROUP_CHANNEL_GUIDANCE: &str = r#"
+
+**Group channel:** You are in a shared channel. Reply when you're mentioned or asked, or when you add real value; stay silent for casual banter or when someone else already answered. At most one substantive reply per message (no triple-tap). Do not expose the user's private context (memory, DMs) here."#;
+
 /// Build agent descriptions string: base, optional SKILL (when skills exist), optional RUN_CMD, then MCP when configured.
 /// When from_discord is true and Discord is configured, appends DISCORD_API agent and endpoint list.
 /// When question is provided and Redmine is configured, create-context (projects, trackers, etc.) is only appended if the question suggests create/update.
@@ -3605,6 +3615,20 @@ pub fn answer_with_ollama_and_fetch(
         }
 
         let from_discord = discord_reply_channel_id.is_some();
+        let discord_platform_formatting: String = if from_discord {
+            info!("Agent router: Discord reply — injecting platform formatting (no tables, wrap links in <>)");
+            if discord_is_dm == Some(false) {
+                format!(
+                    "{}{}",
+                    DISCORD_PLATFORM_FORMATTING,
+                    DISCORD_GROUP_CHANNEL_GUIDANCE
+                )
+            } else {
+                DISCORD_PLATFORM_FORMATTING.to_string()
+            }
+        } else {
+            String::new()
+        };
         let agent_descriptions = build_agent_descriptions(from_discord, Some(question)).await;
         info!(
             "Agent router: agent list built ({} chars)",
@@ -3793,12 +3817,14 @@ pub fn answer_with_ollama_and_fetch(
             let planning_prompt = crate::config::Config::load_planning_prompt();
             let planning_system_content = match &skill_content {
                 Some(skill) => format!(
-                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}\n\n{}",
-                    discord_user_context, skill, planning_prompt, agent_descriptions
+                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}\n\n{}{}",
+                    discord_user_context, skill, planning_prompt, agent_descriptions,
+                    discord_platform_formatting
                 ),
                 None => format!(
-                    "{}{}{}\n\n{}",
-                    router_soul, discord_user_context, planning_prompt, agent_descriptions
+                    "{}{}{}\n\n{}{}",
+                    router_soul, discord_user_context, planning_prompt, agent_descriptions,
+                    discord_platform_formatting
                 ),
             };
             let mut planning_messages: Vec<crate::ollama::ChatMessage> =
@@ -3951,17 +3977,18 @@ pub fn answer_with_ollama_and_fetch(
                 load_memory_block_for_request(discord_reply_channel_id, load_global_memory);
             let execution_system_content = match &skill_content {
                 Some(skill) => format!(
-                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}{}",
+                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}{}{}",
                     discord_user_context,
                     skill,
                     execution_prompt,
                     metrics_for_system,
                     discord_screenshot_reminder,
                     redmine_howto_reminder,
+                    discord_platform_formatting,
                     model_identity
                 ),
                 None => format!(
-                    "{}{}{}{}{}{}{}{}",
+                    "{}{}{}{}{}{}{}{}{}",
                     router_soul,
                     memory_block,
                     discord_user_context,
@@ -3969,6 +3996,7 @@ pub fn answer_with_ollama_and_fetch(
                     metrics_for_system,
                     discord_screenshot_reminder,
                     redmine_howto_reminder,
+                    discord_platform_formatting,
                     model_identity
                 ),
             };
@@ -4007,18 +4035,19 @@ pub fn answer_with_ollama_and_fetch(
                 load_memory_block_for_request(discord_reply_channel_id, load_global_memory);
             let execution_system_content = match &skill_content {
                 Some(skill) => format!(
-                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}\n\nYour plan: {}{}",
+                    "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}{}\n\nYour plan: {}{}",
                     discord_user_context,
                     skill,
                     execution_prompt,
                     metrics_for_system,
                     discord_screenshot_reminder,
                     redmine_howto_reminder,
+                    discord_platform_formatting,
                     recommendation,
                     model_identity
                 ),
                 None => format!(
-                    "{}{}{}{}{}{}{}\n\nYour plan: {}{}",
+                    "{}{}{}{}{}{}{}{}\n\nYour plan: {}{}",
                     router_soul,
                     memory_block,
                     discord_user_context,
@@ -4026,6 +4055,7 @@ pub fn answer_with_ollama_and_fetch(
                     metrics_for_system,
                     discord_screenshot_reminder,
                     redmine_howto_reminder,
+                    discord_platform_formatting,
                     recommendation,
                     model_identity
                 ),

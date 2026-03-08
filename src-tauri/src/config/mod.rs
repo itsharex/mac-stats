@@ -94,6 +94,22 @@ impl Config {
         std::env::temp_dir().join("mac-stats-debug.log")
     }
 
+    /// Path for daily backup of debug.log: `$HOME/.mac-stats/debug.log_sic`. Used when rotating: copy debug.log here, then truncate debug.log once per day.
+    pub fn debug_log_sic_path() -> PathBuf {
+        Self::log_file_path()
+            .parent()
+            .map(|p| p.join("debug.log_sic"))
+            .unwrap_or_else(|| std::env::temp_dir().join("mac-stats-debug.log_sic"))
+    }
+
+    /// Path for state file that stores the last rotation date (YYYY-MM-DD): `$HOME/.mac-stats/.debug_log_last_rotated`.
+    pub fn debug_log_last_rotated_path() -> PathBuf {
+        Self::log_file_path()
+            .parent()
+            .map(|p| p.join(".debug_log_last_rotated"))
+            .unwrap_or_else(|| std::env::temp_dir().join(".mac-stats-debug_log_last_rotated"))
+    }
+
     /// Get the build date
     ///
     /// Returns the build date from the BUILD_DATE environment variable,
@@ -511,6 +527,12 @@ impl Config {
         Self::agents_dir().join("session_reset_phrases.md")
     }
 
+    /// Path to cookie reject patterns: `$HOME/.mac-stats/agents/cookie_reject_patterns.md`
+    /// One pattern per line; after BROWSER_NAVIGATE we look for a button/link whose text contains any pattern (case-insensitive) and click it to dismiss the cookie banner. User-editable for translation or extra sites.
+    pub fn cookie_reject_patterns_path() -> PathBuf {
+        Self::agents_dir().join("cookie_reject_patterns.md")
+    }
+
     /// Prompts directory: `$HOME/.mac-stats/agents/prompts/`
     pub fn prompts_dir() -> PathBuf {
         Self::agents_dir().join("prompts")
@@ -564,6 +586,8 @@ impl Config {
     const DEFAULT_ESCALATION_PATTERNS: &str = include_str!("../../defaults/escalation_patterns.md");
     const DEFAULT_SESSION_RESET_PHRASES: &str =
         include_str!("../../defaults/session_reset_phrases.md");
+    const DEFAULT_COOKIE_REJECT_PATTERNS: &str =
+        include_str!("../../defaults/cookie_reject_patterns.md");
 
     /// Write a default file if the target path does not exist (never overwrites user edits).
     fn write_default_if_missing(path: &std::path::Path, content: &str) {
@@ -746,6 +770,12 @@ impl Config {
         // Session reset phrases (user-editable; phrases that clear session / start fresh, any language)
         Self::write_default_if_missing(&new_session_reset, Self::DEFAULT_SESSION_RESET_PHRASES);
 
+        // Cookie reject patterns (user-editable; translated/localized patterns for auto-dismissing cookie banners after BROWSER_NAVIGATE)
+        Self::write_default_if_missing(
+            &Self::cookie_reject_patterns_path(),
+            Self::DEFAULT_COOKIE_REJECT_PATTERNS,
+        );
+
         // Default agents: loop over DEFAULT_AGENT_IDS. agent.json only if missing; skill.md and testing.md overwritten from bundle.
         for (dir_name, files) in Self::DEFAULT_AGENT_IDS {
             let dir = agents.join(dir_name);
@@ -801,6 +831,21 @@ impl Config {
     pub fn load_session_reset_phrases() -> Vec<String> {
         let path = Self::session_reset_phrases_path();
         let content = Self::load_file_or_default(&path, Self::DEFAULT_SESSION_RESET_PHRASES);
+        content
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && !s.starts_with('#'))
+            .map(String::from)
+            .collect::<Vec<_>>()
+    }
+
+    /// Load cookie reject patterns from ~/.mac-stats/agents/cookie_reject_patterns.md.
+    /// Returns a list of patterns (one per non-empty, non-comment line). After BROWSER_NAVIGATE
+    /// we look for a button/link whose text contains any pattern (case-insensitive) and click it.
+    /// User-editable for translation or extra sites. If the file is missing, writes the default and returns the default list.
+    pub fn load_cookie_reject_patterns() -> Vec<String> {
+        let path = Self::cookie_reject_patterns_path();
+        let content = Self::load_file_or_default(&path, Self::DEFAULT_COOKIE_REJECT_PATTERNS);
         content
             .lines()
             .map(str::trim)

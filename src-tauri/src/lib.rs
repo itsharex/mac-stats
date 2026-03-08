@@ -240,6 +240,9 @@ fn run_internal(open_cpu_window: bool) {
             // Write default prompt/agent files if missing (first launch or after update)
             crate::config::Config::ensure_defaults();
 
+            // Kill orphaned headless Chrome processes from previous runs or races (keeps browser usage lean)
+            crate::browser_agent::kill_orphaned_browser_processes();
+
             // Load persistent monitors on startup
             use crate::commands::monitors;
             if let Err(e) = monitors::load_monitors_internal() {

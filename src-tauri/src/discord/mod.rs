@@ -15,9 +15,9 @@ use chrono::Timelike;
 use serenity::builder::EditMessage;
 use serenity::client::{Client, Context, EventHandler};
 use serenity::gateway::ShardManager;
-use serenity::model::channel::Message;
+use serenity::model::channel::{Message, ReactionType};
 use serenity::model::gateway::GatewayIntents;
-use serenity::model::id::UserId;
+use serenity::model::id::{MessageId, UserId};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -47,6 +47,17 @@ fn time_of_day(hour: u32) -> TimeOfDay {
 
 /// Short, fixed context for having_fun channels so the tone stays casual even if soul or channel prompt change.
 const HAVING_FUN_CASUAL_CONTEXT: &str = "This is a casual hangout channel. Be conversational, brief, and human — no corporate or assistant fluff. You can have a nice conversation about life in general.";
+
+/// Group-chat and reaction guidance for having_fun (and all_messages): when to speak, one reply per message, reactions, and not dominating.
+const HAVING_FUN_GROUP_CHAT_GUIDANCE: &str = r#"
+
+**Know when to speak:** Reply when you're directly mentioned or asked, when you add real value, when something witty fits, or when correcting important misinformation. Stay silent for casual banter, when someone else already answered, or when your reply would be filler ("yeah", "nice"). Humans don't reply to every message — you shouldn't either. Quality over quantity.
+
+**One response per message (avoid the triple-tap):** At most one substantive reply per incoming message. No multiple fragments or follow-ups to the same user message unless the flow explicitly requires it (e.g. a multi-step tool result). One thoughtful response is enough.
+
+**React like a human:** When a full reply isn't needed, use a single emoji reaction to acknowledge (e.g. 👍 ❤️ 🙌 😂 🤔 ✅). Reply with exactly: REACT: <emoji> (e.g. REACT: 👍). One reaction per message; pick the best fit. Use this for "I saw this" without cluttering the channel.
+
+**Participate, don't dominate:** You're a participant in the group. Don't expose the user's private context (memory, DMs) in shared channels."#;
 
 /// Returns a short block to inject into having_fun channel prompt: current time + period-aware guidance.
 /// So the model (e.g. Werner) can behave differently at night vs morning/afternoon/evening.
@@ -687,6 +698,8 @@ struct BufferedMessage {
     author_name: String,
     content: String,
     is_bot: bool,
+    /// Discord message ID; used to react when the model replies with REACT: <emoji> only.
+    message_id: Option<u64>,
 }
 
 struct HavingFunState {
@@ -756,12 +769,14 @@ async fn fetch_channel_messages_after(
 }
 
 /// Buffer a message for having_fun. If answer_asap is true (mention or from human), next response is scheduled immediately (next tick).
+/// message_id is stored so we can react to it when the model replies with REACT: <emoji> only.
 fn buffer_having_fun_message(
     channel_id: u64,
     author_name: String,
     content: String,
     is_bot: bool,
     answer_asap: bool,
+    message_id: Option<u64>,
 ) {
     if let Ok(mut map) = having_fun_states().lock() {
         let params = get_having_fun_params();
@@ -806,6 +821,7 @@ fn buffer_having_fun_message(
             author_name,
             content,
             is_bot,
+            message_id,
         });
         state.last_activity = std::time::Instant::now();
         // Reset idle clock so response always fires before idle (no message = idle kicks in).
@@ -1081,6 +1097,7 @@ async fn having_fun_respond(
     }
     let mut system = String::new();
     system.push_str(HAVING_FUN_CASUAL_CONTEXT);
+    system.push_str(HAVING_FUN_GROUP_CHAT_GUIDANCE);
     if let Some(ref prompt) = chan.prompt {
         system.push_str("\n\n");
         system.push_str(prompt);
@@ -1169,6 +1186,31 @@ async fn having_fun_respond(
             if reply.is_empty() {
                 return None;
             }
+            // When the model replies with only REACT: <emoji>, add a reaction to the last user message and do not send text.
+            let first_line = reply.lines().next().unwrap_or("").trim();
+            if first_line.starts_with("REACT:") {
+                let emoji = first_line.strip_prefix("REACT:").unwrap_or("").trim();
+                if !emoji.is_empty() && emoji.len() <= 20 && reply.lines().count() <= 2 {
+                    if let Some(msg_id) = messages.last().and_then(|m| m.message_id) {
+                        if let Ok(discord_msg) = channel
+                            .message(ctx, MessageId::new(msg_id))
+                            .await
+                        {
+                            if discord_msg
+                                .react(ctx, ReactionType::Unicode(emoji.to_string()))
+                                .await
+                                .is_ok()
+                            {
+                                debug!(
+                                    "Having fun (channel {}): reacted {} to message {}",
+                                    channel_id, emoji, msg_id
+                                );
+                                return None;
+                            }
+                        }
+                    }
+                }
+            }
             info!(
                 "Having fun (channel {}): reply ({} chars): {}",
                 channel_id,
@@ -1208,6 +1250,7 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
     }
     let mut system = String::new();
     system.push_str(HAVING_FUN_CASUAL_CONTEXT);
+    system.push_str(HAVING_FUN_GROUP_CHAT_GUIDANCE);
     if let Some(ref prompt) = chan.prompt {
         system.push_str("\n\n");
         system.push_str(prompt);
@@ -1747,7 +1790,14 @@ impl EventHandler for Handler {
                     );
                 }
                 let answer_asap = mentions_bot || !is_bot;
-                buffer_having_fun_message(chan_id, author_name, content, is_bot, answer_asap);
+                buffer_having_fun_message(
+                    chan_id,
+                    author_name,
+                    content,
+                    is_bot,
+                    answer_asap,
+                    Some(new_message.id.get()),
+                );
                 return;
             }
         }
