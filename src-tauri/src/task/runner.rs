@@ -86,6 +86,7 @@ pub async fn run_task_until_finished(
             false,
             None,
             None,
+            None, // discord_is_dm: not Discord, load global memory
         )
         .await?;
         last_reply = reply.text;

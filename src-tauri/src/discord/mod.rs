@@ -1844,7 +1844,8 @@ impl EventHandler for Handler {
 
         // Load prior conversation (in-memory, or from latest session file after restart) before adding this turn.
         // If the user asks to clear/new session (any language), clear session and start fresh (see docs/035).
-        let prior = if crate::session_memory::user_wants_session_reset(&content) {
+        let did_session_reset = crate::session_memory::user_wants_session_reset(&content);
+        let prior = if did_session_reset {
             crate::session_memory::clear_session("discord", channel_id_u64);
             tracing::info!(
                 "Discord: user requested session reset (e.g. clear session / new session), starting fresh"
@@ -1873,6 +1874,17 @@ impl EventHandler for Handler {
                     })
                     .collect(),
             )
+        };
+        // After session reset, inject Session Startup instruction + current date so the agent knows which memory to read (see Session Startup in docs).
+        let question_for_ollama = if did_session_reset {
+            tracing::info!("Discord: injected Session Startup + current date (session reset)");
+            format!(
+                "{}\n\n{}",
+                crate::session_memory::session_reset_instruction_with_date_utc(),
+                question
+            )
+        } else {
+            question.clone()
         };
         // Short-term memory: add user message when we receive the request (store original content)
         crate::session_memory::add_message("discord", channel_id_u64, "user", &content);
@@ -1977,7 +1989,7 @@ impl EventHandler for Handler {
         );
         let (reply_text, attachment_paths) =
             match crate::commands::ollama::answer_with_ollama_and_fetch(
-                &question,
+                &question_for_ollama,
                 Some(status_tx),
                 Some(channel_id_u64),
                 Some(author_id_u64),
@@ -1996,6 +2008,7 @@ impl EventHandler for Handler {
                 false, // is_verification_retry
                 None,  // original_user_request
                 None,  // success_criteria_override
+                Some(is_dm), // load global memory only in main session (DM or in-app)
             )
             .await
             {

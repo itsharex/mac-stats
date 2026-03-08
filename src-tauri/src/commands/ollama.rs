@@ -60,10 +60,18 @@ fn load_channel_memory_block(channel_id: u64) -> String {
     )
 }
 
-/// Load memory for the current request: global + per-channel when replying in a Discord channel.
-/// Keeps channel conversations from mixing; DMs and each server channel have their own lesson file.
-fn load_memory_block_for_request(discord_channel_id: Option<u64>) -> String {
-    let global = load_global_memory_block();
+/// Load memory for the current request.
+/// Global memory (personal/long-term) is only loaded in main session (in-app, or Discord DM).
+/// In Discord guild channels and having_fun, only per-channel memory is loaded to avoid leaking personal context.
+fn load_memory_block_for_request(
+    discord_channel_id: Option<u64>,
+    load_global_memory: bool,
+) -> String {
+    let global = if load_global_memory {
+        load_global_memory_block()
+    } else {
+        String::new()
+    };
     let channel = discord_channel_id
         .map(load_channel_memory_block)
         .unwrap_or_default();
@@ -852,12 +860,23 @@ fn build_skill_agent_description(num: u32, skills: &[crate::skills::Skill]) -> S
 }
 
 /// Build the AGENT description paragraph when LLM agents exist. Lists agents by slug or name so the model can invoke AGENT: <slug or id> [task].
-fn build_agent_agent_description(num: u32, agents: &[crate::agents::Agent]) -> String {
-    let list: String = agents
+/// When include_cursor_agent is true and cursor-agent CLI is available, "cursor-agent" is listed so the model can delegate coding tasks via AGENT: cursor-agent.
+fn build_agent_agent_description(
+    num: u32,
+    agents: &[crate::agents::Agent],
+    include_cursor_agent: bool,
+) -> String {
+    let mut list: String = agents
         .iter()
         .map(|a| a.slug.as_deref().unwrap_or(a.name.as_str()).to_string())
         .collect::<Vec<_>>()
         .join(", ");
+    if include_cursor_agent {
+        if !list.is_empty() {
+            list.push_str(", ");
+        }
+        list.push_str("cursor-agent (coding tasks; uses Cursor Agent CLI)");
+    }
     format!(
         "\n\n{}. **AGENT**: Run a specialized LLM agent (its own model and prompt). Use when a task fits an agent below. To invoke: reply with exactly one line: AGENT: <slug or id> [optional task]. If no task is given, the current user question is used. Available agents: {}.",
         num, list
@@ -967,8 +986,13 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
     ));
     num += 1;
     let agent_list = crate::agents::load_agents();
-    if !agent_list.is_empty() {
-        base.push_str(&build_agent_agent_description(num, &agent_list));
+    let cursor_agent_available = crate::commands::cursor_agent::is_cursor_agent_available();
+    if !agent_list.is_empty() || cursor_agent_available {
+        base.push_str(&build_agent_agent_description(
+            num,
+            &agent_list,
+            cursor_agent_available,
+        ));
         num += 1;
     }
     let Some(server_url) = crate::mcp::get_mcp_server_url() else {
@@ -1126,15 +1150,27 @@ pub(crate) async fn run_agent_ollama_session(
     agent: &crate::agents::Agent,
     user_message: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
+    include_global_memory: bool,
 ) -> Result<String, String> {
     use tracing::info;
     let runtime_context = build_agent_runtime_context(chrono::Local::now().fixed_offset());
+    let system_prompt = if include_global_memory {
+        &agent.combined_prompt
+    } else {
+        &agent.combined_prompt_without_memory
+    };
+    if !include_global_memory {
+        info!(
+            "Agent: {} ({}) running without global memory (non-main session)",
+            agent.name, agent.id
+        );
+    }
     info!(
         "Agent: {} ({}) running (model: {:?}, prompt {} chars)",
         agent.name,
         agent.id,
         agent.model,
-        agent.combined_prompt.chars().count()
+        system_prompt.chars().count()
     );
     info!(
         "Agent: {} ({}) runtime date anchor injected",
@@ -1143,7 +1179,7 @@ pub(crate) async fn run_agent_ollama_session(
     let mut messages = vec![
         crate::ollama::ChatMessage {
             role: "system".to_string(),
-            content: format!("{}\n\n{}", agent.combined_prompt, runtime_context),
+            content: format!("{}\n\n{}", system_prompt, runtime_context),
             images: None,
         },
         crate::ollama::ChatMessage {
@@ -2787,6 +2823,26 @@ fn is_browser_task_request(question: &str) -> bool {
         || q.contains("video")
 }
 
+/// True when the request looks like a coding task (implement, refactor, fix, write code, etc.).
+/// Kept for tests and optional future use (e.g. logging or handoff hints); verification fallback no longer restricts by this.
+#[allow(dead_code)]
+fn is_coding_like_request(question: &str) -> bool {
+    let q = question.to_lowercase();
+    q.contains("implement")
+        || q.contains("refactor")
+        || q.contains("fix ")
+        || q.contains("fix bug")
+        || q.contains("write code")
+        || q.contains("create file")
+        || q.contains("add feature")
+        || q.contains("code change")
+        || q.contains("organize")
+        || (q.contains("folder") && (q.contains("organize") || q.contains("structure")))
+        || (q.contains("make ") && (q.contains("change") || q.contains("edit")) && q.contains("project"))
+        || q.contains("cursor-agent")
+        || q.contains("cursor agent")
+}
+
 fn should_use_http_fallback_after_browser_action_error(tool: &str, err: &str) -> bool {
     let trimmed = err.trim();
     if trimmed.starts_with(tool)
@@ -3179,7 +3235,15 @@ pub fn answer_with_ollama_and_fetch(
     original_user_request: Option<String>,
     // Request-local criteria extracted on the first pass. Reused on retry to avoid context bleed.
     success_criteria_override: Option<Vec<String>>,
+    // When Some(true) = Discord DM (main session, load global memory). When Some(false) = Discord guild (do not load global memory). When None = not Discord (load global memory).
+    discord_is_dm: Option<bool>,
 ) -> Pin<Box<dyn Future<Output = Result<OllamaReply, String>> + Send>> {
+    let load_global_memory = discord_is_dm.map_or(true, |dm| dm);
+    if discord_is_dm == Some(false) {
+        tracing::info!(
+            "Agent router: Discord guild channel — not loading global memory (main-session only)"
+        );
+    }
     let question = question.to_string();
     let mut conversation_history = conversation_history.map(|v| v.to_vec());
     let attachment_images_base64 = attachment_images_base64.map(|v| v.to_vec());
@@ -3883,7 +3947,8 @@ pub fn answer_with_ollama_and_fetch(
                     crate::logging::ellipse(arg, 60)
                 );
             }
-            let memory_block = load_memory_block_for_request(discord_reply_channel_id);
+            let memory_block =
+                load_memory_block_for_request(discord_reply_channel_id, load_global_memory);
             let execution_system_content = match &skill_content {
                 Some(skill) => format!(
                     "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}{}",
@@ -3938,7 +4003,8 @@ pub fn answer_with_ollama_and_fetch(
                 "Agent router: execution step — sending plan + question, starting tool loop (max {} tools)",
                 max_tool_iterations
             );
-            let memory_block = load_memory_block_for_request(discord_reply_channel_id);
+            let memory_block =
+                load_memory_block_for_request(discord_reply_channel_id, load_global_memory);
             let execution_system_content = match &skill_content {
                 Some(skill) => format!(
                     "{}Additional instructions from skill:\n\n{}\n\n---\n\n{}{}{}{}\n\nYour plan: {}{}",
@@ -4874,6 +4940,52 @@ pub fn answer_with_ollama_and_fetch(
                         } else {
                             (arg, "")
                         };
+                        // Proxy agent: cursor-agent runs the CLI instead of Ollama (handoff when local model isn't enough).
+                        let selector_lower = selector.to_lowercase();
+                        if (selector_lower == "cursor-agent" || selector_lower == "cursor_agent")
+                            && crate::commands::cursor_agent::is_cursor_agent_available()
+                        {
+                            let prompt = if task_message.is_empty() {
+                                question.to_string()
+                            } else {
+                                task_message.to_string()
+                            };
+                            send_status("Running Cursor Agent…");
+                            info!(
+                                "Agent router: AGENT cursor-agent proxy (prompt {} chars)",
+                                prompt.len()
+                            );
+                            let prompt_clone = prompt.clone();
+                            match tokio::task::spawn_blocking(move || {
+                                crate::commands::cursor_agent::run_cursor_agent(&prompt_clone)
+                            })
+                            .await
+                            .map_err(|e| format!("Cursor Agent task: {}", e))
+                            .and_then(|r| r)
+                            {
+                                Ok(result) => {
+                                    info!(
+                                        "Agent router: cursor-agent proxy completed ({} chars)",
+                                        result.len()
+                                    );
+                                    format!(
+                                        "Cursor Agent (proxy) result:\n\n{}\n\nUse this to answer the user's question.",
+                                        result.trim()
+                                    )
+                                }
+                                Err(e) => {
+                                    info!("Agent router: cursor-agent proxy failed: {}", e);
+                                    format!(
+                                        "AGENT cursor-agent failed: {}. Answer without this result.",
+                                        e
+                                    )
+                                }
+                            }
+                        } else if selector_lower == "cursor-agent"
+                            || selector_lower == "cursor_agent"
+                        {
+                            "Cursor Agent is not available (cursor-agent CLI not on PATH). Answer without it.".to_string()
+                        } else {
                         let agents = crate::agents::load_agents();
                         match crate::agents::find_agent_by_id_or_name(&agents, selector) {
                             Some(agent) => {
@@ -4952,6 +5064,7 @@ pub fn answer_with_ollama_and_fetch(
                                         agent,
                                         &user_msg,
                                         status_tx.as_ref(),
+                                        load_global_memory,
                                     )
                                     .await
                                     {
@@ -5001,6 +5114,7 @@ pub fn answer_with_ollama_and_fetch(
                                     selector, list
                                 )
                             }
+                        }
                         }
                     }
                     "SCHEDULE" => {
@@ -6422,6 +6536,7 @@ pub fn answer_with_ollama_and_fetch(
                         true,              // is_verification_retry: keep context, skip NEW_TOPIC
                         Some(request_for_verification.clone()),
                         success_criteria.clone(),
+                        discord_is_dm,
                     )
                     .await;
                 }
@@ -6429,6 +6544,48 @@ pub fn answer_with_ollama_and_fetch(
                     .as_deref()
                     .map(|r| r.chars().take(80).collect::<String>())
                     .unwrap_or_default();
+                // Handoff: when local model didn't satisfy, try cursor-agent for any task (coding or general, e.g. news/screenshot requests).
+                let try_cursor_agent_handoff =
+                    crate::commands::cursor_agent::is_cursor_agent_available();
+                if try_cursor_agent_handoff {
+                    info!(
+                        "Agent router: verification not satisfied, handing off to Cursor Agent (general fallback)"
+                    );
+                    let request_clone = request_for_verification.clone();
+                    match tokio::task::spawn_blocking(move || {
+                        crate::commands::cursor_agent::run_cursor_agent(&request_clone)
+                    })
+                    .await
+                    .map_err(|e| format!("Cursor Agent handoff task: {}", e))
+                    .and_then(|r| r)
+                    {
+                        Ok(cursor_result) => {
+                            info!(
+                                "Agent router: cursor-agent handoff completed ({} chars)",
+                                cursor_result.len()
+                            );
+                            response_content.clear();
+                            response_content.push_str(
+                                "The local model couldn't fully complete this, so I handed it off to Cursor Agent. Here's what it did:\n\n",
+                            );
+                            response_content.push_str(cursor_result.trim());
+                        }
+                        Err(e) => {
+                            info!("Agent router: cursor-agent handoff failed: {}", e);
+                            let disclaimer = reason
+                                .map(|r| {
+                                    format!(
+                                        "\n\nNote: We may not have fully met your request: {}.",
+                                        r.trim()
+                                    )
+                                })
+                                .unwrap_or_else(|| {
+                                    "\n\nNote: We may not have fully met your request.".to_string()
+                                });
+                            response_content.push_str(&disclaimer);
+                        }
+                    }
+                } else {
                 let disclaimer = reason
                     .map(|r| {
                         format!(
@@ -6440,6 +6597,7 @@ pub fn answer_with_ollama_and_fetch(
                         "\n\nNote: We may not have fully met your request.".to_string()
                     });
                 response_content.push_str(&disclaimer);
+                }
                 // Do not append "From past sessions" memory dump to the user-visible reply — it creates a messy mix and confuses Discord users.
                 if let Some(ref from_memory) = memory_snippet {
                     info!(
@@ -8020,7 +8178,8 @@ mod tests {
         explicit_no_playable_video_finding, extract_browser_navigation_target,
         extract_last_prefixed_argument, final_reply_from_tool_results,
         grounded_redmine_time_entries_failure_reply, is_browser_navigation_target_token,
-        is_browser_task_request, is_grounded_redmine_time_entries_blocked_reply,
+        is_browser_task_request, is_coding_like_request,
+        is_grounded_redmine_time_entries_blocked_reply,
         is_likely_article_like_result, original_request_for_retry, parse_agent_tool_from_response,
         parse_all_tools_from_response, parse_tool_from_response, redmine_direct_fallback_hint,
         redmine_request_for_routing, redmine_time_entries_range_for_date, sanitize_success_criteria,
@@ -8618,5 +8777,16 @@ mod tests {
             !suffix.contains("Article-grade results were not found"),
             "when search had article-like results, suffix must not contain hub-only warning"
         );
+    }
+
+    #[test]
+    fn is_coding_like_request_detects_implement_refactor_fix() {
+        assert!(is_coding_like_request("Implement a login form"));
+        assert!(is_coding_like_request("Refactor the auth module"));
+        assert!(is_coding_like_request("Fix the bug in parser"));
+        assert!(is_coding_like_request("Add feature: dark mode"));
+        assert!(is_coding_like_request("Use cursor-agent to add tests"));
+        assert!(!is_coding_like_request("What's the weather today?"));
+        assert!(!is_coding_like_request("List Redmine tickets"));
     }
 }

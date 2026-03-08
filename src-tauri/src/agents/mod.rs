@@ -50,6 +50,8 @@ pub struct Agent {
     pub orchestrator: bool,
     pub enabled: bool,
     pub combined_prompt: String,
+    /// Same as combined_prompt but without long-term memory (soul+mood+skill only). Used in Discord guild / having_fun so personal memory is not loaded.
+    pub combined_prompt_without_memory: String,
     /// Max tool iterations per request when this agent is in charge. Default 15.
     pub max_tool_iterations: u32,
 }
@@ -240,6 +242,8 @@ fn load_one_agent(dir: &Path, id: &str) -> Option<Agent> {
 
     let combined_prompt =
         build_combined_prompt(soul.as_deref(), mood.as_deref(), memory.as_deref(), &skill);
+    let combined_prompt_without_memory =
+        build_combined_prompt(soul.as_deref(), mood.as_deref(), None, &skill);
 
     let max_tool_iterations = config.max_tool_iterations.unwrap_or(15);
     Some(Agent {
@@ -251,6 +255,7 @@ fn load_one_agent(dir: &Path, id: &str) -> Option<Agent> {
         orchestrator: config.orchestrator.unwrap_or(false),
         enabled: config.enabled.unwrap_or(true),
         combined_prompt,
+        combined_prompt_without_memory,
         max_tool_iterations,
     })
 }

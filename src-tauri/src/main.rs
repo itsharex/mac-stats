@@ -189,6 +189,7 @@ fn main() {
                         false, // is_verification_retry
                         None,  // original_user_request
                         None,  // success_criteria_override
+                        None,  // discord_is_dm: not Discord, load global memory
                     )
                     .await
                     {

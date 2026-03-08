@@ -56,9 +56,21 @@ So: **session context** = the list of prior messages in the **main** conversatio
   - **Scheduler / other entry points**: If they ever call the same pipeline, pass `None` for history or their own session key and load logic.
 * **Cap**: Define a single place (e.g. last N messages or M tokens). Suggest N = 20 messages or M = 8192 tokens as a default; document so it can be tuned.
 
+### Session Startup (recommended order)
+
+Before doing anything else in a session, the agent should load context in this order:
+
+1. **Soul** — Read `~/.mac-stats/agents/soul.md` (or the agent’s own soul if overridden). Defines who the agent is.
+2. **User info** — Read "who you’re helping": `~/.mac-stats/user-info.json` (or equivalent) when present; Discord user details are injected by the app when available.
+3. **Daily memory** — If the app supports daily memory files (e.g. `~/.mac-stats/memory/YYYY-MM-DD.md`), read **today’s** and **yesterday’s** files so the agent has recent context. (Optional; not all setups use daily files.)
+4. **Global/personal memory (main session only)** — Read `~/.mac-stats/agents/memory.md` **only in main session** (in-app chat or Discord DM). Never load global/personal memory in Discord guild channels or having_fun — it holds personal context that must not leak into shared channels.
+
+On **session reset** (user says "new topic", "reset", etc.), the app clears the conversation and injects a Session Startup instruction plus **current date/time (UTC)** so the agent knows which daily files to read and can greet with correct date awareness.
+
 ### Long-term Memory
 
 * **Definition**: Information that persists across sessions (restarts, different days) and can be injected into the agent's context.
+* **Main-session only**: Global memory (`~/.mac-stats/agents/memory.md`) is **only** loaded in **main session** (in-app or Discord DM). In Discord guild channels and having_fun, the app does **not** inject global memory, so personal context cannot leak. Per-channel memory (`memory-discord-{channel_id}.md`) is still loaded for that channel.
 * **Existing**: Session files in `~/.mac-stats/session/session-memory-<topic>-<sessionid>-<timestamp>.md` are already long-term persistence of a **conversation transcript**, but they are not currently loaded to resume context. So "long-term" today = archive only.
 * **Optional: resume session**: For Discord, optionally on first message in a channel after restart, load the **most recent** session file for that channel (match by session_id in filename) and use it to seed short-term memory (e.g. last K messages from that file). That gives continuity across restarts without a separate "long-term memory" store.
 * **Optional: semantic long-term memory**: A separate store for facts, preferences, or summaries (e.g. "User prefers brief answers"; "Project X is in Python"). Not in current scope; if added later:

@@ -130,6 +130,17 @@ pub fn user_wants_session_reset(message: &str) -> bool {
     iter.any(|phrase| normalized.contains(&phrase.to_lowercase()))
 }
 
+/// Returns the Session Startup instruction plus current date/time (UTC) to inject after a session reset.
+/// Used so the agent knows to run Session Startup and which daily memory files (if any) to read.
+pub fn session_reset_instruction_with_date_utc() -> String {
+    let now = chrono::Utc::now();
+    let date_time = now.format("%Y-%m-%d %H:%M UTC");
+    format!(
+        "A new session was started. Current date/time: {}. Execute your Session Startup: read soul, user-info, and daily memory for today and yesterday; in main session also read MEMORY. Then respond to the user.",
+        date_time
+    )
+}
+
 /// Add a message to the session and persist to disk when we have more than 3 messages.
 /// `source` e.g. "discord", `session_id` e.g. Discord channel id.
 pub fn add_message(source: &str, session_id: u64, role: &str, content: &str) {

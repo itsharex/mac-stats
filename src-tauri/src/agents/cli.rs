@@ -133,6 +133,7 @@ pub async fn run_agent_test(selector: &str, path: Option<&Path>) -> Result<(), i
                 &agent_for_prompt,
                 &prompt_for_run,
                 None,
+                true, // include_global_memory: CLI is main session
             )
             .await
         })

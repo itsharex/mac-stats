@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.38] - 2026-03-08
+
+### Added
+- **Cursor-agent handoff** — When completion verification fails (local model didn’t satisfy the request), the router hands off to the cursor-agent CLI with the original user request and returns that result instead of only appending a disclaimer. Applies to any task type (e.g. news, La Vanguardia / lavanguardia.es, browser/screenshot, coding). See `docs/031_cursor_agent_handoff.md`.
+- **AGENT: cursor-agent proxy** — When cursor-agent is on PATH, it is listed as an available agent; the model can reply `AGENT: cursor-agent <task>` and the router runs the CLI (no Ollama) and injects the result.
+
+### Changed
+- **Session memory in Discord** — Global (personal) memory is loaded only for main session (in-app chat or Discord DM). In Discord guild channels and having_fun, only per-channel memory is loaded to avoid leaking personal context into server channels. Agents use `combined_prompt_without_memory` when `include_global_memory` is false.
+
 ## [0.1.37] - 2026-02-28
 
 ### Changed
