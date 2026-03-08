@@ -59,10 +59,9 @@ Ollama can invoke the following tool agents:
 ## Ollama Connection / Session Handling
 
 * **Current Behaviour**: A single `OllamaClient` is stored when the user configures Ollama.
-* **Intended Improvement**: Use the stored `OllamaClient`'s `client` inside `send_ollama_chat_messages` and other Ollama call paths.
+* **Done**: `send_ollama_chat_messages` now uses the stored `OllamaClient`'s HTTP client (via `OllamaClient::http_client()`) instead of creating a new `reqwest::Client` per request. The stored client is built with the app's chat timeout (`Config::ollama_chat_timeout_secs()`) via `OllamaConfig::timeout_secs`.
 
 ## Open tasks:
 
-* Investigate improving Ollama connection / session handling.
 * Implement Mail, WhatsApp, and Google Docs integrations.
 * Review and refine the AI tasks roadmap.

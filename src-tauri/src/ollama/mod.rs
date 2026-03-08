@@ -23,6 +23,9 @@ pub struct OllamaConfig {
     pub temperature: Option<f32>,
     #[serde(default)]
     pub num_ctx: Option<u32>,
+    /// HTTP client timeout in seconds for /api/chat. None = use default (120).
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
 
 impl Default for OllamaConfig {
@@ -33,6 +36,7 @@ impl Default for OllamaConfig {
             api_key: None,
             temperature: None,
             num_ctx: None,
+            timeout_secs: None,
         }
     }
 }
@@ -349,11 +353,18 @@ impl OllamaClient {
             config.endpoint
         );
 
+        let timeout_secs = config.timeout_secs.unwrap_or(120);
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(120)) // Long timeout for LLM
+            .timeout(std::time::Duration::from_secs(timeout_secs))
             .build()?;
 
         Ok(Self { config, client })
+    }
+
+    /// Returns a clone of the HTTP client for use after releasing the global lock (e.g. in async paths).
+    /// Cloning reqwest::Client is cheap (shared connection pool).
+    pub fn http_client(&self) -> reqwest::Client {
+        self.client.clone()
     }
 
     /// Check if Ollama is available

@@ -208,6 +208,7 @@ pub fn configure_ollama(config: OllamaConfigRequest) -> Result<(), String> {
         api_key: config.api_key_keychain_account.clone(),
         temperature: config.temperature,
         num_ctx: config.num_ctx,
+        timeout_secs: Some(crate::config::Config::ollama_chat_timeout_secs()),
     };
 
     ollama_config.validate().map_err(|e| {
@@ -646,7 +647,7 @@ pub async fn send_ollama_chat_messages(
 
     let messages = deduplicate_consecutive_messages(messages);
 
-    let (endpoint, model, api_key, config_temp, config_num_ctx) = {
+    let (endpoint, model, api_key, config_temp, config_num_ctx, http_client) = {
         let client_guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
         let client = client_guard
             .as_ref()
@@ -657,17 +658,12 @@ pub async fn send_ollama_chat_messages(
             client.config.api_key.clone(),
             client.config.temperature,
             client.config.num_ctx,
+            client.http_client(),
         )
     };
 
     let effective_model = model_override.unwrap_or(model);
     let options = merge_chat_options(config_temp, config_num_ctx, options_override);
-
-    let timeout_secs = crate::config::Config::ollama_chat_timeout_secs();
-    let temp_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
     let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
     let chat_request = crate::ollama::ChatRequest {
@@ -706,7 +702,7 @@ pub async fn send_ollama_chat_messages(
         if attempt > 0 {
             tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
         }
-        let mut http_request = temp_client.post(&url).json(&chat_request);
+        let mut http_request = http_client.post(&url).json(&chat_request);
         if let Some(key) = &api_key_value {
             let _masked = crate::security::mask_credential(key);
             http_request = http_request.header("Authorization", format!("Bearer {}", key));
