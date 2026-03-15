@@ -74,6 +74,31 @@ Whenever Ollama is asked to decide which agent to use (planning step in Discord 
    - If Chrome is not installed at the path above, install it or create a symlink; mac-stats does not install Chrome.
    - After a timeout or crash, mac-stats clears the cached session; the next BROWSER_* use will reconnect or relaunch.
 
+### Connection process (step-by-step)
+
+When you invoke a BROWSER_* tool (e.g. BROWSER_NAVIGATE, BROWSER_SCREENSHOT), the app does the following:
+
+1. **Session lookup**  
+   mac-stats keeps a single cached CDP (Chrome DevTools Protocol) session. If a session already exists and was used recently (within the idle timeout, default 1 hour), that connection is reused and the tool runs immediately.
+
+2. **No session or session expired**  
+   The app needs a live Chrome to talk to:
+   - **Port check:** It requests `http://127.0.0.1:9222/json/version` to see if Chrome is already running with remote debugging. If that succeeds, it reads the WebSocket URL from the response and connects to that Chrome (your manually started one or an existing mac-stats-launched one).
+   - **Connect:** It opens a CDP connection over WebSocket. That connection is then cached as the "session" for subsequent BROWSER_* calls.
+
+3. **Nothing on port 9222**  
+   If nothing is listening on 9222:
+   - **Visible Chrome (default):** mac-stats starts Chrome with `--remote-debugging-port=9222`, waits about 3 seconds for it to be ready, then connects. No manual step needed if Chrome is installed in the default location.
+   - **Headless:** If the run is configured for headless mode, mac-stats uses the headless_chrome crate to launch a separate Chrome process (no port 9222). That session is still cached the same way.
+
+4. **Session cleared on error**  
+   If a CDP call fails with a connection error (e.g. Chrome closed, network error), mac-stats clears the cached session. The next BROWSER_* use goes back to step 1 and will either reconnect to 9222 or relaunch Chrome (or headless) as needed.
+
+5. **Idle timeout**  
+   If no BROWSER_* tool is used for longer than the configured idle timeout (default 1 hour), the session is dropped. The next use follows steps 2–3 again.
+
+So: **first use** or **after an error/timeout** → check 9222 → connect or launch → cache session. **Later uses** → reuse cached session until idle too long or an error occurs.
+
 ### Cookie consent and screenshots
 When the user asks to remove or dismiss a cookie consent banner and take a screenshot, the planning prompt instructs the model to include **BROWSER_CLICK** on the consent button (using the Elements list from BROWSER_NAVIGATE) **before** BROWSER_SCREENSHOT. Pre-routing to NAVIGATE + SCREENSHOT is skipped when the question mentions cookie/consent/banner so the planner can add the click step.
 
@@ -97,4 +122,4 @@ When the user asks to remove or dismiss a cookie consent banner and take a scree
 
 ## Open tasks:
 - Investigate why some users are unable to launch Chrome on port 9222.
-- Improve the documentation for BROWSER_* tools to better explain the connection process.
+- ~~Improve the documentation for BROWSER_* tools to better explain the connection process.~~ **Done:** added § "Connection process (step-by-step)" above (session lookup, port check, connect/launch, session clear on error, idle timeout).
