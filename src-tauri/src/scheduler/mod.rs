@@ -212,10 +212,11 @@ fn next_run(entry: &ScheduleEntry, after: DateTime<Local>) -> Option<DateTime<Lo
     }
 }
 
-/// Execute a single task: direct tool (FETCH_URL/BRAVE_SEARCH) or Ollama.
-/// Returns Some((reply_text, already_sent_to_discord)) when the task produced a reply; None otherwise.
-/// When already_sent_to_discord is true (e.g. task runner sent the finished summary), the caller should not send again.
-async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
+/// Result of running a scheduled task.
+/// - Ok(Some((reply_text, already_sent_to_discord))): success with optional reply to send.
+/// - Ok(None): task ran but produced no reply (e.g. FETCH_URL/BRAVE_SEARCH that don't post to Discord).
+/// - Err(msg): task failed; msg is a short user-facing error for Discord when reply_to_channel_id is set.
+async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, String> {
     let id_info = entry.id.as_deref().unwrap_or("(no id)");
     let task = entry.task.trim();
 
@@ -225,7 +226,7 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
             Some(u) => u,
             None => {
                 warn!("Scheduler: FETCH_URL with no valid URL (id={})", id_info);
-                return None;
+                return Ok(None);
             }
         };
         info!("Scheduler: running FETCH_URL for {} (id={})", url, id_info);
@@ -239,18 +240,20 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
                     "Scheduler: FETCH_URL succeeded ({} chars)",
                     body.chars().count()
                 );
+                return Ok(None);
             }
             Ok(Err(e)) => {
                 error!("Scheduler: FETCH_URL failed (id={}): {}", id_info, e);
+                return Err(e.to_string());
             }
             Err(e) => {
                 error!(
                     "Scheduler: FETCH_URL task join error (id={}): {}",
                     id_info, e
                 );
+                return Err(format!("fetch task error: {}", e));
             }
         }
-        return None;
     }
 
     if task.to_uppercase().starts_with("BRAVE_SEARCH:") {
@@ -259,34 +262,34 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
         let query = query[..semi].trim();
         if query.is_empty() {
             warn!("Scheduler: BRAVE_SEARCH with empty query (id={})", id_info);
-            return None;
+            return Ok(None);
         }
         info!(
             "Scheduler: running BRAVE_SEARCH for {} (id={})",
             query, id_info
         );
         match crate::commands::brave::get_brave_api_key() {
-            Some(api_key) => {
-                match crate::commands::brave::brave_web_search(query, &api_key).await {
-                    Ok(results) => {
-                        info!(
-                            "Scheduler: BRAVE_SEARCH succeeded ({} chars)",
-                            results.chars().count()
-                        );
-                    }
-                    Err(e) => {
-                        error!("Scheduler: BRAVE_SEARCH failed (id={}): {}", id_info, e);
-                    }
+            Some(api_key) => match crate::commands::brave::brave_web_search(query, &api_key).await {
+                Ok(results) => {
+                    info!(
+                        "Scheduler: BRAVE_SEARCH succeeded ({} chars)",
+                        results.chars().count()
+                    );
+                    return Ok(None);
                 }
-            }
+                Err(e) => {
+                    error!("Scheduler: BRAVE_SEARCH failed (id={}): {}", id_info, e);
+                    return Err(e.to_string());
+                }
+            },
             None => {
                 warn!(
                     "Scheduler: BRAVE_SEARCH skipped (no API key) (id={})",
                     id_info
                 );
+                return Ok(None);
             }
         }
-        return None;
     }
 
     if task.to_uppercase().starts_with("TASK:") || task.to_uppercase().starts_with("TASK_RUN:") {
@@ -298,13 +301,13 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
         let path_or_id = task[prefix_len..].trim();
         if path_or_id.is_empty() {
             warn!("Scheduler: TASK: with empty path/id (id={})", id_info);
-            return None;
+            return Ok(None);
         }
         info!(
             "Scheduler: running task until finished (id={}, path_or_id={})",
             id_info, path_or_id
         );
-        return match crate::task::resolve_task_path(path_or_id) {
+        match crate::task::resolve_task_path(path_or_id) {
             Ok(path) => {
                 let task_name = path
                     .file_name()
@@ -353,11 +356,11 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
                             reply.chars().count(),
                             sent_to_discord
                         );
-                        Some((reply, sent_to_discord))
+                        return Ok(Some((reply, sent_to_discord)));
                     }
                     Err(e) => {
                         error!("Scheduler: task run failed (id={}): {}", id_info, e);
-                        None
+                        return Err(e.to_string());
                     }
                 }
             }
@@ -366,9 +369,9 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
                     "Scheduler: task path resolve failed (id={}): {}",
                     id_info, e
                 );
-                None
+                return Err(e.to_string());
             }
-        };
+        }
     }
 
     info!(
@@ -388,11 +391,11 @@ async fn execute_task(entry: &ScheduleEntry) -> Option<(String, bool)> {
                 id_info,
                 reply.text.chars().count()
             );
-            Some((reply.text, false))
+            Ok(Some((reply.text, false)))
         }
         Err(e) => {
             error!("Scheduler: Ollama failed (id={}): {}", id_info, e);
-            None
+            Err(e.to_string())
         }
     }
 }
@@ -464,31 +467,58 @@ async fn scheduler_loop() {
         if now_after_sleep >= next_time {
             let entry = &entries[idx];
             let result = execute_task(entry).await;
-            if let (Some(ref channel_id_str), Some((ref text, already_sent))) =
-                (&entry.reply_to_channel_id, &result)
-            {
-                if !*already_sent {
-                    if let Ok(channel_id) = channel_id_str.parse::<u64>() {
-                        let message = if let Some(ref sid) = entry.id {
-                            format!("[Schedule: {}]\n\n{}", sid, text)
-                        } else {
-                            text.clone()
-                        };
-                        if let Err(e) =
-                            crate::discord::send_message_to_channel(channel_id, &message).await
-                        {
-                            error!(
-                                "Scheduler: failed to send result to Discord channel {}: {}",
-                                channel_id_str, e
-                            );
-                        } else {
-                            info!(
-                                "Scheduler: sent result to Discord channel {}",
-                                channel_id_str
-                            );
+            match result {
+                Ok(Some((ref text, already_sent))) => {
+                    if let Some(ref channel_id_str) = entry.reply_to_channel_id {
+                        if !already_sent {
+                            if let Ok(channel_id) = channel_id_str.parse::<u64>() {
+                                let message = if let Some(ref sid) = entry.id {
+                                    format!("[Schedule: {}]\n\n{}", sid, text)
+                                } else {
+                                    text.clone()
+                                };
+                                if let Err(e) =
+                                    crate::discord::send_message_to_channel(channel_id, &message).await
+                                {
+                                    error!(
+                                        "Scheduler: failed to send result to Discord channel {}: {}",
+                                        channel_id_str, e
+                                    );
+                                } else {
+                                    info!(
+                                        "Scheduler: sent result to Discord channel {}",
+                                        channel_id_str
+                                    );
+                                }
+                            }
                         }
                     }
                 }
+                Err(ref msg) => {
+                    if let Some(ref channel_id_str) = entry.reply_to_channel_id {
+                        if let Ok(channel_id) = channel_id_str.parse::<u64>() {
+                            let failure_msg = entry
+                                .id
+                                .as_deref()
+                                .map(|sid| format!("[Schedule: {}] Failed: {}", sid, msg))
+                                .unwrap_or_else(|| format!("Schedule failed: {}", msg));
+                            if let Err(e) =
+                                crate::discord::send_message_to_channel(channel_id, &failure_msg).await
+                            {
+                                error!(
+                                    "Scheduler: failed to send failure message to Discord channel {}: {}",
+                                    channel_id_str, e
+                                );
+                            } else {
+                                info!(
+                                    "Scheduler: sent failure message to Discord channel {}",
+                                    channel_id_str
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {}
             }
             // One-shot: if it was "at", we don't remove from file; next load will skip it (at is in past).
             // So we just continue and reload.

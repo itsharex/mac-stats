@@ -286,6 +286,13 @@ See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for deta
 
 ---
 
+## Testing (2026-03-16) — closing reviewer re-run
+
+- **Integration:** `cargo check` and `cargo clippy` pass (warnings only; no errors). `src/ollama.js` and `src-tauri/dist/ollama.js` in sync. `toggle_cpu_window`, `set_chat_verbosity` in `tauri::generate_handler![]`; `run_due_monitor_checks()` called from `lib.rs` (background thread, 30s).
+- **Smoke:** `cargo build --release` succeeded. `./target/release/mac_stats --cpu -vv` started; process observed via `pgrep`; `~/.mac-stats/debug.log` shows Ollama init (endpoint, configuration successful). Manual checks (menu bar click, `--cpu`/`-vv` in chat) left to human.
+
+---
+
 ## Open tasks:
 
 - Review `docs/023_externalized_prompts_DONE.md` and merge any missing details back into this plan if needed.
