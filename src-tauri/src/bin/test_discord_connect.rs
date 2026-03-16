@@ -3,6 +3,7 @@
 //!   cd src-tauri && cargo run --bin test_discord_connect
 //! Or with token from file: cargo run --bin test_discord_connect -- [path/to/.config.env]
 //! Optional second arg or env TEST_DISCORD_CONNECT_SECS (1–300) sets run duration in seconds (default 15).
+//! Use --quick or -q for a 2-second run (enough to see "Bot connected" then exit).
 //!
 //! Logs "Discord: Connecting...", "Gateway client built...", "Discord: Bot connected as X"
 //! on success; runs for the configured duration then exits.
@@ -16,15 +17,25 @@ fn env_duration_secs() -> u64 {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let (path, duration_secs) = if let Some(a1) = args.get(1) {
-        if let Ok(n) = a1.parse::<u64>() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let quick = args.iter().any(|a| a == "--quick" || a == "-q");
+    let rest: Vec<&str> = args
+        .iter()
+        .filter(|a| *a != "--quick" && *a != "-q")
+        .map(String::as_str)
+        .collect();
+
+    let (path, duration_secs) = if quick {
+        let path = rest.first().copied().unwrap_or(".config.env");
+        (path, 2u64)
+    } else if let Some(a1) = rest.first() {
+        if let Ok(n) = (*a1).parse::<u64>() {
             (".config.env", n.clamp(1, 300))
-        } else if let Some(a2) = args.get(2) {
+        } else if let Some(a2) = rest.get(1) {
             let n = a2.parse().ok().map(|n: u64| n.clamp(1, 300)).unwrap_or(15);
-            (a1.as_str(), n)
+            (*a1, n)
         } else {
-            (a1.as_str(), env_duration_secs())
+            (*a1, env_duration_secs())
         }
     } else {
         (".config.env", env_duration_secs())

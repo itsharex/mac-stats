@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **test_discord_connect --quick / -q** — `--quick` or `-q` runs for 2 seconds (enough to see "Bot connected" then exit). Docs: §12 in `docs/007_discord_agent.md`; FEATURE-CODER backlog and 007 open task marked done. OpenClaw re-verification §22 (005); 022 testing note 2026-03-16 (closing reviewer).
 - **Process list DOM (CPU window)** — In `dist/cpu.js`: use `replaceChildren()` instead of `innerHTML = ""`; single click listener on list (event delegation) instead of per-row listeners; skip DOM update when process list data unchanged (`lastProcessListKey`). Docs 002 task and FEATURE-CODER backlog marked done; OpenClaw §21 (005); 022 testing note 2026-03-16.
 - **Theme switch animation** — 200ms fade-out on body before theme navigation in `cpu-ui.js` (ensureThemeSwitchStyle + transitionend/250ms fallback); no extra ongoing CPU. Open task in docs/002 and FEATURE-CODER backlog marked done; OpenClaw re-verification §20 (005); 022 closing testing note (2026-03-16).
 - **Docs 005, 006, 002, 022** — OpenClaw re-verification §19 (005); FEATURE-CODER backlog row for 002 fetch_page_content verification done (006); 002 § on fetch_page_content/main-thread blocking verified (frontend uses fetch_page + spawn_blocking); 022 testing note 2026-03-16 (integration/smoke closing).

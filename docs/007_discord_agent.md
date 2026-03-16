@@ -191,6 +191,7 @@ cargo run --bin test_discord_connect -- path/to/.config.env
 
 To customize how long the binary stays connected before exiting (default 15s, range 1–300):
 
+- **Quick check:** `--quick` or `-q` — runs for 2 seconds (enough to see "Bot connected" then exit). Example: `cargo run --bin test_discord_connect -- --quick` or `cargo run --bin test_discord_connect -- .config.env --quick`.
 - **Environment:** `TEST_DISCORD_CONNECT_SECS=30` (e.g. `TEST_DISCORD_CONNECT_SECS=30 cargo run --bin test_discord_connect`).
 - **CLI:** Optional second argument (seconds), or a single numeric argument to use default path and that duration:
   - `cargo run --bin test_discord_connect -- .config.env 30` — env file `.config.env`, run 30 seconds.
@@ -275,5 +276,5 @@ Example: `./target/release/mac_stats agent test redmine` runs the Redmine agent�
 - Investigate the possibility of using a more secure method for storing the Discord bot token.
 - ~~Consider adding a feature to allow users to view the logs for the Discord bot.~~ **Done:** Settings → Discord bot section has a **View logs** button that opens `~/.mac-stats/debug.log` in the default app (macOS). Commands: `get_debug_log_path`, `open_debug_log`.
 - ~~Improve the documentation for the `test_discord_connect` binary.~~ **Done:** §12 expanded with token resolution, env file format (DISCORD-USER1/USER2-TOKEN), behavior, and failure message.
-- Investigate the possibility of using a more efficient method for testing the Discord connection.
+- ~~Investigate the possibility of using a more efficient method for testing the Discord connection.~~ **Done:** `--quick` / `-q` flag runs for 2 seconds (enough to confirm "Bot connected"); see §12.
 - ~~Consider adding a feature to allow users to customize the behavior of the `test_discord_connect` binary.~~ **Done:** run duration is configurable via env `TEST_DISCORD_CONNECT_SECS` (1–300) or CLI (second arg, or single numeric arg for default path + duration). See §12.
