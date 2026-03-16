@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Docs 004, 005, 006, 022** — Known Issues §2 Alert System: channel registration items marked done (004); FEATURE-CODER backlog row for sync (006). OpenClaw §27 re-verification (005); 022 closing testing note (2026-03-16).
+
 ### Added
 - **Alert channel commands** — Tauri commands to register/unregister alert channels: `register_telegram_channel(id, chat_id)`, `register_slack_channel(id)`, `register_mastodon_channel(id, instance_url)`, `remove_alert_channel(channel_id)`. Credentials via Keychain (telegram_bot_{id}, slack_webhook_{id}, mastodon_alert_{id}). See `commands/alerts.rs`; docs/004_notes.md and FEATURE-CODER backlog updated.
 

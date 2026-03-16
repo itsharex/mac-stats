@@ -93,8 +93,8 @@ Whenever Ollama is asked to decide which agent to use, the app sends the complet
 	* ~~Timeout handling not fully implemented (std::process::Command doesn't have timeout)~~ **Done:** plugin script runs in a thread, main thread uses `recv_timeout(timeout_secs)`; on timeout the process is killed (Unix: `libc::kill(SIGKILL)`). See `plugins/mod.rs`.
 	* ~~Plugin script execution could be improved with better error messages~~ **Done:** plugin_id and script path in all error paths; spawn/wait/timeout/disconnect messages include context; JSON parse failures include stdout snippet (first 400 chars); non-zero exit includes exit code and trimmed stderr (max 1000 chars). See `plugins/mod.rs`.
 2. **Alert System**
-	* Alert channel registration not exposed via Tauri commands
-	* Need to add commands for registering Telegram/Slack/Mastodon channels
+	* ~~Alert channel registration not exposed via Tauri commands~~ **Done:** see Open tasks (register_telegram_channel, register_slack_channel, register_mastodon_channel, remove_alert_channel in `commands/alerts.rs`).
+	* ~~Need to add commands for registering Telegram/Slack/Mastodon channels~~ **Done:** see Open tasks.
 	* Alert evaluation needs to be called periodically (background task)
 3. **Ollama Integration**
 	* Stream support not implemented (currently only non-streaming chat)
