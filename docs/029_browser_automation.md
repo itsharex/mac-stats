@@ -120,6 +120,34 @@ When the user asks to remove or dismiss a cookie consent banner and take a scree
 | Chrome not installed | Cannot launch; you must install Chrome and/or start it manually on 9222. |
 | Connection dies (timeout, crash) | Session is cleared on error; next use will reconnect to 9222 or relaunch. |
 
+### Troubleshooting: Chrome won't start or connect on 9222
+
+If BROWSER_* tools fail with "Chrome isn't running on port 9222" or launch errors, work through the following.
+
+1. **Chrome not at default path**
+   - **macOS:** mac-stats expects Chrome at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. If you installed Chrome elsewhere (e.g. Chromium, a different name), either move/symlink it to that path or start Chrome yourself with `--remote-debugging-port=9222` and leave it running; mac-stats will connect to it.
+   - **Linux:** Chrome must be on PATH as `google-chrome`. Install the official package or ensure the binary is named/linked so that `google-chrome` runs.
+
+2. **Port 9222 already in use**
+   - Another Chrome (or another app) may be using 9222. mac-stats will *connect* to an existing Chrome on 9222; if that Chrome is stuck or not responding, close it and retry.
+   - To see what is using the port:
+     - **macOS/Linux:** `lsof -i :9222` or `netstat -an | grep 9222`. If it's an old Chrome, kill that process (e.g. `kill <PID>`) and retry.
+   - If you want to use a different port, that is not currently configurable; use 9222 or start Chrome manually on 9222 before using BROWSER_*.
+
+3. **Spawn fails (e.g. "Launch Chrome: ... is Chrome installed at ...?")**
+   - **Permissions:** On macOS, ensure the app is allowed to run external apps (e.g. not overly restricted in Privacy & Security). If you built from source, run the binary from Terminal once to rule out Gatekeeper blocking.
+   - **Quarantine:** If Chrome was downloaded and is quarantined, the system might block the child process. Try: `xattr -d com.apple.quarantine "/Applications/Google Chrome.app"` (or the path you use).
+   - **Architecture:** Use a Chrome build that matches your Mac (Apple Silicon vs Intel). mac-stats does not switch Chrome variants.
+
+4. **Launch succeeds but connection still fails**
+   - mac-stats waits ~3 seconds after launch before connecting. On a slow machine or under load, Chrome may need longer. Start Chrome manually with `--remote-debugging-port=9222`, wait until it's fully up, then trigger the BROWSER_* tool again.
+   - **Firewall:** Ensure nothing blocks localhost (127.0.0.1) port 9222. macOS firewall "Block all incoming" can still allow outgoing/local connections; if you use a strict tool, allow the app or Chrome.
+
+5. **Fallback: headless Chrome**
+   - If visible Chrome on 9222 is not an option, the app can use the headless_chrome crate (no port 9222). When the model or user says "headless", BROWSER_* uses that path. You can also retry after a failed launch; in some cases the code falls back to headless automatically.
+
+If the problem persists, check `~/.mac-stats/debug.log` for lines like `Browser agent [CDP]: ...` or `Launch Chrome: ...` to see the exact error.
+
 ## Open tasks:
-- Investigate why some users are unable to launch Chrome on port 9222.
+- ~~Investigate why some users are unable to launch Chrome on port 9222.~~ **Done:** added § "Troubleshooting: Chrome won't start or connect on 9222" above (default path, port in use, spawn failures, connection timing, firewall, headless fallback, debug log).
 - ~~Improve the documentation for BROWSER_* tools to better explain the connection process.~~ **Done:** added § "Connection process (step-by-step)" above (session lookup, port check, connect/launch, session clear on error, idle timeout).
