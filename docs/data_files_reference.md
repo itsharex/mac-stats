@@ -49,7 +49,7 @@ Short reference for the JSON files under `~/.mac-stats/` used by the scheduler a
 ### Limits and behavior
 
 - **maxSchedules:** Optional cap in `~/.mac-stats/config.json` (e.g. `"maxSchedules": 20`). When the number of entries reaches this limit, new SCHEDULE requests are rejected. Omit or `0` = no limit (clamped 1–1000).
-- **Deduplication:** Adding a schedule with the same `cron` and same task (after normalizing whitespace) as an existing entry is treated as duplicate and not added again.
+- **Deduplication:** Adding a schedule with the same `cron` (or same `at` for one-shot) and same task (after normalizing whitespace) as an existing entry is treated as duplicate and not added again.
 - **Empty task:** Entries with empty `task` are skipped at load time.
 
 ---

@@ -635,6 +635,18 @@ pub fn add_schedule_at(
         }
     }
 
+    let task_norm = task_normalized_for_dedup(&task);
+    let is_duplicate = file_data.schedules.iter().any(|e| {
+        e.at.as_deref() == Some(at_str.as_str())
+            && task_normalized_for_dedup(&e.task) == task_norm
+    });
+    if is_duplicate {
+        info!(
+            "Scheduler: skipping duplicate one-shot (same at and task already scheduled)"
+        );
+        return Ok(ScheduleAddOutcome::AlreadyExists);
+    }
+
     file_data.schedules.push(ScheduleEntryRaw {
         id: Some(id.clone()),
         cron: None,
