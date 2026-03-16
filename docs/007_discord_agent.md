@@ -269,7 +269,7 @@ Example: `./target/release/mac_stats agent test redmine` runs the Redmine agentâ
 ## Open tasks:
 
 - ~~Improve the documentation for `~/.mac-stats/schedules.json` and `~/.mac-stats/user-info.json`.~~ **Done:** see **docs/data_files_reference.md**.
-- Look into using a more robust caching mechanism for `~/.mac-stats/user-info.json`.
+- ~~Look into using a more robust caching mechanism for `~/.mac-stats/user-info.json`.~~ **Done:** in-memory cache with file mtime invalidation in `user_info/mod.rs`; reads use cache when file unchanged, writes refresh cache so next read sees new data; external edits to the file are detected and trigger reload.
 - Investigate the possibility of using a more efficient data structure for `~/.mac-stats/schedules.json`.
 - ~~Improve the error handling for cases where the Discord API is unavailable.~~ **Done:** connection/timeout errors return a short user-facing message ("Discord API is temporarily unavailable (connection or timeout). Try again in a moment."); one retry after 2s on connection/timeout or 5xx in `discord_api_request`; `send_message_to_channel` and multipart send use the same message for request failures. See `discord/api.rs` and `discord/mod.rs`.
 - Investigate the possibility of using a more secure method for storing the Discord bot token.

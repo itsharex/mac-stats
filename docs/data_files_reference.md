@@ -74,8 +74,8 @@ Short reference for the JSON files under `~/.mac-stats/` used by the scheduler a
 
 ### When the file is read and written
 
-- **Read:** When handling a Discord (or other) message; if the author’s id is in the file, the bot merges "User details: …" into the agent context.
-- **Written:** When a user messages the bot, the app updates (or adds) their `display_name` from Discord so the file stays in sync. New users get a minimal entry with `id` and `display_name`.
+- **Read:** When handling a Discord (or other) message; if the author’s id is in the file, the bot merges "User details: …" into the agent context. Reads use an in-memory cache; the cache is invalidated when the file's modification time changes (e.g. external edit) or after a write.
+- **Written:** When a user messages the bot, the app updates (or adds) their `display_name` from Discord so the file stays in sync. New users get a minimal entry with `id` and `display_name`. After a write, the cache is refreshed so the next read sees the new data without re-reading from disk.
 
 ### Example
 
