@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Docs 006, 007, 022, data_files_reference** — FEATURE-CODER backlog: schedules.json data-structure investigation done (006); 007 open task marked done, linked to data_files_reference § "Data structure and performance" (array kept, O(n) acceptable); 022 closing testing note (2026-03-16 reviewer run); data_files_reference: new § "Data structure and performance" for schedules.json.
 - **Docs 005, 006, 022, 029** — OpenClaw re-verification §25 (005); FEATURE-CODER backlog row for 029 Chrome 9222 troubleshooting done (006); 022 closing testing note (2026-03-16); 029 new § "Troubleshooting: Chrome won't start or connect on 9222" (default path, port in use, spawn failures, connection timing, firewall, headless fallback, debug log); open task marked done.
 - **Plugin execution diagnostics** — Plugin errors and warnings now include plugin id and script path; script-not-found, spawn failure, timeout, wait failure, and JSON parse errors are clearer; failed runs log exit code and trimmed stderr; parse errors include stdout snippet. See `plugins/mod.rs`. Docs 004, 022, 005 (§), 006 backlog updated.
 - **Plugin script timeout** — Plugin execution now respects `timeout_secs`: script runs in a thread, main thread waits with `recv_timeout`; on timeout the process is killed (Unix) and a clear error is returned. See `plugins/mod.rs`; docs/004_notes.md and FEATURE-CODER backlog updated.

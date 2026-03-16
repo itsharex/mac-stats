@@ -52,6 +52,10 @@ Short reference for the JSON files under `~/.mac-stats/` used by the scheduler a
 - **Deduplication:** Adding a schedule with the same `cron` (or same `at` for one-shot) and same task (after normalizing whitespace) as an existing entry is treated as duplicate and not added again.
 - **Empty task:** Entries with empty `task` are skipped at load time.
 
+### Data structure and performance
+
+Schedules are stored as a **JSON array** for simplicity, human readability, and backward compatibility. Operations that look up by `id` (e.g. REMOVE_SCHEDULE) or check for duplicates (add_schedule / add_schedule_at) do a single pass over the array (O(n)). Typical usage keeps N small (tens of schedules, capped by maxSchedules). For that scale, O(n) is acceptable and no in-memory index or file-format change is required. If we ever need O(1) lookup by id at larger scale, options would be: (a) build a HashMap by id after parsing and use it only in memory, or (b) migrate the file format to an object keyed by id, with a one-time migration for existing array files. No change is implemented at this time.
+
 ---
 
 ## user-info.json
