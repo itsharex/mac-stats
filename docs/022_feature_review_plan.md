@@ -246,6 +246,16 @@ After the initial feature review and merge to main, the following changes were m
 
 See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for details.
 
+**Externalized prompts (F11) — summary from 023**
+
+- **Files:** `~/.mac-stats/agents/soul.md` (personality, prepended to all system prompts), `~/.mac-stats/prompts/planning_prompt.md` (planning step), `~/.mac-stats/prompts/execution_prompt.md` (execution step; contains `{{AGENTS}}` placeholder).
+- **Placeholder:** `{{AGENTS}}` in the execution prompt is replaced at runtime with the dynamic tool list (RUN_JS, FETCH_URL, BRAVE_SEARCH, SCHEDULE, etc.); do not remove it or Ollama won’t see available tools.
+- **Defaults:** Embedded via `include_str!` from `src-tauri/defaults/` (e.g. `defaults/agents/soul.md`, `defaults/prompts/planning_prompt.md`, `defaults/prompts/execution_prompt.md`). `Config::ensure_defaults()` writes missing files on first launch; existing user files are never overwritten.
+- **Assembly order:** (1) Soul, (2) Discord user context (when from Discord), (3) Prompt (planning or execution with `{{AGENTS}}` expanded), (4) Plan (execution step only). Code: `commands/ollama.rs` → `answer_with_ollama_and_fetch()`.
+- **Tauri commands:** `list_prompt_files` (returns soul, planning_prompt, execution_prompt name/path/content), `save_prompt_file(name, content)` (name = `soul` | `planning_prompt` | `execution_prompt`).
+- **Editing:** Changes take effect on the next request (prompts loaded fresh each time). Per-agent soul in `agent-<id>/soul.md` overrides shared soul for that agent. Planning prompt should instruct the model to reply with `RECOMMEND: <plan>`.
+- Full reference: **docs/023_externalized_prompts_DONE.md**.
+
 ---
 
 ## 9. Closing review (2026-03-08)
@@ -320,4 +330,4 @@ See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for deta
 
 ## Open tasks:
 
-- Review `docs/023_externalized_prompts_DONE.md` and merge any missing details back into this plan if needed.
+- ~~Review `docs/023_externalized_prompts_DONE.md` and merge any missing details back into this plan if needed.~~ **Done:** §8 now includes a short "Externalized prompts (F11) — summary from 023" (files, placeholder, defaults, assembly order, Tauri commands, editing notes); 023 remains the full reference.

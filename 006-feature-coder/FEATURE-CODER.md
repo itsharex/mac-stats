@@ -45,5 +45,6 @@ This folder and doc define how to pick and implement **FEAT** (feature) tasks in
 | docs/007_discord_agent.md | ~~Customize test_discord_connect behavior (duration)~~ | **Done:** env `TEST_DISCORD_CONNECT_SECS` (1–300), CLI second arg or single numeric arg; §12 updated. |
 | docs/007_discord_agent.md | ~~More robust caching for user-info.json~~ | **Done:** in-memory cache + mtime invalidation in `user_info/mod.rs`; external edits trigger reload. |
 | docs/033_docs_vs_code_review.md | ~~Verify prefer_headless behavior in edge cases~~ | **Done:** § "prefer_headless — Edge cases and verification" (scenarios table, session reuse, retries, ensure_chrome_on_port, verification checklist). |
+| docs/022_feature_review_plan.md | ~~Review 023 and merge missing details into this plan~~ | **Done:** §8 "Externalized prompts (F11) — summary from 023" added (files, {{AGENTS}}, defaults, assembly order, Tauri commands, editing notes); 023 remains full reference. |
 
 Start with the first FEAT you can complete end-to-end (code or doc), then move to the next.
