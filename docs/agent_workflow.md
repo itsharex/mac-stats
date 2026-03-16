@@ -82,4 +82,4 @@ For the Coder to edit files in this repo directly:
 ## Open tasks:
 - ~~Improve the documentation for tool agents and their invocations.~~ **Done:** added "How invocations work", full tool table with invocation syntax, and See also links (007, README, 100_all_agents).
 - Consider implementing a more robust patching system for the Coder agent.
-- Review the Brave Search API usage and ensure it complies with the Brave API key requirements.
+- ~~Review the Brave Search API usage and ensure it complies with the Brave API key requirements.~~ **Done:** compliance documented in docs/008_brave_agent.md (§ API compliance); empty-query guard and error handling documented and implemented in commands/brave.rs.

@@ -96,7 +96,12 @@ pub fn get_brave_api_key() -> Option<String> {
 }
 
 /// Run a web search via Brave Search API. Returns a formatted string of results for Ollama.
+/// Rejects empty or whitespace-only queries to avoid unnecessary API calls.
 pub async fn brave_web_search(query: &str, api_key: &str) -> Result<String, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Err("Brave search: query is empty.".to_string());
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()

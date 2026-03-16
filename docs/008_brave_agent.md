@@ -93,6 +93,14 @@ The Brave Search API uses a subscription token in the request header:
 *   **Header**: `X-Subscription-Token: YOUR_API_KEY`
 *   **Endpoint**: `GET https://api.search.brave.com/res/v1/web/search?q=<query>`
 
+### API compliance
+
+The implementation in `commands/brave.rs` follows Brave’s official requirements:
+
+*   **Authentication**: Uses `X-Subscription-Token` as per [Brave Search API – Authentication](https://api-dashboard.search.brave.com/documentation/guides/authentication). Key is never logged or sent except in that header.
+*   **Key source**: API key is read from `BRAVE_API_KEY` (env) or `.config.env` (env-style files only); no hardcoding. Aligns with Brave’s “use environment variables or secure configuration” guidance.
+*   **Endpoint**: `https://api.search.brave.com/res/v1/web/search` with query parameter `q`. Accept header: `application/json`.
+
 ### Rate Limiting
 
 The Brave Search API uses a 1-second sliding window and returns rate limit info in response headers. The app logs these so you can monitor usage:
@@ -110,13 +118,21 @@ The Brave Search API uses a 1-second sliding window and returns rate limit info 
 *   **Discord bot**: When a user asks something that benefits from web search, Ollama can output `BRAVE_SEARCH: <query>`. The app runs the search and gives the results back to Ollama for the reply.
 *   **Ollama agent flow**: Same pipeline as Discord (planning step + tool loop); BRAVE_SEARCH is one of the three agents (with FETCH_URL and RUN_JS).
 
+### Error handling and edge cases
+
+*   **Empty query**: Empty or whitespace-only queries are rejected before calling the API; the function returns `Err("Brave search: query is empty.")`. Scheduler and Discord flows avoid sending empty searches.
+*   **429 (rate limited)**: Response body is not required; the app logs rate-limit headers and a warning with `X-RateLimit-Reset` when present. Callers receive an error string including the status and a short body snippet; they can retry after the reset time.
+*   **Other 4xx/5xx**: Non-success status is returned as `Err("Brave API HTTP <code>: <reason or body snippet>")`. No automatic retries; key or quota issues require user/dashboard action.
+*   **Timeout**: Request timeout is 15 seconds; failure is reported as a generic request failure.
+*   **No results**: If the API returns success but `web.results` is missing or empty, the function returns the string `"No web results found."` so Ollama can still answer.
+
 ### Implementation
 
 *   **Module**: `src-tauri/src/commands/brave.rs`
 *   **Key resolution**: `get_brave_api_key()` — env, then `.config.env` (cwd, then `~/.mac-stats/.config.env`).
-*   **Search**: `brave_web_search(query, api_key)` — async HTTP request, parses `web.results` (title, url, description), returns formatted text for Ollama.
+*   **Search**: `brave_web_search(query, api_key)` — trims query, rejects empty; async HTTP request, parses `web.results` (title, url, description), returns formatted text for Ollama.
 
 ## Open tasks:
 
-*   Improve the Brave Search API documentation for better user experience.
-*   Review Brave-search-specific error handling and edge cases.
+*   ~~Improve the Brave Search API documentation for better user experience.~~ **Done:** API compliance subsection and error-handling/edge-cases subsection added above.
+*   ~~Review Brave-search-specific error handling and edge cases.~~ **Done:** documented in “Error handling and edge cases” and implemented (empty-query guard in `brave_web_search`).

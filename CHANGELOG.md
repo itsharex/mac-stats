@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Brave Search API** — API compliance and error-handling/edge-cases documented in `docs/008_brave_agent.md`; empty-query guard in `brave_web_search` (trim, reject empty/whitespace); FEATURE-CODER and agent_workflow open tasks marked done. OpenClaw §18 re-verification (005) and 022 testing note (2026-03-16) added.
 - **Docs 005 (§17), 006, 022** — OpenClaw re-verification §17 (005); FEATURE-CODER backlog row for 022/023 merge done (006); 022 §8 "Externalized prompts (F11) — summary from 023" and open task closed.
 - **Docs 005, 006, 022, 033** — OpenClaw re-verification §16 (005-openclaw-reviewer); FEATURE-CODER backlog row for 033 prefer_headless verification done (006); 022 testing note 2026-03-16 (integration/smoke); 033 prefer_headless edge cases and verification section plus open task closed.
 - **user-info.json caching** — In-memory cache with file mtime invalidation in `user_info/mod.rs`: reads use cache when file unchanged; writes refresh cache so next read sees new data; external edits to the file trigger reload. Open task in `docs/007_discord_agent.md` and FEATURE-CODER backlog marked done; `docs/data_files_reference.md` and 022 testing note (2026-03-16) updated. OpenClaw re-verification (§15) added in `005-openclaw-reviewer/005-openclaw-reviewer.md`.
