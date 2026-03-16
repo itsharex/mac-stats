@@ -83,10 +83,46 @@
     }
   }
 
+  // One-time inject of style for theme-switch fade-out (no per-theme CSS edits)
+  function ensureThemeSwitchStyle() {
+    if (document.getElementById("theme-switch-style")) return;
+    const style = document.createElement("style");
+    style.id = "theme-switch-style";
+    style.textContent =
+      "body.theme-switch-fade-out { opacity: 0; transition: opacity 0.2s ease-out; }";
+    document.head.appendChild(style);
+  }
+
   function applyTheme(theme) {
     localStorage.setItem("theme", theme);
     syncThemeClass(theme);
-    navigateToTheme(theme);
+    const url = (function () {
+      const base = getThemeBasePath();
+      return base + theme + "/cpu.html";
+    })();
+    if (window.location.pathname.endsWith(theme + "/cpu.html")) return;
+
+    ensureThemeSwitchStyle();
+    document.body.classList.add("theme-switch-fade-out");
+
+    let navigated = false;
+    const done = () => {
+      if (navigated) return;
+      navigated = true;
+      document.body.classList.remove("theme-switch-fade-out");
+      window.location.href = url;
+    };
+    const fallback = setTimeout(done, 250);
+    document.body.addEventListener(
+      "transitionend",
+      function onEnd(e) {
+        if (e.target !== document.body || e.propertyName !== "opacity") return;
+        document.body.removeEventListener("transitionend", onEnd);
+        clearTimeout(fallback);
+        done();
+      },
+      { once: true }
+    );
   }
 
   function initThemePicker() {

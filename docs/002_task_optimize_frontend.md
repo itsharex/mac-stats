@@ -104,5 +104,5 @@ This achieves the goal of "minimizing CPU usage to the absolute max" while maint
 ### Open tasks:
 
 - ~~Verify whether `fetch_page_content` blocks the main thread in any frontend-triggered path.~~ **Done:** frontend uses `fetch_page` Tauri command with `spawn_blocking`; see § above.
-- Improve the theme switching animation if it can be done without increasing CPU usage.
+- ~~Improve the theme switching animation if it can be done without increasing CPU usage.~~ **Done:** 200ms fade-out on body before navigation in `cpu-ui.js` (injected style, transitionend + 250ms fallback); no extra ongoing CPU.
 - Further optimize process list DOM updates.
