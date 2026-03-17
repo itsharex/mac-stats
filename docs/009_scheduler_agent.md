@@ -71,6 +71,28 @@
 - Executes tasks using Ollama + tools or direct tool calls
 - Supports deduplication by `cron` + `task` (whitespace-normalized)
 
+### Multiple API keys / endpoints (design)
+
+**Current behaviour:** The scheduler uses a single, app-wide configuration for all schedules:
+
+- **Ollama:** One endpoint and model (from Settings / `config.json`). Every schedule that runs via Ollama uses the same client.
+- **Brave Search:** One API key (env `BRAVE_API_KEY` or Keychain). Direct `BRAVE_SEARCH: <query>` tasks use this key.
+- **Discord:** One bot token. `reply_to_channel_id` posts to that bot’s channel.
+
+**What “multiple API keys” could mean:**
+
+1. **Per-schedule Brave key** – e.g. schedule A uses key from env, schedule B uses a different key (e.g. from Keychain by label, or a field in `schedules.json`). Use case: different projects or rate limits.
+2. **Per-schedule Ollama endpoint/model** – e.g. one schedule uses a fast model, another a larger model. Would require optional `ollama_endpoint` / `ollama_model` on the schedule entry and a way to select client per run.
+3. **Multiple Discord bots** – e.g. schedule posts to channel of bot A, another to bot B. Would require multiple tokens and channel→bot mapping; larger change.
+
+**Options (no implementation):**
+
+- **Env / config only:** Keep single keys; users who need multiple keys can run a second mac-stats instance (e.g. different config dir) or use separate scheduler processes. Document this as the current recommendation.
+- **Per-schedule overrides:** Extend schedule entry with optional `brave_api_key_id`, `ollama_endpoint`, etc. Keys could be stored in Keychain with a label; scheduler would resolve by label. Adds complexity to UI and file format.
+- **Named profiles:** Introduce “profiles” in config (e.g. `profiles: { "work": { "brave_api_key": "…" }, "personal": { … } }`) and an optional `profile` field on each schedule. Scheduler would load the right profile for the run.
+
+No code change in this FEAT; this section records the investigation and design options for future work.
+
 ---
 
 ## 📄 References
