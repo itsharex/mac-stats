@@ -1184,7 +1184,31 @@ const CHARS_PER_TOKEN: usize = 4;
 /// Reserve tokens for model reply and wrapper text.
 const RESERVE_TOKENS: u32 = 512;
 
+/// When over limit by at most 1/this fraction, truncate only (no summarization) to avoid extra Ollama call.
+const TRUNCATE_ONLY_THRESHOLD_DENOM: u32 = 4;
+
+/// Truncate at last newline or space before max_chars so we don't cut mid-word. O(max_chars).
+fn truncate_at_boundary(body: &str, max_chars: usize) -> String {
+    let mut last_break = max_chars;
+    let mut i = 0;
+    for c in body.chars() {
+        if i >= max_chars {
+            break;
+        }
+        if c == '\n' || c == ' ' {
+            last_break = i + 1;
+        }
+        i += 1;
+    }
+    if i <= max_chars {
+        return body.to_string();
+    }
+    body.chars().take(last_break).collect()
+}
+
 /// Reduce fetched page content to fit the model context: summarize via Ollama if needed, else truncate.
+/// Uses byte-length heuristic for fast path and "slightly over" path to avoid full char count; only
+/// when summarization is needed do we count chars for logging.
 async fn reduce_fetched_content_to_fit(
     body: &str,
     context_size_tokens: u32,
@@ -1198,18 +1222,31 @@ async fn reduce_fetched_content_to_fit(
         .saturating_sub(RESERVE_TOKENS)
         .saturating_sub(estimated_used_tokens);
     let max_chars = (max_tokens_for_body as usize).saturating_mul(CHARS_PER_TOKEN);
-    let body_tokens_est = body.chars().count() / CHARS_PER_TOKEN;
 
-    if body_tokens_est <= max_tokens_for_body as usize {
+    // Fast path: cheap byte heuristic (len/4 >= char_count/4 for UTF-8). Avoids char count when body fits.
+    let body_tokens_upper = body.len() / CHARS_PER_TOKEN;
+    if body_tokens_upper <= max_tokens_for_body as usize {
         return Ok(body.to_string());
     }
 
+    // Slightly over: within 25% of limit → truncate only, no summarization (saves one Ollama round-trip).
+    let threshold = max_tokens_for_body + (max_tokens_for_body / TRUNCATE_ONLY_THRESHOLD_DENOM);
+    if body_tokens_upper <= threshold as usize {
+        let truncated = truncate_at_boundary(body, max_chars);
+        return Ok(format!(
+            "{} (content truncated due to context limit)",
+            truncated.trim_end()
+        ));
+    }
+
+    // Way over: summarization path. Compute exact token estimate only for logging.
+    let body_tokens_est = body.chars().count() / CHARS_PER_TOKEN;
     info!(
         "Agent router: page content too large (est. {} tokens), max {} tokens; reducing",
         body_tokens_est, max_tokens_for_body
     );
 
-    let body_truncated_for_request: String = body.chars().take(max_chars).collect();
+    let body_truncated_for_request = truncate_at_boundary(body, max_chars);
     let summary_tokens = (max_tokens_for_body / 2).max(256);
     let summarization_messages = vec![
         crate::ollama::ChatMessage {
@@ -1232,10 +1269,10 @@ async fn reduce_fetched_content_to_fit(
         Ok(resp) => {
             let summary = resp.message.content.trim().to_string();
             if summary.is_empty() {
-                let fallback: String = body.chars().take(max_chars).collect();
+                let fallback = truncate_at_boundary(body, max_chars);
                 Ok(format!(
                     "{} (content truncated due to context limit)",
-                    fallback
+                    fallback.trim_end()
                 ))
             } else {
                 Ok(summary)
@@ -1243,10 +1280,10 @@ async fn reduce_fetched_content_to_fit(
         }
         Err(e) => {
             info!("Agent router: summarization failed ({}), truncating", e);
-            let fallback: String = body.chars().take(max_chars).collect();
+            let fallback = truncate_at_boundary(body, max_chars);
             Ok(format!(
                 "{} (content truncated due to context limit)",
-                fallback
+                fallback.trim_end()
             ))
         }
     }

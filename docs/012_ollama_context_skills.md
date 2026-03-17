@@ -71,7 +71,7 @@ This document describes how mac-stats uses **per-model context window size**, **
 - **Approach:** Before injecting “Here is the page content: …” we estimate token usage (chars/4). We reserve 512 tokens for the reply and subtract the current conversation size. If the page content would exceed the remaining space:
   1. **Summarization (preferred):** One extra Ollama request: “Summarize the following web page content in under N tokens…” with the (possibly pre-truncated) body. The summary is then injected into the main conversation.
   2. **Fallback:** If summarization fails, we truncate the text to fit and append “(content truncated due to context limit).”
-- **Rust:** `commands/ollama.rs` → `reduce_fetched_content_to_fit(...)` and the FETCH_URL branch in the tool loop. Uses `model_info.context_size_tokens` from the cache.
+- **Rust:** `commands/ollama.rs` → `reduce_fetched_content_to_fit(...)` and the FETCH_URL branch in the tool loop. Uses `model_info.context_size_tokens` from the cache. Performance: fast path via byte-length heuristic when body fits; when over by ≤25% of limit, truncate only (no summarization) to avoid an extra Ollama call; truncation at last newline/space via `truncate_at_boundary` for readability.
 
 ### Skills (~/.mac-stats/skills/)
 
@@ -94,4 +94,4 @@ This document describes how mac-stats uses **per-model context window size**, **
 
 ## Open tasks
 
-Ollama/skills open tasks are tracked in **006-feature-coder/FEATURE-CODER.md**. Done: skill-not-found error handling (Discord replies with available skills when user requests a missing skill).
+Ollama/skills open tasks are tracked in **006-feature-coder/FEATURE-CODER.md**. Done: skill-not-found error handling (Discord replies with available skills when user requests a missing skill); FETCH_URL content reduction performance (fast path, truncate-only when slightly over, boundary truncation).
