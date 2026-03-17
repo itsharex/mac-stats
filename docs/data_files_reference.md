@@ -1,6 +1,6 @@
-# Data files reference: schedules.json and user-info.json
+# Data files reference: schedules.json, user-info.json, session_reset_phrases.md
 
-Short reference for the JSON files under `~/.mac-stats/` used by the scheduler and Discord agent. For usage (SCHEDULE tool, Discord, etc.) see **docs/007_discord_agent.md** and **docs/009_scheduler_agent.md**.
+Short reference for key data files under `~/.mac-stats/` used by the scheduler, Discord agent, and session memory. For usage (SCHEDULE tool, Discord, session reset) see **docs/007_discord_agent.md**, **docs/009_scheduler_agent.md**, and **docs/019_agent_session_and_memory.md**.
 
 ---
 
@@ -96,6 +96,25 @@ Schedules are stored as a **JSON array** for simplicity, human readability, and 
   ]
 }
 ```
+
+---
+
+## session_reset_phrases.md
+
+**Path:** `$HOME/.mac-stats/agents/session_reset_phrases.md`  
+**Purpose:** When a user message contains any of these phrases (case-insensitive substring), the app clears the session for that channel and starts fresh (Session Startup instruction + current date/time is injected). Used by the Discord handler and session memory; similar to OpenClaw’s session reset triggers, but in a simple text file.
+
+### Format
+
+- **One phrase per line.** Empty lines and lines starting with `#` are ignored.
+- **Matching:** Case-insensitive substring: if the user message contains the phrase anywhere, the session is reset.
+- **Default:** The app ships a default file with phrases in English, German, Spanish, French, Italian, Portuguese, and Dutch (e.g. “new topic”, “reset”, “clear session”, “neue sitzung”, “nueva sesión”, etc.). Users can add or remove lines.
+- **Fallback:** If the file is missing or yields no phrases, a built-in list in `session_memory.rs` is used so reset still works.
+
+### See also
+
+- **docs/019_agent_session_and_memory.md** — Session Startup, session reset behavior.
+- **docs/035_memory_and_topic_handling.md** — Memory and topic handling overview.
 
 ---
 
