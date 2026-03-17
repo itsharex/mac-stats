@@ -102,17 +102,9 @@ Whenever Ollama is asked to decide which agent to use, the app sends the complet
 4. **UI Implementation**
 	* Settings UI for adding monitors and configuring alerts could still be improved
 
-## Open tasks:
+## Open tasks
 
-### Plugin System
-* ~~Implement proper timeout handling using tokio or crossbeam~~ **Done:** std thread + `mpsc::recv_timeout` + kill on timeout (Unix) in `plugins/mod.rs`.
-* ~~Improve plugin script error messages~~ **Done:** all error paths include plugin_id and script path; JSON parse failures show stdout snippet; non-zero exit shows exit code and trimmed stderr; failures logged with tracing::warn.
+Open tasks for plugins, alerts, Ollama, and UI are tracked in **006-feature-coder/FEATURE-CODER.md** (table “Remaining open”). Completed items:
 
-### Alert System
-* ~~Add commands for registering Telegram/Slack/Mastodon channels~~ **Done:** Tauri commands `register_telegram_channel(id, chat_id)`, `register_slack_channel(id)`, `register_mastodon_channel(id, instance_url)`, `remove_alert_channel(channel_id)` in `commands/alerts.rs`; credentials via Keychain (telegram_bot_{id}, slack_webhook_{id}, mastodon_alert_{id}). See `alerts/channels.rs` and `alerts/mod.rs` (remove_channel).
-
-### Ollama Integration
-* Implement stream support for better UX
-
-### UI Implementation
-* Improve the settings UI for adding monitors and configuring alerts
+- **Plugin system:** timeout handling (std thread + `mpsc::recv_timeout` + kill on timeout in `plugins/mod.rs`); improved plugin script error messages (plugin_id, script path, stdout snippet, exit code, stderr).
+- **Alert system:** Tauri commands for registering Telegram/Slack/Mastodon channels and removing alert channels (`commands/alerts.rs`).

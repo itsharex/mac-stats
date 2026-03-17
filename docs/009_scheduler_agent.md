@@ -80,11 +80,8 @@
 
 ---
 
-## 🛠️ Open tasks:
-- Add a scheduler UI for creating and editing schedules instead of relying on manual `schedules.json` edits.
-- Consider support for multiple API keys in scheduler-driven tool flows.
-- ~~Improve error handling for scheduler tool invocations.~~ **Done:** when a scheduled task fails (FETCH_URL, BRAVE_SEARCH, Ollama, TASK run), the scheduler sends a short failure message to the schedule’s Discord channel (if `reply_to_channel_id` is set). See `scheduler/mod.rs` `execute_task` (returns `Result<Option<(String, bool)>, String>`) and loop handling of `Err(msg)`.
-- ~~Clarify whether cron expressions should be interpreted in local time or UTC.~~ **Done:** documented in **docs/data_files_reference.md** (cron and `at` = local time).
-- ~~Review deduplication behavior for identical `cron` + `task` pairs.~~ **Done:** cron and one-shot (`at` + task) both deduplicate in `add_schedule` / `add_schedule_at`; same key (cron or at) + same normalized task → `AlreadyExists`. See **docs/data_files_reference.md**.
+## 🛠️ Open tasks
+
+Scheduler open tasks (scheduler UI, multiple API keys) are tracked in **006-feature-coder/FEATURE-CODER.md**. Completed: error handling for scheduler tool invocations (failure message to Discord when `reply_to_channel_id` set); cron/`at` = local time (data_files_reference.md); deduplication for identical cron+task pairs (add_schedule / add_schedule_at).
 
 ---

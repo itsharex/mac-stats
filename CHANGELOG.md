@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Docs 004, 005, 006, 009, 022** — OpenClaw §28 re-verification (005); FEATURE-CODER "Remaining open" table (006); open tasks in 004 and 009 consolidated to FEATURE-CODER; 022 testing note (2026-03-17).
 - **Docs 004, 005, 006, 022** — Known Issues §2 Alert System: channel registration items marked done (004); FEATURE-CODER backlog row for sync (006). OpenClaw §27 re-verification (005); 022 closing testing note (2026-03-16).
 
 ### Added

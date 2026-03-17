@@ -386,6 +386,11 @@ See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for deta
 - **Integration:** `cargo check` and `cargo clippy` pass (43 warnings; no errors). `diff src/ollama.js src-tauri/dist/ollama.js` empty (in sync). `toggle_cpu_window`, `set_chat_verbosity` in `tauri::generate_handler![]` in `lib.rs`; `run_due_monitor_checks()` called from `lib.rs` (background thread, 30s).
 - **Smoke:** `cargo build --release` succeeded (v0.1.41). `./target/release/mac_stats --cpu -vv` started in background; `pgrep -fl mac_stats` confirmed process; `~/.mac-stats/debug.log`: verbosity 2, 4 monitors loaded from disk, status bar setup, Discord token + gateway, scheduler (2 entries), task review thread, Ollama configuration and connection successful, 8 agents loaded with shared soul present, Discord bot connected (Werner_Amvara), CPU window created and shown. Manual checks (menu bar click, `--cpu`/`-vv` in chat) left to human.
 
+## Testing (2026-03-17) — closing reviewer “Start testing now. Do your job.”
+
+- **Integration:** `cargo check` and `cargo clippy` pass (43 warnings; no errors). `diff src/ollama.js src-tauri/dist/ollama.js` empty (in sync). `toggle_cpu_window`, `set_chat_verbosity` in `tauri::generate_handler![]` in `lib.rs` (L225, L229); `run_due_monitor_checks()` called from `lib.rs` (L364, background thread, 30s).
+- **Smoke:** `cargo build --release` succeeded (v0.1.41). `./target/release/mac_stats --cpu -vv` started in background; `pgrep -fl mac_stats` confirmed process; `~/.mac-stats/debug.log`: verbosity 2, 4 monitors loaded from disk, status bar setup, Discord token + gateway, scheduler (2 entries), task review thread, Ollama configuration and connection successful, 8 agents loaded with shared soul present, Discord bot connected (Werner_Amvara), CPU window created and shown. Manual checks (menu bar click, `--cpu`/`-vv` in chat) left to human.
+
 ---
 
 ## Open tasks:

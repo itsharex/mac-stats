@@ -59,4 +59,18 @@ This folder and doc define how to pick and implement **FEAT** (feature) tasks in
 | docs/004_notes.md | ~~Add commands for registering Telegram/Slack/Mastodon channels~~ | **Done:** `register_telegram_channel`, `register_slack_channel`, `register_mastodon_channel`, `remove_alert_channel` in `commands/alerts.rs`; AlertManager `remove_channel` in `alerts/mod.rs`. |
 | docs/004_notes.md | ~~Sync Known Issues with Open tasks (alert channel registration)~~ | **Done:** Known Issues §2 Alert System updated: channel registration items marked done to match Open tasks. |
 
+### Remaining open (pick next FEAT here)
+
+| Source | Task | Notes |
+|--------|------|--------|
+| docs/004_notes.md | Implement stream support for Ollama chat (better UX) | Non-streaming only today; add streaming in ollama + frontend. |
+| docs/004_notes.md | Improve settings UI for adding monitors and configuring alerts | Settings UI could be improved. |
+| docs/009_scheduler_agent.md | Add scheduler UI for creating and editing schedules | Instead of manual schedules.json edits. |
+| docs/009_scheduler_agent.md | Consider support for multiple API keys in scheduler-driven flows | Investigation / design. |
+| docs/012_ollama_context_skills.md | Improve Ollama error handling in skill/context pipeline | Error handling in skills path. |
+| docs/012_ollama_context_skills.md | Improve FETCH_URL content reduction performance | reduce_fetched_content_to_fit / trimming. |
+| docs/agent_workflow.md | More robust patching system for Coder agent | Consider / design. |
+| docs/035_memory_and_topic_handling.md | Per-channel memory in non-Discord contexts; new-topic detection; memory pruning docs; multi-language reset phrases; compaction performance | Several items; see 035. |
+| docs/README.md | Trim other docs so active backlog lives here | Point Open tasks in other docs to this file. **Done for:** 004_notes.md, 009_scheduler_agent.md. |
+
 Start with the first FEAT you can complete end-to-end (code or doc), then move to the next.
