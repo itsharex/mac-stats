@@ -782,6 +782,152 @@ pub async fn send_ollama_chat_messages(
     Err(last_send_err.unwrap_or_else(|| "No response".to_string()))
 }
 
+/// One line of Ollama NDJSON stream: `{"message":{"content":"..."},"done":false}`.
+#[derive(Debug, Deserialize)]
+struct OllamaStreamLine {
+    #[serde(default)]
+    message: OllamaStreamMessage,
+    #[serde(default)]
+    done: bool,
+}
+#[derive(Debug, Default, Deserialize)]
+struct OllamaStreamMessage {
+    #[serde(default)]
+    content: Option<String>,
+}
+
+/// Same as send_ollama_chat_messages but with stream: true; emits "ollama-chat-chunk" with
+/// `{ content: string }` for each delta and returns the full response when done.
+pub async fn send_ollama_chat_messages_streaming(
+    messages: Vec<crate::ollama::ChatMessage>,
+    model_override: Option<String>,
+    options_override: Option<crate::ollama::ChatOptions>,
+) -> Result<crate::ollama::ChatResponse, String> {
+    use crate::state::APP_HANDLE;
+    use futures_util::StreamExt;
+    use tracing::{debug, info};
+
+    let messages = deduplicate_consecutive_messages(messages);
+
+    let (endpoint, model, api_key, config_temp, config_num_ctx, http_client) = {
+        let client_guard = get_ollama_client().lock().map_err(|e| e.to_string())?;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| "Ollama not configured".to_string())?;
+        (
+            client.config.endpoint.clone(),
+            client.config.model.clone(),
+            client.config.api_key.clone(),
+            client.config.temperature,
+            client.config.num_ctx,
+            client.http_client(),
+        )
+    };
+
+    let effective_model = model_override.unwrap_or(model);
+    let options = merge_chat_options(config_temp, config_num_ctx, options_override);
+
+    let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
+    let chat_request = crate::ollama::ChatRequest {
+        model: effective_model.clone(),
+        messages: messages.clone(),
+        stream: true,
+        options,
+        tools: Some(vec![]),
+    };
+
+    let verbosity = crate::logging::VERBOSITY.load(Ordering::Relaxed);
+    if verbosity >= 2 {
+        info!("Ollama → Request (POST /api/chat stream=true)");
+    }
+
+    let api_key_value = api_key
+        .as_ref()
+        .and_then(|acc| crate::security::get_credential(acc).ok().flatten())
+        .or_else(read_ollama_api_key_from_env_or_config);
+
+    let mut http_request = http_client.post(&url).json(&chat_request);
+    if let Some(key) = &api_key_value {
+        let _masked = crate::security::mask_credential(key);
+        http_request = http_request.header("Authorization", format!("Bearer {}", key));
+        debug!("Ollama: Using API key for streaming chat request");
+    }
+
+    let resp = http_request
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send chat request: {}", e))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new());
+        if let Ok(err_payload) = serde_json::from_str::<crate::ollama::OllamaErrorResponse>(&body) {
+            return Err(format!("Ollama error: {}", err_payload.error));
+        }
+        return Err(format!("Ollama HTTP {}: {}", status, body.trim()));
+    }
+
+    let app_handle = APP_HANDLE.get().ok_or_else(|| "App handle not available for streaming".to_string())?;
+    let mut stream = resp.bytes_stream();
+    let mut buf = Vec::<u8>::new();
+    let mut full_content = String::new();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.map_err(|e| format!("Stream read error: {}", e))?;
+        buf.extend_from_slice(&chunk);
+        // Process complete lines (NDJSON)
+        while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+            let line = std::mem::take(&mut buf);
+            let (line_bytes, rest) = line.split_at(pos);
+            buf = rest[1..].to_vec();
+            let line_str = match std::str::from_utf8(line_bytes) {
+                Ok(s) => s.trim(),
+                Err(_) => continue,
+            };
+            if line_str.is_empty() {
+                continue;
+            }
+            let parsed: OllamaStreamLine = match serde_json::from_str(line_str) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            if let Some(delta) = parsed.message.content {
+                full_content.push_str(&delta);
+                let _ = app_handle.emit_all("ollama-chat-chunk", serde_json::json!({ "content": delta }));
+            }
+            if parsed.done {
+                let response = crate::ollama::ChatResponse {
+                    message: crate::ollama::ChatMessage {
+                        role: "assistant".to_string(),
+                        content: full_content.clone(),
+                        images: None,
+                    },
+                    done: true,
+                };
+                if verbosity >= 2 {
+                    let n = full_content.chars().count();
+                    info!("Ollama ← Stream done ({} chars)", n);
+                }
+                return Ok(response);
+            }
+        }
+    }
+
+    // Stream ended without done: true; return what we have
+    let response = crate::ollama::ChatResponse {
+        message: crate::ollama::ChatMessage {
+            role: "assistant".to_string(),
+            content: full_content,
+            images: None,
+        },
+        done: true,
+    };
+    Ok(response)
+}
+
 /// Send chat message to Ollama (async, non-blocking)
 #[tauri::command]
 pub async fn ollama_chat(request: ChatRequest) -> Result<crate::ollama::ChatResponse, String> {
@@ -7669,6 +7815,13 @@ pub struct OllamaChatWithExecutionRequest {
     pub question: String,
     pub system_prompt: Option<String>,
     pub conversation_history: Option<Vec<crate::ollama::ChatMessage>>,
+    /// When true (default), stream response chunks to frontend via "ollama-chat-chunk" for better UX.
+    #[serde(default = "default_stream_true")]
+    pub stream: bool,
+}
+
+fn default_stream_true() -> bool {
+    true
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -7792,14 +7945,13 @@ pub async fn ollama_chat_with_execution(
         images: None,
     });
 
-    let chat_request = ChatRequest {
-        messages: messages.clone(),
-    };
-
-    info!("Ollama Chat with Execution: Sending initial request to Ollama");
-    let mut response = ollama_chat(chat_request)
-        .await
-        .map_err(|e| format!("Failed to send chat request: {}", e))?;
+    info!("Ollama Chat with Execution: Sending initial request to Ollama (stream={})", request.stream);
+    let mut response = if request.stream {
+        send_ollama_chat_messages_streaming(messages.clone(), None, None).await
+    } else {
+        send_ollama_chat_messages(messages.clone(), None, None).await
+    }
+    .map_err(|e| format!("Failed to send chat request: {}", e))?;
 
     let mut response_content = response.message.content.clone();
     const MAX_FETCH_ITERATIONS: u32 = 3;

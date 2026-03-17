@@ -59,12 +59,12 @@ This folder and doc define how to pick and implement **FEAT** (feature) tasks in
 | docs/004_notes.md | ~~Add commands for registering Telegram/Slack/Mastodon channels~~ | **Done:** `register_telegram_channel`, `register_slack_channel`, `register_mastodon_channel`, `remove_alert_channel` in `commands/alerts.rs`; AlertManager `remove_channel` in `alerts/mod.rs`. |
 | docs/004_notes.md | ~~Sync Known Issues with Open tasks (alert channel registration)~~ | **Done:** Known Issues §2 Alert System updated: channel registration items marked done to match Open tasks. |
 | docs/README.md | ~~Trim other docs so active backlog lives here~~ | **Done:** 007, 022, 029, 002, agent_workflow, 008, 012, 035 now point to this file; README Cross-Cutting updated. |
+| docs/004_notes.md | ~~Implement stream support for Ollama chat (better UX)~~ | **Done:** backend `send_ollama_chat_messages_streaming` (NDJSON), emit `ollama-chat-chunk`; frontend listens and appends to assistant message; `stream` flag on request (default true). |
 
 ### Remaining open (pick next FEAT here)
 
 | Source | Task | Notes |
 |--------|------|--------|
-| docs/004_notes.md | Implement stream support for Ollama chat (better UX) | Non-streaming only today; add streaming in ollama + frontend. |
 | docs/004_notes.md | Improve settings UI for adding monitors and configuring alerts | Settings UI could be improved. |
 | docs/009_scheduler_agent.md | Add scheduler UI for creating and editing schedules | Instead of manual schedules.json edits. |
 | docs/009_scheduler_agent.md | Consider support for multiple API keys in scheduler-driven flows | Investigation / design. |

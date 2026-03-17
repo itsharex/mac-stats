@@ -15,6 +15,14 @@ function getInvoke() {
 
 const invoke = (...args) => getInvoke()(...args);
 
+/** Get Tauri event listen if available (for streaming chat chunks). */
+function getListen() {
+  if (typeof window.__TAURI__ !== 'undefined' && window.__TAURI__.event?.listen) {
+    return window.__TAURI__.event.listen;
+  }
+  return null;
+}
+
 // ============================================================================
 // Configuration & State
 // ============================================================================
@@ -424,45 +432,79 @@ async function sendChatMessage() {
   // Add user message to conversation history (non-reserved messages only)
   addToHistory('user', message);
 
+  const systemPrompt = getSystemPrompt();
+  const history = getConversationHistory().slice(0, -1);
+
+  let useStreaming = false;
+  let unlistenChunk = null;
+  const listenFn = getListen();
+  if (listenFn) {
+    try {
+      addChatMessage('assistant', '');
+      unlistenChunk = await listenFn('ollama-chat-chunk', (event) => {
+        const content = event?.payload?.content;
+        if (typeof content === 'string') appendToLastAssistantMessage(content);
+      });
+      useStreaming = true;
+    } catch (_) {
+      const container = document.getElementById('chat-messages');
+      const assistantMessages = container?.querySelectorAll('.chat-message.assistant');
+      if (assistantMessages?.length) assistantMessages[assistantMessages.length - 1].remove();
+    }
+  }
+
   try {
-    // System prompt: only send if user set a custom one; otherwise backend uses soul.md
-    const systemPrompt = getSystemPrompt();
-    
-    // Get conversation history (excluding the current message - it's in question)
-    const history = getConversationHistory().slice(0, -1);
-    
-    // Use unified command that handles everything
-    console.log('[Ollama] Sending request via unified command...');
+    console.log('[Ollama] Sending request via unified command (stream=', useStreaming, ')...');
     const response = await invoke('ollama_chat_with_execution', {
       request: {
         question: message,
         ...(systemPrompt ? { system_prompt: systemPrompt } : {}),
-        conversation_history: history.length > 0 ? history : null
+        conversation_history: history.length > 0 ? history : null,
+        stream: useStreaming
       }
     });
-    
+
+    if (unlistenChunk && typeof unlistenChunk === 'function') {
+      unlistenChunk();
+      unlistenChunk = null;
+    }
+
     console.log('[Ollama] ✅ Response received:', response);
-    
+
     if (response.error) {
-      addChatMessage('assistant', `Error: ${response.error}`);
+      if (useStreaming) {
+        const container = document.getElementById('chat-messages');
+        const assistantMessages = container?.querySelectorAll('.chat-message.assistant');
+        const last = assistantMessages?.[assistantMessages.length - 1];
+        if (last && !last.textContent.trim()) last.textContent = `Error: ${response.error}`;
+        else addChatMessage('assistant', `Error: ${response.error}`);
+      } else {
+        addChatMessage('assistant', `Error: ${response.error}`);
+      }
       return;
     }
-    
+
     if (response.needs_code_execution && response.code) {
-      // Code needs to be executed - handle ping-pong (recursive execution)
       await executeCodeAndContinue(response, message, systemPrompt, 0);
     } else if (response.final_answer) {
-      // Direct answer, no code execution needed
-      addChatMessage('assistant', response.final_answer);
-      // Add assistant response to history
+      if (!useStreaming) addChatMessage('assistant', response.final_answer);
       addToHistory('assistant', response.final_answer);
     } else {
-      addChatMessage('assistant', 'Received unexpected response format');
+      if (!useStreaming) addChatMessage('assistant', 'Received unexpected response format');
+      else addChatMessage('assistant', 'Received unexpected response format');
     }
-    
   } catch (err) {
+    if (unlistenChunk && typeof unlistenChunk === 'function') unlistenChunk();
     console.error('[Ollama] Failed to send chat message:', err);
-    addChatMessage('assistant', `Error: ${err}`);
+    if (useStreaming) {
+      const container = document.getElementById('chat-messages');
+      const assistantMessages = container?.querySelectorAll('.chat-message.assistant');
+      const last = assistantMessages?.[assistantMessages.length - 1];
+      if (last && !last.textContent.trim()) last.textContent = `Error: ${err}`;
+      else addChatMessage('assistant', `Error: ${err}`);
+    } else {
+      addChatMessage('assistant', `Error: ${err}`);
+    }
   }
 }
 
@@ -872,17 +914,30 @@ function addChatMessage(role, content, isHtml = false) {
     console.warn('[Ollama] chat-messages container not found');
     return;
   }
-  
+
   const messageDiv = document.createElement('div');
   messageDiv.className = `chat-message ${role}`;
-  
+
   if (isHtml) {
     messageDiv.innerHTML = content;
   } else {
     messageDiv.textContent = content;
   }
-  
+
   messagesContainer.appendChild(messageDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+/**
+ * Append text to the last assistant message (for streaming). Safe: appends as text node.
+ */
+function appendToLastAssistantMessage(text) {
+  const messagesContainer = document.getElementById('chat-messages');
+  if (!messagesContainer) return;
+  const assistantMessages = messagesContainer.querySelectorAll('.chat-message.assistant');
+  const last = assistantMessages[assistantMessages.length - 1];
+  if (!last) return;
+  last.appendChild(document.createTextNode(text));
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 

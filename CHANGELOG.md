@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **ellipse() edge case** — `logging::ellipse()` enforces `max_len >= sep_len + 1` so first_count/last_count never go negative for very small `max_len`.
 
+## [0.1.42] - 2026-03-17
+
+### Added
+- **Ollama chat streaming** — CPU window Ollama chat streams response chunks to the UI: backend `send_ollama_chat_messages_streaming` (NDJSON stream, `stream: true`); frontend listens for `ollama-chat-chunk` and appends to the last assistant message for incremental display. Request supports `stream: true` (default). See `commands/ollama.rs`, `src/ollama.js`.
+
+### Changed
+- **Docs 004, 005, 006, 022** — Notes and backlog updates; OpenClaw re-verification (005); FEATURE-CODER and 022 feature review plan (2026-03-17).
+
 ## [0.1.41] - 2026-03-16
 
 ### Changed
