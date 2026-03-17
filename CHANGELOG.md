@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Discord skill-not-found** — When user requests a missing skill (e.g. `skill: 99`), Discord replies with "Skill \"X\" not found. Available: 1-summarize, 2-code." and returns early; `parse_discord_ollama_overrides` returns `requested_skill_selector` so handler can detect not-found. FEATURE-CODER and docs/012 open task marked done. See `discord/mod.rs`.
+- **Docs 005, 006, 012, 022** — OpenClaw §32 re-verification (005); FEATURE-CODER backlog row for skill-not-found done (006); docs/012 open tasks note updated; 022 testing note (2026-03-17).
 - **Docs backlog centralization** — OpenClaw §30 re-verification (005); FEATURE-CODER backlog: active open tasks centralized in 006-feature-coder/FEATURE-CODER.md; 007, 008, 012, 022, 029, 002, 035, agent_workflow, docs/README now point to it; 022 testing note 2026-03-17 (closing reviewer).
 - **Docs 005, 022** — OpenClaw §29 re-verification (005); 022 testing note (2026-03-17, closing reviewer).
 - **Docs 004, 005, 006, 009, 022** — OpenClaw §28 re-verification (005); FEATURE-CODER "Remaining open" table (006); open tasks in 004 and 009 consolidated to FEATURE-CODER; 022 testing note (2026-03-17).

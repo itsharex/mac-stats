@@ -1479,7 +1479,8 @@ fn extract_model_switch_from_question(question: &str) -> Option<(String, String)
 }
 
 /// Parse leading "model: ...", "temperature: ...", "num_ctx: ...", "skill: ...", "agent: ...", "verbose" from a Discord message.
-/// Returns (rest of message, model_override, options_override, skill_content, agent_selector, verbose).
+/// Returns (rest of message, model_override, options_override, skill_content, requested_skill_selector, agent_selector, verbose).
+/// `requested_skill_selector`: Some if user wrote "skill: X" (so caller can detect "skill not found" when skill_content is None).
 /// `verbose`: None = not set (use default from config: DM vs channel), Some(true/false) = explicit.
 /// When verbose is false, status/thinking messages are suppressed in the channel.
 fn parse_discord_ollama_overrides(
@@ -1488,6 +1489,7 @@ fn parse_discord_ollama_overrides(
     String,
     Option<String>,
     Option<crate::ollama::ChatOptions>,
+    Option<String>,
     Option<String>,
     Option<String>,
     Option<bool>,
@@ -1605,15 +1607,20 @@ fn parse_discord_ollama_overrides(
     } else {
         None
     };
-    let skill_content = skill_selector.and_then(|sel| {
-        let skills = crate::skills::load_skills();
-        crate::skills::find_skill_by_number_or_topic(&skills, &sel).map(|s| s.content.clone())
-    });
+    let (skill_content, requested_skill_selector) = match skill_selector {
+        Some(ref sel) => {
+            let skills = crate::skills::load_skills();
+            let content = crate::skills::find_skill_by_number_or_topic(&skills, sel).map(|s| s.content.clone());
+            (content, Some(sel.clone()))
+        }
+        None => (None, None),
+    };
     (
         question,
         model_override,
         options_override,
         skill_content,
+        requested_skill_selector,
         agent_selector,
         verbose,
     )
@@ -1807,9 +1814,35 @@ impl EventHandler for Handler {
             mut model_override,
             options_override,
             skill_content,
+            requested_skill_selector,
             agent_selector,
             verbose_opt,
         ) = parse_discord_ollama_overrides(&content);
+
+        // User requested a skill (e.g. "skill: 99") but it was not found — reply with available skills and return.
+        if requested_skill_selector.is_some() && skill_content.is_none() {
+            let selector = requested_skill_selector.as_deref().unwrap_or("?");
+            let skills = crate::skills::load_skills();
+            let available: String = if skills.is_empty() {
+                "none (add skill-N-topic.md files to ~/.mac-stats/agents/skills/)".to_string()
+            } else {
+                skills
+                    .iter()
+                    .map(|s| format!("{}-{}", s.number, s.topic))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let err_msg = format!(
+                "Skill \"{}\" not found. Available: {}.",
+                selector, available
+            );
+            info!("Discord: {}", err_msg);
+            if let Err(e) = new_message.channel_id.say(&ctx, &err_msg).await {
+                error!("Discord: failed to send skill-not-found message: {}", e);
+            }
+            return;
+        }
+
         let escalation = is_escalation_message(&question);
         if escalation {
             info!("Discord: escalation detected (user wants task actually completed)");

@@ -94,4 +94,4 @@ This document describes how mac-stats uses **per-model context window size**, **
 
 ## Open tasks
 
-Ollama/skills open tasks (error handling, FETCH_URL content reduction) are tracked in **006-feature-coder/FEATURE-CODER.md**.
+Ollama/skills open tasks are tracked in **006-feature-coder/FEATURE-CODER.md**. Done: skill-not-found error handling (Discord replies with available skills when user requests a missing skill).
