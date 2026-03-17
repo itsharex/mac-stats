@@ -72,6 +72,7 @@ This folder and doc define how to pick and implement **FEAT** (feature) tasks in
 | docs/012_ollama_context_skills.md | ~~Improve Ollama error handling in skill/context pipeline~~ | **Done:** when user requests a missing skill (e.g. `skill: 99`), Discord replies with "Skill \"X\" not found. Available: 1-summarize, 2-code." and returns early; parser returns `requested_skill_selector` so handler can detect not-found. |
 | docs/012_ollama_context_skills.md | ~~Improve FETCH_URL content reduction performance~~ | **Done:** fast path (byte heuristic), truncate-only when slightly over (no summarization), truncate_at_boundary for readability. |
 | docs/agent_workflow.md | More robust patching system for Coder agent | Consider / design. |
-| docs/035_memory_and_topic_handling.md | Per-channel memory in non-Discord contexts; new-topic detection; memory pruning docs; compaction performance | Several items; see 035. Multi-language reset phrases done (data_files_reference § session_reset_phrases.md). |
+| docs/035_memory_and_topic_handling.md | ~~Memory pruning docs~~ | **Done:** § "Memory pruning and compaction" in 035 (caps, on-request/periodic compaction, having_fun, performance, refs). |
+| docs/035_memory_and_topic_handling.md | Per-channel memory in non-Discord contexts; new-topic detection; compaction performance | Remaining 035 items; see 035. |
 
 Start with the first FEAT you can complete end-to-end (code or doc), then move to the next.

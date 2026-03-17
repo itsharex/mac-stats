@@ -77,6 +77,41 @@ git clone https://github.com/raro42/mac-stats.git && cd mac-stats && ./run
 
 ---
 
+## Memory pruning and compaction
+
+Context is kept under control by **caps** and **compaction** (summarize-then-replace). Nothing is silently dropped without summarization when compaction runs.
+
+### What gets capped
+
+| What | Limit | Where |
+|------|--------|--------|
+| **Conversation history** (prior turns sent to the model) | Last **20** messages | Applied before planning/execution in the main router (`commands/ollama.rs`). Older messages are not sent; compaction can reduce them to one summary message. |
+
+### When compaction runs
+
+1. **On-request compaction**  
+   When handling a request (Discord, CPU window, etc.), if the session has **≥ 8 messages**, the app compacts before calling the model: the last 20 messages are sent to a small model to produce a short **CONTEXT** (summary) and optional **LESSONS**. The in-memory session is replaced by one system message containing the summary; **LESSONS** are appended to global `~/.mac-stats/agents/memory.md`. If compaction fails (e.g. model unavailable), the full history is kept for that request and no replacement occurs.
+
+2. **Periodic compaction (every 30 minutes)**  
+   A background thread runs every 30 minutes and compacts each in-memory session that has **≥ 4 messages**. For each such session: lessons are appended to global memory; if the session has had **no activity for 30 minutes** it is **cleared**; if it is **active** (activity within 30 min) it is **replaced** with the summary (same as on-request).  
+   See `run_periodic_session_compaction()` in `commands/ollama.rs` and the thread started from `lib.rs`.
+
+3. **Discord having_fun channels**  
+   For channels configured as having_fun, compaction does **not** call the LLM. A fixed minimal CONTEXT is stored so casual chat never gets summarized into task/platform themes. Log: `Session compaction: Discord having_fun channel <id> — using fixed minimal context (no LLM)`.
+
+### Compaction performance
+
+- **On-request**: One extra LLM call when history ≥ 8 messages; failure is non-fatal (full history kept for that request).
+- **Periodic**: One compaction call per session that meets the threshold; runs in a background thread so it does not block the main flow.
+- **New-topic**: When the new-topic check returns true, prior context is cleared and no compaction call is made for that turn.
+
+### References
+
+- **Full plan and behavior**: `docs/session_compaction_and_memory_plan_DONE.md`
+- **Implementation**: `src-tauri/src/commands/ollama.rs` (e.g. `COMPACTION_THRESHOLD`, `compact_conversation_history`, `run_periodic_session_compaction`), `src-tauri/src/session_memory.rs` (`list_sessions`, `last_activity`)
+
+---
+
 ## Quick Reference  
 | Need | Action |  
 |------|--------|  
