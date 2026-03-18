@@ -2093,6 +2093,8 @@ impl EventHandler for Handler {
                 None,  // original_user_request
                 None,  // success_criteria_override
                 Some(is_dm), // load global memory only in main session (DM or in-app)
+                None,  // request_id_override: generated on first run
+                0,     // retry_count
             )
             .await
             {

@@ -459,6 +459,7 @@ async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, S
     match crate::commands::ollama::answer_with_ollama_and_fetch(
         task, None, None, None, None, None, None, None, None, false, None, false, true, true, None,
         None, false, None, None, None, // discord_is_dm: not Discord, load global memory
+        None, 0, // request_id_override, retry_count
     )
     .await
     {

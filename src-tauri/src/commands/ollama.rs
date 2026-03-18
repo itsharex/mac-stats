@@ -2774,6 +2774,19 @@ pub struct OllamaReply {
     pub attachment_paths: Vec<PathBuf>,
 }
 
+/// Request-local execution context for a single Discord/Ollama run (task-008 Phase 1).
+/// Holds only state belonging to this request so verification retries cannot inherit
+/// stale criteria, tool payloads, or task context from prior requests.
+#[derive(Clone)]
+pub struct RequestRunContext {
+    pub request_id: String,
+    pub retry_count: u32,
+    pub original_user_question: String,
+    pub discord_channel_id: Option<u64>,
+    pub discord_user_id: Option<u64>,
+    pub discord_user_name: Option<String>,
+}
+
 /// One short Ollama call to extract 1–3 concrete success criteria from the user request.
 /// Returns None on error or empty so the run is not blocked.
 async fn extract_success_criteria(
@@ -3454,6 +3467,10 @@ pub fn answer_with_ollama_and_fetch(
     success_criteria_override: Option<Vec<String>>,
     // When Some(true) = Discord DM (main session, load global memory). When Some(false) = Discord guild (do not load global memory). When None = not Discord (load global memory).
     discord_is_dm: Option<bool>,
+    // When Some, use this request id so retries share the same id for end-to-end log correlation (task-008 Phase 1).
+    request_id_override: Option<String>,
+    // 0 = first run; 1 = verification retry. Logged for request tracing.
+    retry_count: u32,
 ) -> Pin<Box<dyn Future<Output = Result<OllamaReply, String>> + Send>> {
     let load_global_memory = discord_is_dm.map_or(true, |dm| dm);
     if discord_is_dm == Some(false) {
@@ -3467,6 +3484,7 @@ pub fn answer_with_ollama_and_fetch(
     let discord_intermediate = discord_intermediate.map(|s| s.to_string());
     let original_user_request = original_user_request.map(|s| s.to_string());
     let success_criteria_override = success_criteria_override.map(|v| v.to_vec());
+    let request_id_override = request_id_override.map(String::from);
     Box::pin(async move {
         use tracing::info;
         let question = question.as_str();
@@ -3477,19 +3495,48 @@ pub fn answer_with_ollama_and_fetch(
                 is_verification_retry,
             )
         });
-        let request_id: String = format!(
-            "{:08x}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64
-                & 0xFFFF_FFFF
-        );
+        let request_id: String = request_id_override.unwrap_or_else(|| {
+            format!(
+                "{:08x}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64
+                    & 0xFFFF_FFFF
+            )
+        });
 
-        info!(
-            "Agent router [{}]: session start — {}",
-            request_id,
-            crate::config::Config::version_display()
+        let run_ctx = RequestRunContext {
+            request_id: request_id.clone(),
+            retry_count,
+            original_user_question: request_for_verification.clone(),
+            discord_channel_id: discord_reply_channel_id,
+            discord_user_id,
+            discord_user_name: discord_user_name.clone(),
+        };
+
+        if run_ctx.retry_count > 0 {
+            info!(
+                "Agent router [{}]: session start (verification retry {}, request-local criteria only) — {}",
+                run_ctx.request_id,
+                run_ctx.retry_count,
+                crate::config::Config::version_display()
+            );
+        } else {
+            info!(
+                "Agent router [{}]: session start — {}",
+                run_ctx.request_id,
+                crate::config::Config::version_display()
+            );
+        }
+        tracing::debug!(
+            request_id = %run_ctx.request_id,
+            retry_count = run_ctx.retry_count,
+            channel_id = ?run_ctx.discord_channel_id,
+            user_id = ?run_ctx.discord_user_id,
+            user_name = ?run_ctx.discord_user_name.as_deref(),
+            question_preview = %run_ctx.original_user_question.chars().take(60).collect::<String>(),
+            "request run context"
         );
 
         // When Discord user asks for screenshots to be sent here, focus on current task only (no prior chat).
@@ -3693,7 +3740,8 @@ pub fn answer_with_ollama_and_fetch(
                     match detect_new_topic(question, &summary, &effective_model).await {
                         Ok(true) => {
                             info!(
-                                "Agent router: new-topic check returned NEW_TOPIC, using no prior context"
+                                "Agent router [{}]: NEW_TOPIC — using no prior context; any verification retry will use only request-local criteria",
+                                request_id
                             );
                             is_new_topic = true;
                         }
@@ -6795,6 +6843,8 @@ pub fn answer_with_ollama_and_fetch(
                         Some(request_for_verification.clone()),
                         success_criteria.clone(),
                         discord_is_dm,
+                        Some(request_id.clone()), // same request_id for end-to-end log correlation
+                        1,                       // retry_count
                     )
                     .await;
                 }

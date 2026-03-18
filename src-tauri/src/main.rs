@@ -190,6 +190,7 @@ fn main() {
                         None,  // original_user_request
                         None,  // success_criteria_override
                         None,  // discord_is_dm: not Discord, load global memory
+                        None, 0, // request_id_override, retry_count
                     )
                     .await
                     {
