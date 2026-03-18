@@ -31,7 +31,7 @@ See `scan-log.md` for per-run details (scan time, tasks created, notes).
 | task-004 | Scheduler log churn          | done — "loaded N entries" at DEBUG. |
 | task-005 | Session compaction log       | done — "keeping full history (N messages)". |
 | task-007 | Discord read attachments     | done — image attachments downloaded, base64 passed to Ollama vision path. |
-| task-008 | Overnight plan: request isolation, search hardening, compaction safety | plan — Phase 1–5 done. Phase 6 (retry/failover taxonomy) open. Phase 7 observability done (request_id, topic, prior session, criteria, search blob size, compaction logs); regression coverage optional. |
+| task-008 | Overnight plan: request isolation, search hardening, compaction safety | plan — Phase 1–7 done. Phase 6 (retry/failover taxonomy): § "Retry and failover taxonomy" in docs/021_router_and_agents.md. |
 
 ## Task format
 

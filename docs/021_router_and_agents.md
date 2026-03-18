@@ -134,7 +134,38 @@ Current tools use a single-line form `TOOL_NAME: <argument>`. Possible future im
 
 Implementation would live in `commands/ollama.rs` (parsing, tool loop) and possibly in agent prompts (router snippet). No code change in this FEAT; this section records scope for future work.
 
+## Retry and failover taxonomy (task-008 Phase 6)
+
+This section documents when the router and related components **retry** (same operation again) or **fail over** (try an alternative path), and when they **fail** without retry. Implementation lives in `commands/ollama.rs`, `discord/api.rs`, `discord/mod.rs`, `browser_agent/mod.rs`, and `scheduler/mod.rs`.
+
+### Retry (one extra attempt)
+
+| Component | Trigger | Behavior | Location |
+|-----------|---------|----------|----------|
+| **Ollama API** | 503 or request timeout | Retry once after a short delay; then return user-facing error. | `commands/ollama.rs` (task-001) |
+| **Completion verification** | Verification says "not satisfied" | One retry with "complete remaining steps" prompt; same `request_id`; no second retry. | `answer_with_ollama_and_fetch` with `retry_on_verification_no`; retry path passes `false` so we don’t retry again. |
+| **Discord API** | Connection error or timeout (and 5xx where applicable) | One retry after delay. | `discord/api.rs` (send_message and related) |
+| **Browser CDP** | Connection/session error | Clear session and retry once (`with_connection_retry`). | `browser_agent/mod.rs` |
+| **BROWSER_NAVIGATE** | CDP navigate fails | Ensure Chrome on port, retry CDP; if still failing, try HTTP fallback. | `commands/ollama.rs` (tool handler) |
+| **Session compaction** | Compaction run fails (e.g. Ollama error) | Retry once after 3s; then log and leave session unchanged; next cycle will try again. | `commands/ollama.rs` (periodic compaction) |
+| **Having-fun (Discord)** | Idle thought request times out | Retry once after delay. | `discord/mod.rs` |
+
+### No retry (fail and report)
+
+- **Ollama**: After the one retry for 503/timeout; or on 4xx / non-retryable errors.
+- **Verification**: Second "not satisfied" → we do not retry again; user sees answer plus optional disclaimer.
+- **Discord API**: After one retry for connection/timeout; or on 4xx (e.g. bad request, forbidden).
+- **Browser**: After connection retry or CDP→HTTP failover; or on non-transient errors (e.g. invalid URL).
+- **Compaction**: When we **skip** compaction (e.g. fewer than 2 conversational messages), we do not count that as a failure and do not retry in the same cycle.
+
+### Summary
+
+- **Retry** = at most one extra attempt for transient failures (timeout, 503, connection, verification NO).
+- **Failover** = try alternative path once (e.g. CDP → HTTP for BROWSER_NAVIGATE).
+- **Fail** = return error or partial result to the user; no further retries in that request.
+
 ## Open tasks:
 - ~~Investigate why some agents are not being properly initialized.~~ **Done:** § "Agent initialization and model resolution" above (load from disk each time; model resolution depends on ModelCatalog from `ensure_ollama_agent_ready_at_startup`; race when catalog not yet set; failure modes logged). Added log when catalog missing in `agents/mod.rs`.
 - ~~Improve the documentation for specialist agents.~~ **Done:** § "Specialist agents" above (definition, invocation, what they receive, where they live, default table, limitation).
 - ~~Consider adding support for more advanced tool commands.~~ **Done:** § "More advanced tool commands (future)" above (options: structured args, result streaming, compound/batch hints, tool schema; scope for future implementation).
+- ~~task-008 Phase 6: Retry/failover taxonomy.~~ **Done:** § "Retry and failover taxonomy" above (retry table, no-retry cases, summary); doc-only.
