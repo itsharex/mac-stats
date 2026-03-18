@@ -82,6 +82,31 @@ User (e.g. Discord)
 - **Specialist agents (001, 002, 003)** only need to do their job in one turn; they cannot schedule, create tasks, or call other agents via the router. If a specialist “needs” to do that, the orchestrator must do it (e.g. orchestrator calls 002, gets result, then orchestrator does TASK_APPEND or SCHEDULE).
 - There is no “agent calling the router as an API” in a separate request: the router is the loop that drives the entry-point. So “explicitly call the router” = the entry-point outputting tool lines in that same conversation.
 
+## Specialist agents
+
+**Definition**: Any agent that is **not** the entry-point is a specialist from the router’s perspective. The entry-point (e.g. agent-000) is the only one in the tool loop; all others are invoked via `AGENT: <id or slug or name> <task>` and run in a **single** Ollama request with **no** tool list.
+
+**Invocation**: The orchestrator (or any entry-point) outputs one line: `AGENT: 002 write a small Python script` or `AGENT: senior-coder refactor this function`. The router resolves the selector (id `002`, slug `senior-coder`, or name) to an agent, then calls `run_agent_ollama_session(agent, task)`.
+
+**What the specialist receives**:
+- **User message**: Only the `<task>` string (e.g. “write a small Python script”). No main-conversation history, no tool list.
+- **System prompt**: That agent’s assembled prompt (soul + mood + skill from `~/.mac-stats/agents/agent-NNN-<name>/`).
+
+**Where they live**: Under `~/.mac-stats/agents/` (and defaults in the app under `src-tauri/defaults/agents/`). Each agent has `agent.json`, `skill.md`, `mood.md`, `soul.md`, and optionally `testing.md`. See **docs/017_llm_agents.md** for the default agent table and roles.
+
+**Default specialists** (orchestrator 000 delegates to these):
+
+| ID   | Name / slug           | Role / purpose        |
+|------|------------------------|------------------------|
+| 001  | General Assistant      | General Q&A             |
+| 002  | Coder (senior-coder)   | Code generation        |
+| 003  | Generalist             | Fast replies           |
+| 004  | Discord Expert         | Discord API specialist |
+| 005  | Task Runner            | Task file execution    |
+| 006  | Redmine                | Redmine ticket review/search/create/update |
+
+**Limitation**: Specialists cannot call FETCH_URL, TASK_*, SCHEDULE, or another AGENT. If the task requires tools or multi-step work, the orchestrator must run the tool (or another agent) and use the result in the main conversation.
+
 ## References
 
 - **Tool loop**: `commands/ollama.rs` → `answer_with_ollama_and_fetch`, `parse_tool_from_response`, `parse_all_tools_from_response`, and the `while tool_count < max_tool_iterations` loop. Plans like `RUN_CMD: date then REDMINE_API GET /time_entries.json?...` are normalized and split into separate steps so each tool runs in sequence (not one RUN_CMD with the whole chain).
@@ -90,5 +115,5 @@ User (e.g. Discord)
 
 ## Open tasks:
 - Investigate why some agents are not being properly initialized.
-- Improve the documentation for specialist agents.
+- ~~Improve the documentation for specialist agents.~~ **Done:** § "Specialist agents" above (definition, invocation, what they receive, where they live, default table, limitation).
 - Consider adding support for more advanced tool commands.
