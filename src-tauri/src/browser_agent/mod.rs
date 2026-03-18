@@ -12,6 +12,7 @@ mod http_fallback;
 
 pub use http_fallback::{click_http, extract_http, input_http, navigate_http};
 
+use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -578,12 +579,13 @@ pub fn kill_orphaned_browser_processes() {
     }
 }
 
-/// Last page's element list (index, label) for status messages. Set after each navigate/click/input so "Clicking element 7 (Accept all)…" can show the label.
-static LAST_ELEMENT_LABELS: OnceLock<Mutex<Option<Vec<(u32, String)>>>> = OnceLock::new();
+/// Last page's element list (index → label) for status messages. Set after each navigate/click/input so "Clicking element 7 (Accept all)…" can show the label.
+/// HashMap for O(1) lookup when resolving labels for BROWSER_CLICK/BROWSER_INPUT status messages.
+static LAST_ELEMENT_LABELS: OnceLock<Mutex<Option<HashMap<u32, String>>>> = OnceLock::new();
 /// Last browser state text shown to the model. Used to re-ground retries after browser-step failures.
 static LAST_BROWSER_STATE_SNAPSHOT: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
-fn last_element_labels() -> &'static Mutex<Option<Vec<(u32, String)>>> {
+fn last_element_labels() -> &'static Mutex<Option<HashMap<u32, String>>> {
     LAST_ELEMENT_LABELS.get_or_init(|| Mutex::new(None))
 }
 
@@ -609,9 +611,10 @@ fn element_label_for_status(i: &Interactable) -> String {
 }
 
 /// Set the last page's element labels (called after navigate/click/input). Used so status can show "Clicking element 7 (Accept all)…".
+/// Duplicate indices: last entry wins. Callers (CDP/HTTP paths) supply unique indices from page state.
 pub(crate) fn set_last_element_labels(labels: Vec<(u32, String)>) {
     if let Ok(mut g) = last_element_labels().lock() {
-        *g = Some(labels);
+        *g = Some(labels.into_iter().collect());
     }
 }
 
@@ -622,15 +625,12 @@ pub(crate) fn set_last_browser_state_snapshot(snapshot: String) {
 }
 
 /// Get the label for element at 1-based index from the last cached page state. Used for status message context.
+/// Edge cases: returns None if lock is poisoned, cache is empty, or index not in last state (e.g. first action in run before any navigate).
 pub fn get_last_element_label(index: u32) -> Option<String> {
-    last_element_labels().lock().ok().and_then(|g| {
-        g.as_ref().and_then(|labels| {
-            labels
-                .iter()
-                .find(|(i, _)| *i == index)
-                .map(|(_, l)| l.clone())
-        })
-    })
+    last_element_labels()
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().and_then(|labels| labels.get(&index).cloned()))
 }
 
 pub fn get_last_browser_state_snapshot() -> Option<String> {

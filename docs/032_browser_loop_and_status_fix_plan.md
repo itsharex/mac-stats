@@ -67,7 +67,7 @@ Whenever Ollama is asked to decide which agent to use, the app sends the complet
 * **Phase 3 (Error short-circuiting)**: Done. Added logic in `ollama.rs` after tool execution to detect if a `BROWSER_` tool (or `BROWSER_SCREENSHOT`) returned an error. If an error is detected, the batched tool execution loop is aborted via `break`, preventing subsequent batched tools (like `BROWSER_SCREENSHOT` immediately after a failed `BROWSER_NAVIGATE`) from incorrectly executing on an invalid state.
 
 ## Open tasks:
-- Review and refine the `browser_agent` cache and `get_last_element_label` function for better performance and edge cases.
+- ~~Review and refine the `browser_agent` cache and `get_last_element_label` function for better performance and edge cases.~~ **Done:** Cache now uses `HashMap<u32, String>` for O(1) lookup; `set_last_element_labels` builds map from vec (duplicate indices: last wins). Edge cases documented in doc comment: lock poison → `None`, empty cache → `None`, index not in last state (e.g. first action before navigate) → `None`.
 - Investigate and implement a more robust repetition detection mechanism.
 - ~~Consider adding a "browser tool limit" warning for users who exceed the limit.~~ **Done:** When the browser tool cap is reached, the reply now appends a user-facing note: "Note: Browser action limit (15 per run) was reached; some actions were skipped." (ollama.rs, after the tool loop).
 - Review and optimize the `ollama.rs` tool loop for better performance and error handling.

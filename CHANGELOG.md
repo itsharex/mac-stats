@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Browser tool limit user-facing note (032)** — When the browser action cap (15 per run) is reached, the reply now appends: "Note: Browser action limit (15 per run) was reached; some actions were skipped." (`browser_tool_cap_reached` in `commands/ollama.rs`). Docs 005 §53 re-verification, 006 FEATURE-CODER and 032 open task marked done, 022 testing note.
+
+## [0.1.44] - 2026-03-18
+
+### Changed
+- **Browser agent element label cache (032)** — `LAST_ELEMENT_LABELS` now uses `HashMap<u32, String>` for O(1) lookup when resolving labels for BROWSER_CLICK/BROWSER_INPUT status messages; `set_last_element_labels` builds map from vec (duplicate indices: last wins); `get_last_element_label` doc comment documents edge cases (lock poison, empty cache, index not in last state). Docs: 005 §54 re-verification, 006 FEATURE-CODER and 032 open task marked done, 022 testing note.
+
+## [Unreleased]
+
+### Changed
 - **Docs 005 §52, 006, 021, 022, agents-tasks** — OpenClaw re-verification §52 (005); task-008 Phase 6 done: new § "Retry and failover taxonomy" in docs/021 (retry table: Ollama, verification, Discord API, CDP, BROWSER_NAVIGATE failover, compaction, having-fun; no-retry cases; summary); FEATURE-CODER and agents-tasks Phase 6 done; 022 testing note (2026-03-18).
 - **Agent router observability (task-008 Phase 7)** — request_id on all agent-router logs (criteria, new-topic, prior session, compaction); SAME_TOPIC log when keeping history; prior session message count and cap; compaction decision/result with request_id and context/lessons; Brave and Perplexity search result count and blob size in logs. Docs 005 §51, 006 Phase 7 done, agents-tasks task-008 Phase 7 done, 022 testing note (2026-03-18).
 
