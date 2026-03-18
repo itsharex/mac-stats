@@ -107,8 +107,14 @@ On **session reset** (user says "new topic", "reset", etc.), the app clears the 
 - Session compaction and session replacement are already wired into the main router path; the remaining work here is review/tuning, not first-time implementation.
 - For Discord **having_fun** channels, session compaction uses a fixed minimal context (no LLM call) so compacted CONTEXT never invents task or platform themes from casual chat.
 
+## Session memory implementation review (done)
+
+- **Correctness**: Internal artifacts (verifier prompts, criteria extraction, tool dumps) are filtered on add and on load; empty content is not stored. Lock poison is handled (early return, no panic). Persist clones under lock then drops lock before I/O; clear/replace persist before mutating. **Fix applied:** `parse_session_file` was skipping the first block because the file starts with `## User` and the split leaves the first segment with a leading `## `; the parser now trims `## ` from each block so the first User/Assistant block is recognized.
+- **Efficiency**: Lock is held only for in-memory reads/writes and a single clone for persist; I/O runs outside the lock. Message count is small (typical cap 20); list_sessions is O(sessions). Redundant normalization on read (get_messages) is acceptable; stored messages are already normalized on add.
+- **Storage structure**: In-memory store is a `HashMap<key, SessionState>` with `Vec<(String, String)>` messages; persistence is one file per session (append-only style, new file per persist with timestamp). For typical channel/session counts this is fine; no change needed for now.
+
 ## Open tasks:
 
-- Review whether the `session_memory` implementation is correct and efficient.
+- ~~Review whether the `session_memory` implementation is correct and efficient.~~ **Done:** see "Session memory implementation review" above; parser fix for first block in `session_memory.rs`.
 - Review whether the current conversation-history storage structure should be optimized.
 - Consider adding a mechanism for users to manually edit or update their long-term memory.

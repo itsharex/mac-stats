@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Browser tool limit user-facing note (032)** — When the browser action cap (15 per run) is reached, the reply now appends: "Note: Browser action limit (15 per run) was reached; some actions were skipped." (`browser_tool_cap_reached` in `commands/ollama.rs`). Docs 005 §53 re-verification, 006 FEATURE-CODER and 032 open task marked done, 022 testing note.
 - **Duplicate browser action refusal (032)** — Consecutive identical browser actions (same BROWSER_NAVIGATE URL or same BROWSER_CLICK index) are skipped; reply gets "Same browser action as previous step; use a different action or reply with DONE." `normalize_browser_tool_arg`, `last_browser_tool_arg` in `commands/ollama.rs`. Docs 005, 006, 022, 032.
 - **Unknown-tool handling in tool loop (032)** — In `ollama.rs` tool loop, the catch-all for unknown tools no longer silently skips; unknown tools now produce a user-facing hint ("Unknown tool \"X\". Use one of the available tools...") and `tracing::warn!` so the model gets feedback and logs are traceable. Docs 005 §56 re-verification, 006 FEATURE-CODER and 032 open task marked done, 022 smoke note.
+- **Session memory parser fix (019)** — `parse_session_file` in `session_memory.rs` now trims leading `## ` from each block so the first User/Assistant block is recognized when loading session files. Docs 019 implementation review done, 005 §57 re-verification, 006 FEATURE-CODER backlog, 022 testing note (2026-03-18).
 
 ## [0.1.44] - 2026-03-18
 

@@ -446,7 +446,7 @@ fn parse_session_file(path: &Path) -> Vec<(String, String)> {
     };
     let mut out = Vec::new();
     for block in content.split("\n## ") {
-        let block = block.trim();
+        let block = block.trim().trim_start_matches("## ").trim();
         if block.is_empty() {
             continue;
         }
