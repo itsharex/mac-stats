@@ -53,7 +53,7 @@ Option: system prompt ends with “Tool reference (short): [link or token]”. W
 
 1. **Shorten REDMINE in the prompt**
    - Replace the long paragraph with: when to use (one line), GET issue (one line), PUT notes (one line), search (one line), create (one line). Remove the long endpoint list; rely on pre-route for “review” and on tool-result hints for “create” (e.g. after GET we already say “If the user asked to update, reply REDMINE_API: PUT ...”).
-   - **Stop appending create-context (projects, trackers, statuses) to every request.** Append only when we’re about to create/update (e.g. planner said “create issue” or we add a separate “inject Redmine context” step when the model outputs “REDMINE_API: POST” and we need project/tracker IDs).
+   - **Stop appending create-context (projects, trackers, statuses) to every request.** *Done:* In `build_agent_descriptions`, create-context is appended only when the question suggests create/update (same phrases as pre-route: create, new issue, update, add comment, with the next steps, post a comment, write, put). When `question` is None we do not add create-context.
 
 2. **Pre-route more**
    - Any “review/list/update Redmine ticket N” → force the right REDMINE_API call so the model doesn’t need to “find” it in a long list.

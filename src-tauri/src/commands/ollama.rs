@@ -1134,6 +1134,7 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
             num
         ));
         // Create context (projects, trackers, statuses) only when user might create/update — avoids polluting prompt for simple "review ticket N".
+        // Align with pre-route wants_update: same phrases so create-context is present when we might POST/PUT.
         let wants_create_or_update = question
             .map(|q| {
                 let q_lower = q.to_lowercase();
@@ -1141,10 +1142,12 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
                     || q_lower.contains("new issue")
                     || q_lower.contains("update")
                     || q_lower.contains("add comment")
+                    || q_lower.contains("with the next steps")
                     || q_lower.contains("post a comment")
                     || q_lower.contains("write ")
+                    || q_lower.contains("put ")
             })
-            .unwrap_or(true);
+            .unwrap_or(false);
         if wants_create_or_update {
             if let Some(ctx) = crate::redmine::get_redmine_create_context().await {
                 base.push_str("\n\n");
