@@ -4534,6 +4534,8 @@ pub fn answer_with_ollama_and_fetch(
         let mut last_browser_extract: Option<String> = None;
         // Cap browser tools per run to prevent runaway NAVIGATE/CLICK loops (see docs/032_browser_loop_and_status_fix_plan.md).
         let mut browser_tool_count: u32 = 0;
+        // Set when we skip a browser tool due to cap; used to append a user-facing note to the reply.
+        let mut browser_tool_cap_reached: bool = false;
         // For news requests: if the last PERPLEXITY_SEARCH returned only hub/landing/tag/standings pages, verification must not accept a confident news answer.
         let mut last_news_search_was_hub_only: Option<bool> = None;
 
@@ -4598,6 +4600,7 @@ pub fn answer_with_ollama_and_fetch(
                 );
                 if is_browser_tool {
                     if browser_tool_count >= MAX_BROWSER_TOOLS_PER_RUN {
+                        browser_tool_cap_reached = true;
                         let msg = format!(
                             "Maximum browser actions per run reached ({}). Reply with your answer or DONE: success / DONE: no.",
                             MAX_BROWSER_TOOLS_PER_RUN
@@ -6803,6 +6806,17 @@ pub fn answer_with_ollama_and_fetch(
                 .push_str("\n\nNote: A screenshot was requested but none was attached.");
             info!(
                 "Agent router: heuristic guard — screenshot requested but no attachment, appended note"
+            );
+        }
+
+        // User-facing note when browser action limit was reached (032_browser_loop_and_status_fix_plan).
+        if browser_tool_cap_reached {
+            response_content.push_str(&format!(
+                "\n\nNote: Browser action limit ({} per run) was reached; some actions were skipped.",
+                MAX_BROWSER_TOOLS_PER_RUN
+            ));
+            info!(
+                "Agent router: browser tool cap was reached, appended user-facing note"
             );
         }
 

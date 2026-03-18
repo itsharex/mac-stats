@@ -69,5 +69,5 @@ Whenever Ollama is asked to decide which agent to use, the app sends the complet
 ## Open tasks:
 - Review and refine the `browser_agent` cache and `get_last_element_label` function for better performance and edge cases.
 - Investigate and implement a more robust repetition detection mechanism.
-- Consider adding a "browser tool limit" warning for users who exceed the limit.
+- ~~Consider adding a "browser tool limit" warning for users who exceed the limit.~~ **Done:** When the browser tool cap is reached, the reply now appends a user-facing note: "Note: Browser action limit (15 per run) was reached; some actions were skipped." (ollama.rs, after the tool loop).
 - Review and optimize the `ollama.rs` tool loop for better performance and error handling.
