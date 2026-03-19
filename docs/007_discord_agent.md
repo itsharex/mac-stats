@@ -171,7 +171,7 @@ You can put **optional leading lines** in your message to override model, parame
 | `temperature:` or `temperature=` | `temperature: 0.7` | Set temperature for this request. |
 | `num_ctx:` or `num_ctx=` | `num_ctx: 8192` | Set context window size for this request. |
 | `params:` | `params: temperature=0.7 num_ctx=8192` | Set multiple options in one line. |
-| `skill:` or `skill=` | `skill: 2` or `skill: code` | Load `~/.mac-stats/skills/skill-<number>-<topic>.md` and prepend its content to the system prompt. |
+| `skill:` or `skill=` | `skill: 2` or `skill: code` | Load `~/.mac-stats/agents/skills/skill-<number>-<topic>.md` and prepend its content to the system prompt. |
 | `verbose` or `verbose: true` | (on its own line) | Show status/thinking messages in the channel for this request. |
 | `verbose: false` | (on its own line) | Hide status messages for this request (default in channels). |
 

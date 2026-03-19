@@ -28,7 +28,7 @@ Whenever Ollama is asked to decide which agent to use, the app sends the **compl
 
 ## Ollama Context Window, Model/Params, and Skills
 
-This document describes how mac-stats uses **per-model context window size**, **Discord message overrides** (model, temperature, num_ctx), **context-aware content reduction** for FETCH_URL, and **skills** from `~/.mac-stats/skills/` so different agents can respond differently.
+This document describes how mac-stats uses **per-model context window size**, **Discord message overrides** (model, temperature, num_ctx), **context-aware content reduction** for FETCH_URL, and **skills** from `~/.mac-stats/agents/skills/` so different agents can respond differently.
 
 ### Context Window Size per Model
 
@@ -76,7 +76,7 @@ This document describes how mac-stats uses **per-model context window size**, **
 ### Skills (~/.mac-stats/skills/)
 
 - **Purpose:** Different “agents” (behaviours) per request by attaching different system-prompt overlays. Skills are Markdown files that are prepended to the system prompt when selected.
-- **Path:** `~/.mac-stats/skills/` (see `Config::skills_dir()` in `config/mod.rs`).
+- **Path:** `~/.mac-stats/agents/skills/` (see `Config::skills_dir()` in `config/mod.rs`).
 - **Naming:** `skill-<number>-<topic>.md`, e.g. `skill-1-summarize.md`, `skill-2-code.md`. The number and topic are parsed from the filename for listing and selection.
 - **Discord:** Leading line `skill: 2` or `skill: code` (case-insensitive for topic). The app loads all skills from the directory, finds the one matching the number or topic, and passes its content as `skill_content` into `answer_with_ollama_and_fetch`. The content is prepended to both the planning and execution system prompts as “Additional instructions from skill: …”.
 - **Rust:** `skills.rs` → `load_skills()`, `find_skill_by_number_or_topic()`. `commands/ollama.rs` → `answer_with_ollama_and_fetch(..., skill_content)` injects skill text into the system message.

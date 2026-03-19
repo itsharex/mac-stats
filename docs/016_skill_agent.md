@@ -56,17 +56,28 @@ The SKILL agent lets Ollama run a specialized skill (a Markdown system-prompt ov
 *   **Invocation**: Ollama replies with one line: `SKILL: <number or topic> [optional task]`
 *   **Selector**: Either a **number** (e.g. `2`) or a **topic** slug (e.g. `summarize`, `code`)
 *   **Task**: Optional. If present (text after the first space), it is the user message for the skill session. If omitted, the **current user question** is used as the user message.
-*   **Execution**: The app loads the skill content from `~/.mac-stats/skills/`, runs one Ollama request (system = skill content, user = task or question), and injects the result as `Skill "<number>-<topic>" result:\n\n<result>` into the main conversation.
+*   **Execution**: The app loads the skill content from `~/.mac-stats/agents/skills/`, runs one Ollama request (system = skill content, user = task or question), and injects the result as `Skill "<number>-<topic>" result:\n\n<result>` into the main conversation.
 
 ## Skill Files
 
-*   **Directory**: `~/.mac-stats/skills/` (see `Config::skills_dir()` in `config/mod.rs`)
-*   **Naming**: `skill-<number>-<topic>.md`, e.g. `skill-1-summarize.md`, `skill-2-code.md`
+*   **Directory**: `~/.mac-stats/agents/skills/` (see `Config::skills_dir()` in `config/mod.rs`; it is `agents_dir()/skills`).
+*   **Naming**: `skill-<number>-<topic>.md`, e.g. `skill-1-summarize.md`, `skill-2-code.md`. The filename must have the form `skill-<number>-<topic>.md`; e.g. `skill-1.md` (missing topic) or `skill-x-foo.md` (non-numeric number) are ignored.
 *   **Default skills**: When the skills directory is empty, the app creates two default skills: **1-summarize** (summarization) and **2-code** (code help). You can edit or remove them.
-*   **Content**: Markdown (or plain text) used as the **system prompt** for the skill session. The file is read and trimmed; empty files are skipped.
+*   **Content**: Markdown (or plain text) used as the **system prompt** for the skill session. The file is read and trimmed; empty files are skipped and reported in the app log.
+
+## Troubleshooting: skills not loading
+
+If the app reports "no valid skill files" or a skill you expect is missing:
+
+1. **Path**: Ensure skills live in `~/.mac-stats/agents/skills/`, not `~/.mac-stats/skills/`. Create the directory if needed; the app creates it and default skills when the directory is empty.
+2. **Naming**: Only files matching `skill-<number>-<topic>.md` are loaded (e.g. `skill-1-summarize.md`). Files like `skill-1.md` or `skill-x-foo.md` are skipped; the app logs which files were skipped and why (invalid name or empty).
+3. **Empty files**: Files that are empty or contain only whitespace are skipped; check `~/.mac-stats/debug.log` at verbosity `-vv` or higher for "Skills: skipping empty file".
+4. **Permissions**: If the app cannot read the directory or a file, it logs "could not read directory" or "could not read file" with the path and error.
+
+See `~/.mac-stats/debug.log` after a run (e.g. open CPU window and trigger a skill, or start with `--cpu`) for "Skills: loaded …" or "Skills: skipping …" lines.
 
 ## Open tasks:
 
-*   Investigate why the app sometimes fails to load skills.
+*   ~~Investigate why the app sometimes fails to load skills.~~ **Done:** Diagnostics added in `skills.rs` (warn when filename format invalid, info when empty; log path and doc pointer when no valid skills). Doc path corrected to `~/.mac-stats/agents/skills/` and "Troubleshooting: skills not loading" added.
 *   Improve the user interface for managing skills.
 *   Add support for more advanced skill features, such as conditional logic and user-defined variables.

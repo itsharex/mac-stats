@@ -4,7 +4,7 @@
 //! Any future code that creates or modifies skill files should also log and consider notifying the user (e.g. status or Tauri event).
 
 use crate::config::Config;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// One skill: number and topic from filename, content from file.
 #[derive(Debug, Clone)]
@@ -79,6 +79,8 @@ pub fn load_skills() -> Vec<Skill> {
         }
     };
 
+    let mut skipped_name = 0;
+    let mut skipped_empty = 0;
     for entry in read_dir.filter_map(Result::ok) {
         let path = entry.path();
         if path.extension().map(|e| e != "md").unwrap_or(true) {
@@ -86,11 +88,25 @@ pub fn load_skills() -> Vec<Skill> {
         }
         let name = match path.file_stem().and_then(|s| s.to_str()) {
             Some(n) => n,
-            None => continue,
+            None => {
+                skipped_name += 1;
+                warn!(
+                    "Skills: skipping file (no valid stem): {:?}",
+                    path.file_name().unwrap_or_default()
+                );
+                continue;
+            }
         };
         let (number, topic) = match parse_skill_filename(name) {
             Some(p) => p,
-            None => continue,
+            None => {
+                skipped_name += 1;
+                warn!(
+                    "Skills: skipping file (invalid name format): {:?} — expected skill-<number>-<topic>.md (e.g. skill-1-summarize.md)",
+                    path.file_name().unwrap_or_default()
+                );
+                continue;
+            }
         };
         let content = match std::fs::read_to_string(&path) {
             Ok(c) => c.trim().to_string(),
@@ -100,7 +116,8 @@ pub fn load_skills() -> Vec<Skill> {
             }
         };
         if content.is_empty() {
-            debug!("Skills: skipping empty file {:?}", path);
+            skipped_empty += 1;
+            info!("Skills: skipping empty file {:?}", path);
             continue;
         }
         skills.push(Skill {
@@ -114,6 +131,12 @@ pub fn load_skills() -> Vec<Skill> {
 
     if skills.is_empty() {
         info!("Skills: no valid skill files in {:?}", dir);
+        if skipped_name > 0 || skipped_empty > 0 {
+            info!(
+                "Skills: skipped {} file(s) with invalid name format, {} empty file(s). See docs/016_skill_agent.md (path: ~/.mac-stats/agents/skills/, naming: skill-<number>-<topic>.md).",
+                skipped_name, skipped_empty
+            );
+        }
     } else {
         let list: String = skills
             .iter()
@@ -121,6 +144,12 @@ pub fn load_skills() -> Vec<Skill> {
             .collect::<Vec<_>>()
             .join(", ");
         info!("Skills: loaded {} from {:?}: {}", skills.len(), dir, list);
+        if skipped_name > 0 || skipped_empty > 0 {
+            info!(
+                "Skills: also skipped {} file(s) (invalid name), {} empty.",
+                skipped_name, skipped_empty
+            );
+        }
     }
 
     skills
