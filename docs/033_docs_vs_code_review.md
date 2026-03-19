@@ -76,7 +76,7 @@
 | Doc Claim                          | Code Reality                          | Severity |
 |------------------------------------|---------------------------------------|----------|
 | Allowlist: cat, head, tail, ls, grep | Includes ps, wc, uptime, cursor-agent | Low      |
-**Recommendation:** Add note about expanded allowlist in docs.
+**Resolution:** Full allowlist (including ps, wc, uptime, cursor-agent) is documented in docs/011_local_cmd_agent.md and docs/100_all_agents.md; no further doc change needed.
 
 ---
 
