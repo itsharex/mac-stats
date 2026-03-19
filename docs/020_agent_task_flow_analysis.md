@@ -49,9 +49,9 @@ Ollama can invoke these tools by replying with `TOOL_NAME: <argument>`. The **SC
 |-------|-----------|---------|----------------|
 | **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch web page content (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest, 15s timeout). Used by Discord and CPU-window chat. |
 | **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Brave Search API with result injection. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY`. |
-| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript in CPU window. | In **CPU window**: executed in... *(incomplete documentation)* |
-| **PERPLEXITY_SEARCH** | `PERPLEXITY_SEARCH: <query>` | Perplexity search with result injection. | *(Implementation details missing)* |
-| **RUN_CMD** | `RUN_CMD: <command>` | Run terminal commands. | *(Implementation details missing)* |
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | **CPU window**: frontend runs code in app context and returns result. **Discord/agent**: `commands/ollama.rs` → `run_js_via_node` (Node.js). In some contexts (e.g. Discord) JS may not be executed and the app returns a message instead. |
+| **PERPLEXITY_SEARCH** | `PERPLEXITY_SEARCH: <query>` | Perplexity search with result injection. | `commands/perplexity.rs` → `perplexity_search()`; `perplexity/mod.rs` calls Perplexity Search API. Results shaped and injected in `ollama.rs`. Requires `PERPLEXITY_API_KEY` (env, `.config.env`, or Keychain). Only offered when configured. |
+| **RUN_CMD** | `RUN_CMD: <command> [args]` | Run allowlisted local commands (read-only). | `commands/run_cmd.rs`. Allowlist from orchestrator skill "## RUN_CMD allowlist" (or default: cat, head, tail, ls, grep, date, whoami, ps, wc, uptime, cursor-agent). Paths must be under `~/.mac-stats`. Disabled when `ALLOW_LOCAL_CMD=0`. See `docs/011_local_cmd_agent.md`. |
 
 ---
 
@@ -72,11 +72,13 @@ Ollama can invoke these tools by replying with `TOOL_NAME: <argument>`. The **SC
 - `TASK_CREATE` generates a task file under `~/.mac-stats/task/`.
 - Task loop is separate: triggered by scheduler or task review loop (every 1 minute).
 
+For the full tool list (all agents, invocation, and implementation), see **docs/agent_workflow.md** (Tool list) and **docs/README.md** (Tool Agents).
+
 ---
 
 ## Open tasks:
 
 - **Performance**: Investigate optimizations for sequential execution.  
 - **Parallel execution**: Explore feasibility of multi-tool per turn or parallel agent runs.  
-- **Documentation**: Update for clarity and completeness.  
+- ~~**Documentation**: Update for clarity and completeness.~~ **Done:** Tool table above completed (RUN_JS, PERPLEXITY_SEARCH, RUN_CMD implementation details); See also added for full list. See 006-feature-coder/FEATURE-CODER.md.
 - ~~**Discord integration**: Complete description of bot functionality.~~ **Done:** [007_discord_agent.md](007_discord_agent.md) §2 has "Bot functionality at a glance" (triggers, reply pipeline, personalization, session/memory, scheduling, optional features); [docs/README.md](README.md) At a Glance has a one-line Discord bot summary with link to 007.

@@ -32,7 +32,9 @@ Whenever Ollama is asked to decide which agent to use (planning step in Discord 
 |-------|------------|---------|----------------|
 | **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch a web page’s body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest blocking client, 15s timeout). Used by Discord pipeline and by CPU-window chat (`ollama_chat_with_execution`). |
 | **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search via Brave Search API; results (titles, URLs, snippets) are injected back for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY` (env or `.config.env`). Used by Discord and (when wired) CPU-window agent flow. |
-| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | In **CPU window**: executed in
+| **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). | CPU window: frontend runs code in app context; Discord/agent: `commands/ollama.rs` → `run_js_via_node` (Node.js). In some contexts JS is not executed and a message is returned instead. |
+
+For the full tool list (all agents), see **docs/agent_workflow.md** (Tool list) and **docs/020_agent_task_flow_analysis.md**.
 
 ## CPU Optimization Task Suite
 

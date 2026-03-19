@@ -591,6 +591,11 @@ See `CHANGELOG.md` (0.1.14) and `docs/023_externalized_prompts_DONE.md` for deta
 - **Integration:** `cargo check` and `cargo clippy` pass (44 warnings; no errors). `diff src/ollama.js src-tauri/dist/ollama.js` empty (in sync). `toggle_cpu_window`, `set_chat_verbosity` in `tauri::generate_handler![]` in `lib.rs` (L228, L237); `run_due_monitor_checks()` in `lib.rs` (L372, background thread, 30s).
 - **Smoke:** `cargo build --release` succeeded (v0.1.45). `pkill -f mac_stats` then `nohup ./src-tauri/target/release/mac_stats --cpu -vv` started in background; `pgrep -fl mac_stats` confirmed process (pid 3761). `~/.mac-stats/debug.log`: verbosity 2, Monitor loaded 4 from disk, Discord skipped (no token), agents with shared soul present, CPU window created and shown, Ollama configuration and connection successful; monitor checks (mix-online, prod.cometa, app-monitor, amvara UP). Manual checks (menu bar click, `--cpu`/`-vv` in chat) left to human.
 
+## Testing (2026-03-19) — closing reviewer "Start testing now. Do your job." (004-closing-reviewer prompt)
+
+- **Integration:** `cargo check` and `cargo clippy` pass (44 warnings; no errors). `diff src/ollama.js src-tauri/dist/ollama.js` empty (in sync). `set_chat_verbosity` and `toggle_cpu_window` in `tauri::generate_handler![]` in `lib.rs` (L230, L240); `run_due_monitor_checks()` in `lib.rs` (L375, background thread, 30s).
+- **Smoke:** `cargo build --release` succeeded (v0.1.45). `pkill -f mac_stats` then `nohup ./target/release/mac_stats --cpu -vv` started in background; `pgrep -fl mac_stats` confirmed process (pid 5458). `~/.mac-stats/debug.log`: verbosity 2, Discord gateway + Task review and Scheduler (2 entries) threads spawned, 8 agents loaded with shared soul present, Discord bot connected (Werner_Amvara), CPU window created and shown, Ollama configuration and connection successful, models extracted; Monitor checks (mix-online, prod.cometa, app-monitor, amvara UP). Manual checks (menu bar click, `--cpu`/`-vv` in chat) left to human.
+
 ---
 
 ## Open tasks

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Docs 005 §74, 006, 020, 022, README** — OpenClaw re-verification §74 (005); FEATURE-CODER backlog row for 020 "Documentation: Update for clarity and completeness" done (006); docs/020 tool table completed (RUN_JS, PERPLEXITY_SEARCH, RUN_CMD implementation details), See also for full list; RUN_JS row in docs/README.md fixed (was truncated); 022 testing note 2026-03-19 (closing reviewer).
+
 ### Added
 - **Settings → Ollama tab** — Dashboard Settings: new Ollama tab to set endpoint URL and model (dropdown populated via "Refresh models", Apply); backend `get_ollama_config`, `list_ollama_models_at_endpoint`. Same config as CPU window; docs 005 §73, 006, 015, 022.
 - **Settings → Skills tab** — Dashboard Settings: new Skills tab lists loaded skills (number, topic, path) via `list_skills` Tauri command; hint to ~/.mac-stats/agents/skills/ and docs/016. Backend: `commands/skills.rs`, `SkillForUi`, `list_skills_for_ui()` in skills.rs. Docs: 005 OpenClaw §72 re-verification, 006 FEATURE-CODER and 016 open task "Improve the user interface for managing skills" done, 022 testing note 2026-03-19.
