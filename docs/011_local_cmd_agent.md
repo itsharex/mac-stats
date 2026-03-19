@@ -108,6 +108,42 @@ Together these prevent unauthorized access to files outside `~/.mac-stats` and l
 *   **Code:** `src-tauri/src/commands/run_cmd.rs`, `src-tauri/src/commands/ollama.rs` (tool loop, agent descriptions)
 *   **All agents:** `docs/100_all_agents.md`
 
+## More RUN_CMD features (design only)
+
+This section considers possible extensions. No code changes are required; it informs future work.
+
+### More commands
+
+| Candidate | Use case | Notes |
+|-----------|----------|--------|
+| **sort** | Order lines (e.g. `cat file \| sort`) | Read-only; pipelines already allow it if allowlisted. Low risk. |
+| **uniq** | Deduplicate lines | Read-only; useful with `sort`. Low risk. |
+| **cut** | Extract columns (e.g. `cut -f1 -d,`) | Read-only; no path required when used in pipe. Low risk. |
+| **tr** | Translate/delete characters | Read-only; no path. Low risk. |
+| **jq** | JSON query (e.g. `cat file.json \| jq .schedules`) | Very useful for app JSON under `~/.mac-stats`; path comes from prior stage. If allowlisted, path validation applies to any path-like arg (e.g. `jq .x file.json` → `file.json` must be under base). Medium value; requires `jq` on PATH. |
+| **xargs** | Build commands from stdin | Higher risk (can run arbitrary commands); generally not recommended for allowlist. |
+| **awk** / **sed** | Text processing | Powerful; sed can write files. If ever added, restrict to read-only usage (e.g. sed with no `-i`); complex to enforce. Prefer grep/cut/jq for clarity. |
+
+**Recommendation:** Adding `sort`, `uniq`, `cut`, `tr` to the default allowlist (or documenting them as optional in skill.md) is low-risk and improves usefulness. `jq` is optional and environment-dependent. Avoid `xargs`, and treat `awk`/`sed` as out of scope unless strictly read-only and documented.
+
+### Path validation (current and possible improvements)
+
+**Current behaviour:**
+
+- Path-like tokens: any token that contains `/` or starts with `~` is treated as a path. `~` is expanded with `$HOME`; the path (or its parent if the path does not exist yet) is canonicalized and must be under the permitted base (`~/.mac-stats`).
+- Path-required commands: `cat`, `head`, `tail`, `grep` must receive a path (or pipe input); the app returns a clear error if none is given.
+- `cursor-agent` is excluded from path validation (runs in user environment with full args).
+- Each pipeline stage is validated; path-like tokens in every stage must be under base.
+
+**Possible improvements (design only):**
+
+1. **Stricter “path-like” detection:** Today, a token like `foo/bar` is validated even if it is not a file path (e.g. a URL path). Tightening could reduce false positives but might miss edge cases (e.g. paths with spaces). Current behaviour is conservative (reject unless under base).
+2. **Explicit “safe” path allowlist:** Instead of “any path under `~/.mac-stats`”, allow only known subdirs (e.g. `schedules.json`, `config.json`, `agents/`). Would reduce risk if the app later allowed write access in a subdir; not needed for current read-only design.
+3. **Validation of redirect targets:** Commands like `cat x > ~/.mac-stats/out` run in the shell; the app does not parse redirects. If write-capable commands were ever allowlisted, redirect targets would need to be validated; currently not required (writes are not in scope).
+4. **Better error when path is missing:** For path-required commands, the retry loop already helps. Optional: in the error message, suggest exact examples (e.g. `RUN_CMD: cat ~/.mac-stats/schedules.json`).
+
+No code changes are implied; the above is for documentation and future consideration.
+
 ## Open tasks
 
 RUN_CMD open tasks are tracked in **006-feature-coder/FEATURE-CODER.md**. Completed:
@@ -115,3 +151,4 @@ RUN_CMD open tasks are tracked in **006-feature-coder/FEATURE-CODER.md**. Comple
 *   ~~Update the documentation to better reflect the current implementation and usage of the RUN_CMD agent.~~ **Done:** doc updated to match code (shell execution, allowlist section case-insensitive, pipelines, duplicate detection, TASK_APPEND full output, RUN_CMD naming, retry count, tool iterations).
 *   ~~Review the security measures in place to prevent unauthorized access to the app's data and functionality.~~ **Done:** § "Security review (measures in place)" above (allowlist, path validation, shell scope, cursor-agent caveat, ALLOW_LOCAL_CMD).
 *   ~~Improve RUN_CMD retry loop (error handling / UX).~~ **Done:** only RUN_CMD lines accepted in fix suggestion; one format-only retry when parse fails; clearer user-facing messages (format required, could not get corrected command).
+*   ~~Consider more RUN_CMD features (more commands, path validation).~~ **Done:** § "More RUN_CMD features (design only)" above (candidate commands, path validation current behaviour and possible improvements); doc/design only, no code.

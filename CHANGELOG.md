@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Docs 005 §65, 006, 011, 022; Cargo.lock** — OpenClaw re-verification §65 (005); FEATURE-CODER backlog row for 011 "Consider more RUN_CMD features" done — design only (006); docs/011_local_cmd_agent.md new § "More RUN_CMD features (design only)" (candidate commands table, path validation current + possible improvements); 022 testing note 2026-03-19 (closing reviewer). Cargo.lock version synced to 0.1.45.
 - **Docs 005 §63, 006, 011, 022** — OpenClaw re-verification §63 (005); FEATURE-CODER backlog: 011 security review done, retry loop and more RUN_CMD features as optional/open (006); docs/011_local_cmd_agent.md new § "Security review (measures in place)" and open tasks moved to FEATURE-CODER (011); 022 testing note 2026-03-19 (closing reviewer).
 - **Docs 005 §62, 006, 011, 022** — OpenClaw re-verification §62 (005); FEATURE-CODER backlog row for 011 RUN_CMD docs done (006); docs/011_local_cmd_agent.md updated (shell execution, allowlist case-insensitive, pipelines, duplicate detection, TASK_APPEND full output, RUN_CMD naming, retry count, tool iterations); 022 testing note 2026-03-19 (closing reviewer).
 - **Docs 005 §61, 006, 019, 022** — OpenClaw re-verification §61 (005); FEATURE-CODER backlog row for 019 manual-edit long-term memory done (006); 019 new § "Manual edit of long-term memory (future)" and open task marked done; 022 testing note 2026-03-19 (closing reviewer).

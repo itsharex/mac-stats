@@ -111,6 +111,6 @@ The Coder currently edits this repo **in place** (yolo mode) via the mac-stats-a
 | docs/011_local_cmd_agent.md | ~~Update documentation to reflect current RUN_CMD implementation~~ | **Done:** 011 updated: shell execution, allowlist case-insensitive, pipelines, duplicate detection, TASK_APPEND full output, RUN_CMD naming, retry count, tool iterations; Open task marked done. |
 | docs/011_local_cmd_agent.md | ~~Review security measures for RUN_CMD~~ | **Done:** § "Security review (measures in place)" in 011 (allowlist, path validation, shell scope, cursor-agent caveat, ALLOW_LOCAL_CMD); 011 Open tasks point to this backlog. |
 | docs/011_local_cmd_agent.md | ~~Improve RUN_CMD retry loop (error handling / UX)~~ | **Done:** only accept RUN_CMD in fix suggestion; one format-only retry when parse fails; clearer messages (format required, could not get corrected command). |
-| docs/011_local_cmd_agent.md | Consider more RUN_CMD features (more commands, path validation) | Doc/design only; no code required. |
+| docs/011_local_cmd_agent.md | ~~Consider more RUN_CMD features (more commands, path validation)~~ | **Done:** § "More RUN_CMD features (design only)" in 011 (candidate commands table, path validation current + possible improvements); doc only. |
 
 Start with the first FEAT you can complete end-to-end (code or doc), then move to the next. When all rows above are done, check **docs/006_roadmap_ai_tasks.md** (Mail, WhatsApp, Google Docs) or other docs’ "Open tasks" for new candidates.
