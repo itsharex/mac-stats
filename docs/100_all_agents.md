@@ -58,5 +58,5 @@ Gatekeeper may show "damaged" or block the unsigned app—the file is fine. Righ
 - Review whether `run_local_command` is sufficiently hardened against shell-injection-style misuse.
 - Consider support for more advanced Python-script execution workflows.
 - Consider whether additional external tool integrations belong in the agent layer.
-- Implement more robust handling for MCP server errors.
+- ~~Implement more robust handling for MCP server errors.~~ **Done:** Error-handling § in docs/010_mcp_agent.md; one retry for transient errors in mcp/mod.rs (list_tools, call_tool). See 006-feature-coder/FEATURE-CODER.md.
 - Improve the user interface for scheduling tasks.

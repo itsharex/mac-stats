@@ -116,6 +116,19 @@ Ollama will reply with something like `MCP: airbnb_search {"location":"Paris, Fr
 
 When adding a new server, ensure it supports the transport you use (HTTP/SSE for internet, stdio for local).
 
+## Error handling
+
+When the MCP server is unreachable or a call fails, the app behaves as follows:
+
+| Situation | What happens | What the user / model sees |
+|------------|--------------|-----------------------------|
+| **tools/list fails** (e.g. server down, timeout, bad URL) | MCP is omitted from the agent list for that request. A log line is written: `MCP list_tools failed (...), omitting MCP from agent list`. | Ollama does not see MCP in the tool list; it will not try to use MCP. No user-facing error unless they check logs. |
+| **MCP not configured** (no `MCP_SERVER_URL` / `MCP_SERVER_STDIO`) | MCP is not offered. If the model outputs `MCP: ...`, the tool loop returns a fixed message. | "MCP is not configured (set MCP_SERVER_URL in env or .config.env). Answer without using MCP." |
+| **tools/call fails** (timeout, server error, tool returned error) | The error string is pushed into the conversation and the tool loop continues. | "MCP tool \"&lt;name&gt;\" failed: &lt;error&gt;. Answer the user without this result." The model can still reply using other context. |
+| **Transient failures** (connection refused, timeout, network) | The client retries **once** for `list_tools` and `tools/call`; if the retry fails, the above behaviour applies. | Same as above after the retry fails. |
+
+Server URLs are masked in logs (host only) to avoid leaking full endpoints. Tool-call errors from the server (e.g. invalid arguments) are passed through so the model can adjust.
+
 ## Implementation
 
 - **Module**: `src-tauri/src/mcp/mod.rs` — MCP client for both transports: `list_tools(server_config)`, `call_tool(server_config, tool_name, arguments)`. If config starts with `stdio:` (from **MCP_SERVER_STDIO**), spawns the process and talks JSON-RPC over stdin/stdout; otherwise uses HTTP/SSE with the URL.

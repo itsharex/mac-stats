@@ -104,6 +104,18 @@ fn parse_stdio_spec(server_config: &str) -> Option<(String, Vec<String>)> {
     Some((cmd, args))
 }
 
+/// Heuristic: true if the error looks like a transient network/connection issue worth retrying once.
+fn is_transient_mcp_error(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    lower.contains("timeout")
+        || lower.contains("connection refused")
+        || lower.contains("connection reset")
+        || lower.contains("timed out")
+        || lower.contains("eof")
+        || lower.contains("connection closed")
+        || lower.contains("tcp connect")
+}
+
 /// Mask URL for logs (show host only).
 fn mask_url_for_log(url: &str) -> String {
     if url.len() <= 40 {
@@ -446,8 +458,7 @@ async fn run_mcp_stdio_rpc(
     Ok(rpc_response)
 }
 
-/// List tools from the MCP server.
-pub async fn list_tools(server_url: &str) -> Result<Vec<McpTool>, String> {
+async fn list_tools_once(server_url: &str) -> Result<Vec<McpTool>, String> {
     if let Some((cmd, args)) = parse_stdio_spec(server_url) {
         info!("MCP: listing tools from stdio server {}", cmd);
         let response =
@@ -504,17 +515,27 @@ pub async fn list_tools(server_url: &str) -> Result<Vec<McpTool>, String> {
     Ok(tools)
 }
 
-/// Call an MCP tool by name with optional JSON arguments. Returns the tool result as text.
-pub async fn call_tool(
+/// List tools from the MCP server. Retries once on transient connection/timeout errors.
+pub async fn list_tools(server_url: &str) -> Result<Vec<McpTool>, String> {
+    let mut err = match list_tools_once(server_url).await {
+        Ok(t) => return Ok(t),
+        Err(e) => e,
+    };
+    if is_transient_mcp_error(&err) {
+        warn!("MCP list_tools transient error, retrying once: {}", err);
+        err = match list_tools_once(server_url).await {
+            Ok(t) => return Ok(t),
+            Err(e) => e,
+        };
+    }
+    Err(err)
+}
+
+async fn call_tool_once(
     server_url: &str,
     tool_name: &str,
-    arguments: Option<serde_json::Value>,
+    params: Option<serde_json::Value>,
 ) -> Result<String, String> {
-    let params = Some(serde_json::json!({
-        "name": tool_name,
-        "arguments": arguments.unwrap_or(serde_json::json!({}))
-    }));
-
     if let Some((cmd, args)) = parse_stdio_spec(server_url) {
         info!("MCP: calling tool {} on stdio server {}", tool_name, cmd);
         let response = run_mcp_stdio_rpc(&cmd, &args, "tools/call", params).await?;
@@ -596,4 +617,30 @@ pub async fn call_tool(
     } else {
         text
     })
+}
+
+/// Call an MCP tool by name with optional JSON arguments. Returns the tool result as text.
+/// Retries once on transient connection/timeout errors.
+pub async fn call_tool(
+    server_url: &str,
+    tool_name: &str,
+    arguments: Option<serde_json::Value>,
+) -> Result<String, String> {
+    let params = Some(serde_json::json!({
+        "name": tool_name,
+        "arguments": arguments.unwrap_or(serde_json::json!({}))
+    }));
+
+    let mut err = match call_tool_once(server_url, tool_name, params.clone()).await {
+        Ok(t) => return Ok(t),
+        Err(e) => e,
+    };
+    if is_transient_mcp_error(&err) {
+        warn!("MCP call_tool {} transient error, retrying once: {}", tool_name, err);
+        err = match call_tool_once(server_url, tool_name, params).await {
+            Ok(t) => return Ok(t),
+            Err(e) => e,
+        };
+    }
+    Err(err)
 }
