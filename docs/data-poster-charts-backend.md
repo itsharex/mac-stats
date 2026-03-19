@@ -74,7 +74,7 @@ pub struct CpuDetails {
 * Potential Enhancement: Backend could apply moving average or exponential smoothing to reduce noise in charts.
 
 ## Open tasks:
-- Investigate why the frontend is not utilizing the historical data buffer effectively.
+- ~~Investigate why the frontend is not utilizing the historical data buffer effectively.~~ **Done:** Root cause: the Data Poster theme (and others) had history-section canvases (`temperature-history-chart`, etc.) but did not load `history.js`. The backend exposes `get_metrics_history` (adaptive tiered buffer in `metrics/history.rs`); `history.js` calls it and draws the history charts. Fix: Data Poster theme now loads `../../history.js` in `themes/data-poster/cpu.html`, so the history section uses the backend buffer. Real-time bar/line charts still use `poster-charts.js` + frontend buffer from `get_cpu_details()` (unchanged). See 006-feature-coder/FEATURE-CODER.md.
 - Implement chart-specific refresh rates for each metric.
 - Consider adding data smoothing to reduce noise in charts.
 - Review and refactor the `get_cpu_details()` API response to improve performance and consistency.
