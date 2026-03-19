@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Docs 005 §61, 006, 019, 022** — OpenClaw re-verification §61 (005); FEATURE-CODER backlog row for 019 manual-edit long-term memory done (006); 019 new § "Manual edit of long-term memory (future)" and open task marked done; 022 testing note 2026-03-19 (closing reviewer).
 - **Docs 005 §60, 006, 022** — OpenClaw re-verification §60 (005); FEATURE-CODER backlog row for 022 toggle_cpu_window verification done (006): verified in status_bar.rs that always-recreate after close is intentional; 022 F9 checklist and smoke note (build, run, debug.log) (2026-03-19).
 - **Docs 005 §59, 006, 019, 022** — OpenClaw re-verification §59 (005); FEATURE-CODER backlog row for 019 conversation-history storage structure review done (006); 019 new § "Conversation-history storage structure (review)" (in-memory HashMap+Vec, persistence one file per persist, when to revisit; no code change) and open task closed; 022 testing note (2026-03-19).
 - **Docs 005 §58, 006, 014, 022** — OpenClaw re-verification §58 (005); FEATURE-CODER row for 014 Python agent docs done (006); docs/014_python_agent.md expanded (when to use, config precedence, invocation examples, behaviour, security, troubleshooting table, PYTHON_SCRIPT in tool table); 022 testing note 2026-03-19.

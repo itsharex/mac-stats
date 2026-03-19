@@ -119,8 +119,13 @@ On **session reset** (user says "new topic", "reset", etc.), the app clears the 
 - **Persistence:** Each persist writes a **new** file `session-memory-{session_id}-{timestamp}-{topic}.md` under `~/.mac-stats/session/`. That yields multiple files per channel over time. Resume uses the **latest** file (by mtime) for that session_id. Trade-off: many small files give a clear history and simple recovery; a single append-only file per channel would require rotation and more complex truncation. **Recommendation:** Keep current design. Revisit only if we observe thousands of session files per channel or I/O becomes a bottleneck (e.g. `list_sessions` + many `load_messages_from_latest_session_file` calls); then consider (a) single file per channel with append + periodic rotation, or (b) compaction that keeps only the latest N files per session_id.
 - **Conclusion:** No optimization required for current scale. Documented here so future changes have a clear baseline and trigger.
 
+### Manual edit of long-term memory (future)
+
+- **Current:** Long-term context is loaded from files under `~/.mac-stats/` (e.g. `agents/memory.md`, `session/*.md`). Users can edit these files directly on disk; the app does not provide an in-app or Discord UI to edit them.
+- **Possible enhancement:** A mechanism for users to manually edit or update long-term memory could include: (a) a Tauri command or Settings UI to append/update entries in a designated memory file; (b) a Discord command or keyword (e.g. "remember: …") that appends a fact to the main session memory file; or (c) a "Memory" tab in Settings that lists and edits the same files the agent loads. Out of scope for the current rollout; implement when users request it or when semantic long-term memory is added.
+
 ## Open tasks:
 
 - ~~Review whether the `session_memory` implementation is correct and efficient.~~ **Done:** see "Session memory implementation review" above; parser fix for first block in `session_memory.rs`.
 - ~~Review whether the current conversation-history storage structure should be optimized.~~ **Done:** see "Conversation-history storage structure (review)" above; current design kept; revisit only if scale or I/O demands it.
-- Consider adding a mechanism for users to manually edit or update their long-term memory.
+- ~~Consider adding a mechanism for users to manually edit or update their long-term memory.~~ **Done:** documented above as future consideration ("Manual edit of long-term memory"); no implementation.
