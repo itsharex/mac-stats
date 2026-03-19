@@ -113,8 +113,14 @@ On **session reset** (user says "new topic", "reset", etc.), the app clears the 
 - **Efficiency**: Lock is held only for in-memory reads/writes and a single clone for persist; I/O runs outside the lock. Message count is small (typical cap 20); list_sessions is O(sessions). Redundant normalization on read (get_messages) is acceptable; stored messages are already normalized on add.
 - **Storage structure**: In-memory store is a `HashMap<key, SessionState>` with `Vec<(String, String)>` messages; persistence is one file per session (append-only style, new file per persist with timestamp). For typical channel/session counts this is fine; no change needed for now.
 
+### Conversation-history storage structure (review)
+
+- **In-memory:** One `HashMap<String, SessionState>` keyed by `"{source}-{session_id}"` (e.g. `discord-12345`). Each `SessionState` holds a `Vec<(String, String)>` of (role, content), plus topic_slug, created_at, last_activity. Lookup is O(1); message count per session is small (capped at 20 conversational at use site). For typical usage (dozens of Discord channels plus main session), this is efficient; no index or different structure needed.
+- **Persistence:** Each persist writes a **new** file `session-memory-{session_id}-{timestamp}-{topic}.md` under `~/.mac-stats/session/`. That yields multiple files per channel over time. Resume uses the **latest** file (by mtime) for that session_id. Trade-off: many small files give a clear history and simple recovery; a single append-only file per channel would require rotation and more complex truncation. **Recommendation:** Keep current design. Revisit only if we observe thousands of session files per channel or I/O becomes a bottleneck (e.g. `list_sessions` + many `load_messages_from_latest_session_file` calls); then consider (a) single file per channel with append + periodic rotation, or (b) compaction that keeps only the latest N files per session_id.
+- **Conclusion:** No optimization required for current scale. Documented here so future changes have a clear baseline and trigger.
+
 ## Open tasks:
 
 - ~~Review whether the `session_memory` implementation is correct and efficient.~~ **Done:** see "Session memory implementation review" above; parser fix for first block in `session_memory.rs`.
-- Review whether the current conversation-history storage structure should be optimized.
+- ~~Review whether the current conversation-history storage structure should be optimized.~~ **Done:** see "Conversation-history storage structure (review)" above; current design kept; revisit only if scale or I/O demands it.
 - Consider adding a mechanism for users to manually edit or update their long-term memory.
