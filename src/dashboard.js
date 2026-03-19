@@ -301,6 +301,7 @@ function showSettingsDialog(openTab) {
     loadSettingsAlertChannels();
     loadSettingsSchedules();
     loadSettingsSkills();
+    loadSettingsOllama();
     setupAlertChannelTypeVisibility();
     setupScheduleTypeVisibility();
 }
@@ -377,6 +378,10 @@ function setupSettingsModalListeners() {
     document.getElementById('settings-add-schedule-btn').addEventListener('click', addScheduleFromSettings);
     document.getElementById('alert-channel-type').addEventListener('change', setupAlertChannelTypeVisibility);
     document.getElementById('schedule-type').addEventListener('change', setupScheduleTypeVisibility);
+    const refreshModelsBtn = document.getElementById('ollama-refresh-models-btn');
+    if (refreshModelsBtn) refreshModelsBtn.addEventListener('click', refreshOllamaModels);
+    const ollamaApplyBtn = document.getElementById('ollama-apply-btn');
+    if (ollamaApplyBtn) ollamaApplyBtn.addEventListener('click', applyOllamaConfig);
 }
 
 function setupScheduleTypeVisibility() {
@@ -408,6 +413,77 @@ async function loadSettingsSkills() {
         }
     } catch (err) {
         listEl.innerHTML = `<p class="settings-error">Failed to load: ${escapeHtml(String(err))}</p>`;
+    }
+}
+
+async function loadSettingsOllama() {
+    const endpointEl = document.getElementById('ollama-endpoint');
+    const modelEl = document.getElementById('ollama-model');
+    const statusEl = document.getElementById('ollama-config-status');
+    if (!endpointEl || !modelEl) return;
+    try {
+        const config = await invoke('get_ollama_config');
+        if (config) {
+            endpointEl.value = config.endpoint || 'http://localhost:11434';
+            if (statusEl) statusEl.textContent = '';
+            await refreshOllamaModels();
+            if (config.model && modelEl.options.length > 0) {
+                const found = Array.from(modelEl.options).find(o => o.value === config.model);
+                if (found) modelEl.value = config.model; else modelEl.value = modelEl.options[0]?.value || '';
+            }
+        } else {
+            endpointEl.value = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434';
+            modelEl.innerHTML = '<option value="">— Load models first —</option>';
+            if (statusEl) statusEl.textContent = 'Not configured. Enter endpoint, refresh models, select model, then Apply.';
+        }
+    } catch (err) {
+        endpointEl.value = 'http://localhost:11434';
+        modelEl.innerHTML = '<option value="">— Load models first —</option>';
+        if (statusEl) statusEl.textContent = '';
+    }
+}
+
+async function refreshOllamaModels() {
+    const endpointEl = document.getElementById('ollama-endpoint');
+    const modelEl = document.getElementById('ollama-model');
+    const statusEl = document.getElementById('ollama-config-status');
+    if (!endpointEl || !modelEl) return;
+    const endpoint = endpointEl.value.trim() || 'http://localhost:11434';
+    if (statusEl) statusEl.textContent = 'Loading…';
+    try {
+        const models = await invoke('list_ollama_models_at_endpoint', { endpoint });
+        const current = modelEl.value;
+        modelEl.innerHTML = models.length === 0
+            ? '<option value="">No models at this endpoint</option>'
+            : '<option value="">— Select model —</option>' + models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+        if (current && models.includes(current)) modelEl.value = current;
+        if (statusEl) statusEl.textContent = '';
+    } catch (err) {
+        modelEl.innerHTML = '<option value="">— Load failed —</option>';
+        if (statusEl) statusEl.textContent = `Failed: ${escapeHtml(String(err))}`;
+    }
+}
+
+async function applyOllamaConfig() {
+    const endpointEl = document.getElementById('ollama-endpoint');
+    const modelEl = document.getElementById('ollama-model');
+    const statusEl = document.getElementById('ollama-config-status');
+    if (!endpointEl || !modelEl) return;
+    const endpoint = (endpointEl.value.trim() || 'http://localhost:11434').replace(/\/$/, '');
+    const model = modelEl.value?.trim();
+    if (!model) {
+        if (statusEl) statusEl.textContent = 'Select a model first (use Refresh models if needed).';
+        return;
+    }
+    if (statusEl) statusEl.textContent = 'Applying…';
+    try {
+        await invoke('configure_ollama', { endpoint, model });
+        if (window.Ollama?.saveOllamaEndpoint) window.Ollama.saveOllamaEndpoint(endpoint);
+        const ok = await invoke('check_ollama_connection');
+        if (statusEl) statusEl.textContent = ok ? 'Saved and connected.' : 'Saved; connection check failed.';
+        if (window.Ollama?.checkConnection) window.Ollama.checkConnection();
+    } catch (err) {
+        if (statusEl) statusEl.textContent = `Failed: ${escapeHtml(String(err))}`;
     }
 }
 

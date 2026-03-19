@@ -197,6 +197,8 @@ fn run_internal(open_cpu_window: bool) {
             commands::plugins::run_due_plugins,
             // Ollama commands
             commands::ollama::configure_ollama,
+            commands::ollama::get_ollama_config,
+            commands::ollama::list_ollama_models_at_endpoint,
             commands::ollama::check_ollama_connection,
             commands::ollama::ollama_chat,
             commands::ollama::list_ollama_models,

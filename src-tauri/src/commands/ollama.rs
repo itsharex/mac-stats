@@ -261,6 +261,66 @@ pub fn configure_ollama(config: OllamaConfigRequest) -> Result<(), String> {
     Ok(())
 }
 
+/// Response for get_ollama_config (endpoint and model only; no API key).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OllamaConfigResponse {
+    pub endpoint: String,
+    pub model: String,
+}
+
+/// Return current Ollama endpoint and model if configured. Used by Settings UI to pre-fill the form.
+#[tauri::command]
+pub fn get_ollama_config() -> Option<OllamaConfigResponse> {
+    let guard = get_ollama_client().lock().ok()?;
+    let client = guard.as_ref()?;
+    Some(OllamaConfigResponse {
+        endpoint: client.config.endpoint.clone(),
+        model: client.config.model.clone(),
+    })
+}
+
+/// List model names at an arbitrary endpoint (GET /api/tags). Does not require Ollama to be configured.
+/// Used by Settings UI to populate the model dropdown before or after configuring.
+#[tauri::command]
+pub async fn list_ollama_models_at_endpoint(endpoint: String) -> Result<Vec<String>, String> {
+    use tracing::debug;
+
+    let endpoint = endpoint.trim().trim_end_matches('/').to_string();
+    if endpoint.is_empty() {
+        return Err("Endpoint URL is required".to_string());
+    }
+    let url = format!("{}/api/tags", endpoint);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let response: serde_json::Value = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| {
+            debug!("Ollama: list_ollama_models_at_endpoint failed: {}", e);
+            format!("Failed to request models: {}", e)
+        })?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let models: Vec<String> = response
+        .get("models")
+        .and_then(|m| m.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    m.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(models)
+}
+
 /// Check Ollama connection (async, non-blocking)
 #[tauri::command]
 pub async fn check_ollama_connection() -> Result<bool, String> {

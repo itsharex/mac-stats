@@ -108,6 +108,7 @@
             <button type="button" class="settings-tab" data-tab="alerts">Alert channels</button>
             <button type="button" class="settings-tab" data-tab="schedules">Schedules</button>
             <button type="button" class="settings-tab" data-tab="skills">Skills</button>
+            <button type="button" class="settings-tab" data-tab="ollama">Ollama</button>
           </div>
 
           <section class="settings-panel active" id="settings-monitors">
@@ -205,6 +206,28 @@
             <h4>Skills</h4>
             <p class="settings-hint">Markdown files in <code>~/.mac-stats/agents/skills/</code> (e.g. <code>skill-1-summarize.md</code>). Used as system-prompt overlays; invoke via <code>SKILL: &lt;number or topic&gt;</code> in chat or Discord.</p>
             <div class="settings-list" id="settings-skills-list"></div>
+          </section>
+
+          <section class="settings-panel" id="settings-ollama">
+            <h4>Ollama (AI chat)</h4>
+            <p class="settings-hint">Endpoint and model used for AI chat and Discord agent. Change here or in the CPU window; both use the same backend config.</p>
+            <div class="settings-form">
+              <div class="form-row">
+                <label for="ollama-endpoint">Endpoint URL</label>
+                <input type="url" id="ollama-endpoint" placeholder="http://localhost:11434" />
+              </div>
+              <div class="form-row form-row-inline">
+                <label for="ollama-model">Model</label>
+                <select id="ollama-model">
+                  <option value="">— Load models first —</option>
+                </select>
+                <button type="button" class="btn-secondary" id="ollama-refresh-models-btn">Refresh models</button>
+              </div>
+              <div class="form-row form-row-inline">
+                <span id="ollama-config-status" class="settings-hint"></span>
+                <button type="button" class="btn-primary" id="ollama-apply-btn">Apply</button>
+              </div>
+            </div>
           </section>
         </div>
       </div>

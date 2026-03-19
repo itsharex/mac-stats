@@ -562,6 +562,21 @@ body {
   background: rgba(33, 150, 243, 1);
 }
 
+.btn-secondary {
+  margin-left: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .settings-empty,
 .settings-error {
   font-size: 13px;

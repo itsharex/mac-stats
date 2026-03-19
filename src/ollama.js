@@ -1050,6 +1050,7 @@ window.Ollama = {
   
   // Utils
   getEndpoint: getOllamaEndpoint,
+  saveOllamaEndpoint: saveOllamaEndpoint,
   getSystemPrompt: getSystemPrompt,
   escapeHtml: escapeHtml
 };
