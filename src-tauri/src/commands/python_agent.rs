@@ -6,7 +6,7 @@
 
 use std::path::Path;
 use std::process::Command;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Read ALLOW_PYTHON_SCRIPT from env or .config.env. "0", "false", "no" => false; default true.
 fn allow_python_script_from_config_env_file(path: &Path) -> Option<bool> {
@@ -94,7 +94,11 @@ pub fn run_python_script(id: &str, topic: &str, script_body: &str) -> Result<Str
     let output = Command::new("python3")
         .arg(&script_path)
         .output()
-        .map_err(|e| format!("Failed to run python3: {}", e))?;
+        .map_err(|e| {
+            let msg = format!("Failed to run python3: {} (script: {})", e, script_path.display());
+            warn!("PYTHON_SCRIPT: {}", msg);
+            msg
+        })?;
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -102,6 +106,26 @@ pub fn run_python_script(id: &str, topic: &str, script_body: &str) -> Result<Str
     } else {
         let code = output.status.code().unwrap_or(-1);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("exit code {}: {}", code, stderr.trim()))
+        let stderr_trim = stderr.trim();
+        let stderr_preview: String = {
+            let s: String = stderr_trim.chars().take(500).collect();
+            if stderr_trim.chars().count() > 500 {
+                format!("{}…", s)
+            } else {
+                s
+            }
+        };
+        warn!(
+            "PYTHON_SCRIPT failed: script={}, exit_code={}, stderr_preview={:?}",
+            script_path.display(),
+            code,
+            stderr_preview
+        );
+        Err(format!(
+            "{}: exit code {}: {}",
+            script_path.display(),
+            code,
+            stderr_trim
+        ))
     }
 }

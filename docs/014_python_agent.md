@@ -106,6 +106,6 @@ print(total)
 
 ## Open tasks
 
-- Investigate why some users report issues with the Python script agent.
+- ~~Investigate why some users report issues with the Python script agent.~~ **Done:** Improved diagnostics: script path in user-facing error; on failure and on spawn failure, `tracing::warn!` logs script path, exit code, and stderr preview (500 chars) to `~/.mac-stats/debug.log` for easier debugging.
 - ~~Improve the documentation for the Python script agent to make it more user-friendly.~~ **Done:** When to use, setup (config precedence), invocation examples, behaviour (path, no timeout, tool cap), security, troubleshooting table.
 - Review the security of the app to ensure it is robust against potential vulnerabilities.
