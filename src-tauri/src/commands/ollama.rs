@@ -5801,54 +5801,73 @@ pub fn answer_with_ollama_and_fetch(
                                             );
                                             break;
                                         }
-                                        // Ask Ollama to fix the command
+                                        // Ask Ollama to fix the command (up to 2 attempts: full prompt, then format-only if parse fails)
                                         let allowed =
                                             crate::commands::run_cmd::allowed_commands().join(", ");
-                                        let fix_prompt = format!(
+                                        let mut fix_prompt = format!(
                                             "The command `{}` failed with error:\n{}\n\nReply with ONLY the corrected command on a single line, in this exact format:\nRUN_CMD: <corrected command>\n\nAllowed commands: {}. Paths must be under ~/.mac-stats.",
                                             current_cmd, e, allowed
                                         );
-                                        let fix_messages = vec![crate::ollama::ChatMessage {
-                                            role: "user".to_string(),
-                                            content: fix_prompt,
-                                            images: None,
-                                        }];
-                                        match send_ollama_chat_messages(
-                                            fix_messages,
-                                            model_override.clone(),
-                                            options_override.clone(),
-                                        )
-                                        .await
-                                        {
-                                            Ok(resp) => {
-                                                let fixed = resp.message.content.trim().to_string();
-                                                info!(
-                                                    "Agent router: RUN_CMD fix suggestion: {}",
-                                                    crate::logging::ellipse(&fixed, 120)
-                                                );
-                                                if let Some((_, new_arg)) =
-                                                    parse_tool_from_response(&fixed)
-                                                {
-                                                    current_cmd = new_arg;
-                                                } else {
+                                        let mut fix_parse_retried = false;
+                                        loop {
+                                            let fix_messages = vec![crate::ollama::ChatMessage {
+                                                role: "user".to_string(),
+                                                content: fix_prompt.clone(),
+                                                images: None,
+                                            }];
+                                            match send_ollama_chat_messages(
+                                                fix_messages,
+                                                model_override.clone(),
+                                                options_override.clone(),
+                                            )
+                                            .await
+                                            {
+                                                Ok(resp) => {
+                                                    let fixed = resp.message.content.trim().to_string();
+                                                    info!(
+                                                        "Agent router: RUN_CMD fix suggestion: {}",
+                                                        crate::logging::ellipse(&fixed, 120)
+                                                    );
+                                                    match parse_tool_from_response(&fixed) {
+                                                        Some((tool, new_arg)) if tool == "RUN_CMD" => {
+                                                            current_cmd = new_arg;
+                                                            break;
+                                                        }
+                                                        _ => {
+                                                            if !fix_parse_retried {
+                                                                fix_parse_retried = true;
+                                                                fix_prompt = format!(
+                                                                    "Your previous reply was not in the required format. Reply with exactly one line: RUN_CMD: <command>. No other text, no explanation.\n\nOriginal error: {}\nFailed command: {}",
+                                                                    e, current_cmd
+                                                                );
+                                                                continue;
+                                                            }
+                                                            info!(
+                                                                "Agent router: RUN_CMD fix suggestion not parseable as RUN_CMD (after format retry)"
+                                                            );
+                                                            last_output = format!(
+                                                                "RUN_CMD failed: {}. The model's corrected command was not in the required format (exactly one line: RUN_CMD: <command>). Answer the user's question only; do not include Redmine or other unrelated tool output.",
+                                                                e
+                                                            );
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                Err(ollama_err) => {
+                                                    info!(
+                                                        "Agent router: RUN_CMD fix Ollama call failed: {}",
+                                                        ollama_err
+                                                    );
                                                     last_output = format!(
-                                                        "RUN_CMD failed: {}. AI could not produce a corrected command. Answer the user's question only; do not include Redmine or other unrelated tool output.",
+                                                        "RUN_CMD failed: {}. Could not get a corrected command from the model. Answer the user's question only; do not include Redmine or other unrelated tool output.",
                                                         e
                                                     );
                                                     break;
                                                 }
                                             }
-                                            Err(ollama_err) => {
-                                                info!(
-                                                    "Agent router: RUN_CMD fix Ollama call failed: {}",
-                                                    ollama_err
-                                                );
-                                                last_output = format!(
-                                                    "RUN_CMD failed: {}. Answer the user's question only; do not include Redmine or other unrelated tool output.",
-                                                    e
-                                                );
-                                                break;
-                                            }
+                                        }
+                                        if !last_output.is_empty() {
+                                            break;
                                         }
                                     }
                                 }

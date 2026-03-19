@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unknown-tool handling in tool loop (032)** — In `ollama.rs` tool loop, the catch-all for unknown tools no longer silently skips; unknown tools now produce a user-facing hint ("Unknown tool \"X\". Use one of the available tools...") and `tracing::warn!` so the model gets feedback and logs are traceable. Docs 005 §56 re-verification, 006 FEATURE-CODER and 032 open task marked done, 022 smoke note.
 - **Session memory parser fix (019)** — `parse_session_file` in `session_memory.rs` now trims leading `## ` from each block so the first User/Assistant block is recognized when loading session files. Docs 019 implementation review done, 005 §57 re-verification, 006 FEATURE-CODER backlog, 022 testing note (2026-03-18).
 
+## [0.1.45] - 2026-03-19
+
+### Changed
+- **RUN_CMD fix retry and docs 005 §64, 006, 011, 022** — Agent router RUN_CMD: only accept RUN_CMD in fix suggestion; one format-only retry when parse fails; clearer messages (format required, could not get corrected command). OpenClaw re-verification §64 (005); FEATURE-CODER backlog row RUN_CMD retry loop done (006); docs/011 retry steps and open task done; 022 testing note 2026-03-19.
+
 ## [0.1.44] - 2026-03-18
 
 ### Changed

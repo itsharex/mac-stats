@@ -73,9 +73,9 @@ When a command fails (non-zero exit code), the app does **not** give up immediat
 
 1.  The error message (e.g. `cat: to: No such file or directory`) is sent to Ollama in a focused, minimal prompt: *"The command `<cmd>` failed with error: `<error>`. Reply with ONLY the corrected command: `RUN_CMD: <corrected command>`."*
 2.  Ollama returns the corrected command (e.g. `RUN_CMD: cat ~/.mac-stats/schedules.json`).
-3.  The corrected command is extracted via `parse_tool_from_response` and executed.
-4.  If it succeeds, the output is used. If it fails again, the loop repeats (up to 3 retries).
-5.  If all retries fail, the last error is returned.
+3.  The reply is parsed; only a line in the form `RUN_CMD: <command>` is accepted. If the model’s reply is not parseable or is another tool, the app sends one more prompt asking for *exactly one line: `RUN_CMD: <command>`* with no other text; if that also fails to parse, the app returns a clear message that the corrected command was not in the required format.
+4.  The corrected command is executed. If it succeeds, the output is used. If it fails again, the loop repeats (up to 3 retries).
+5.  If all retries fail, or the model never returns a valid RUN_CMD line, the last error (or a format-failure message) is returned.
 
 This handles the common case where the model appends plan commentary to the command arg (e.g. `cat file.json to view the schedule, then REMOVE_SCHEDULE: <id>`), which causes `cat` to fail on the extra words. The retry prompt forces the model to output just the clean command.
 
@@ -114,3 +114,4 @@ RUN_CMD open tasks are tracked in **006-feature-coder/FEATURE-CODER.md**. Comple
 
 *   ~~Update the documentation to better reflect the current implementation and usage of the RUN_CMD agent.~~ **Done:** doc updated to match code (shell execution, allowlist section case-insensitive, pipelines, duplicate detection, TASK_APPEND full output, RUN_CMD naming, retry count, tool iterations).
 *   ~~Review the security measures in place to prevent unauthorized access to the app's data and functionality.~~ **Done:** § "Security review (measures in place)" above (allowlist, path validation, shell scope, cursor-agent caveat, ALLOW_LOCAL_CMD).
+*   ~~Improve RUN_CMD retry loop (error handling / UX).~~ **Done:** only RUN_CMD lines accepted in fix suggestion; one format-only retry when parse fails; clearer user-facing messages (format required, could not get corrected command).
