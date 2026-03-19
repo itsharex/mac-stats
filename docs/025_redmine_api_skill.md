@@ -57,8 +57,47 @@ That loop now normalizes `RECOMMEND:` wrappers and inline mixed-tool text before
 - Add comment: `REDMINE_API: PUT /issues/<id>.json {"issue":{"notes":"..."}}`
 - Add private note: `REDMINE_API: PUT /issues/<id>.json {"issue":{"notes":"...","private_notes":true}}`
 
-## Open tasks:
+## Configuration
 
-- Implement a more robust way to handle Redmine API errors.
-- Improve the documentation for the `REDMINE_API` command.
-- Consider adding support for other Redmine features, such as issue attachments and custom fields.
+Redmine is configured via environment variables or a config file. The app reads (in order):
+
+1. **Environment**: `REDMINE_URL`, `REDMINE_API_KEY`
+2. **Config file**: `.config.env` or `.env.config` in current directory, `src-tauri`, or `~/.mac-stats/.config.env`
+
+Format: one key per line, e.g. `REDMINE_URL=https://redmine.example.com` and `REDMINE_API_KEY=your-api-key`. Values may be quoted. If both env and file set a key, env wins.
+
+- **REDMINE_URL**: Base URL of the Redmine server (no trailing slash). Must be HTTPS in production.
+- **REDMINE_API_KEY**: Your Redmine API key (My account → API access). Required for all requests; sent as `X-Redmine-API-Key` header.
+
+If either is missing, the tool returns: "Redmine not configured (REDMINE_URL missing...)" or "...REDMINE_API_KEY missing...".
+
+## Error handling
+
+| Situation | What the user sees |
+|-----------|--------------------|
+| Not configured | "Redmine not configured (REDMINE_URL missing from env or .config.env)" or same for REDMINE_API_KEY. |
+| Invalid or expired API key (401) | "Redmine API 401: Unauthorized" plus a short body snippet. Check API key and that it is enabled in Redmine. |
+| Not found (404) | "Redmine API 404: Not Found" plus path/body. Check issue ID, project ID, or path. |
+| Validation error (422) | Friendly message: "Redmine didn't accept the query (invalid parameters, e.g. updated_on). Use a date in YYYY-MM-DD or a range like YYYY-MM-DD..YYYY-MM-DD." For other 422 cases the response body may contain field errors. |
+| Other HTTP error (4xx/5xx) | "Redmine API &lt;status&gt;: &lt;first 500 chars of body&gt;". |
+| Timeout / network failure | "Redmine request failed: &lt;error&gt;" (e.g. connection timeout after 20s). |
+| Invalid JSON body (POST/PUT) | "Invalid JSON body: &lt;parse error&gt;". |
+| Method/path not allowed | "Redmine API: method X not allowed for path Y (GET anything, POST /issues.json to create, PUT only issues/{id}.json)". |
+
+All errors are returned as the tool result so the LLM (and user) can see why the call failed and adjust.
+
+## Implementation
+
+- **Module**: `src-tauri/src/redmine/mod.rs`
+- **Entry**: `redmine_api_request(method, path, body)` — used by the agent router when the model replies with `REDMINE_API: ...`
+- **Create context**: Projects, trackers, statuses, and priorities are fetched and cached (5 min TTL) for the create-issue flow; see `build_agent_descriptions` in the router.
+- **Time entries**: GET `/time_entries.json` is handled by a dedicated path that aggregates and summarizes entries (see `fetch_and_summarize_time_entries`).
+
+## Open tasks
+
+Redmine open tasks and completed items are tracked in **006-feature-coder/FEATURE-CODER.md**. Completed:
+
+- ~~Implement a more robust way to handle Redmine API errors.~~ **Done:** 401/404/422 and generic status get clear messages (401: check API key; 404: check ID/path; 422: date format hint); see `redmine_api_request` in `redmine/mod.rs`.
+- ~~Improve the documentation for the `REDMINE_API` command.~~ **Done:** Configuration, Error handling (table), and Implementation sections added above.
+
+Remaining: consider adding support for other Redmine features (e.g. issue attachments, custom fields).

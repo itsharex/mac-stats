@@ -69,7 +69,7 @@ Review of all **OpenClaw-related** references in mac-stats: docs, code, and defa
 
 ## 6. Status
 
-- **Review date:** 2026-03-08 (initial); re-verified 2026-03-18 (§55, §56, §57); 2026-03-19 (§58–§65).  
+- **Review date:** 2026-03-08 (initial); re-verified 2026-03-18 (§55, §56, §57); 2026-03-19 (§58–§66).  
 - **Result:** All OpenClaw-related references are consistent and correct. No bugs found; no code changes required.
 
 ---
@@ -885,6 +885,24 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 ---
 
+## 66. Re-verification (2026-03-19, agent run)
+
+All §7 checks re-run against current repo (line numbers as of this run):
+
+| Check | Location | Result |
+|-------|----------|--------|
+| README attribution | `README.md` L131 | "Inspired by … [OpenClaw](https://github.com/openclaw/openclaw) …" — present. |
+| agents sibling | `AGENTS.md` L439 | "OpenClaw: `../openclaw` … see docs/035" — present. |
+| 035 sibling | `docs/035_memory_and_topic_handling.md` L132 | "OpenClaw = `../openclaw`" (sibling repos line) — present. |
+| docs/031, 025, 032, 034, docs/README, data_files_reference | 031 L41,43,79; 025 L53,135; 032 L40; 034 L59; docs/README L307; data_files_reference L105 | OpenClaw mentions match §2 table. |
+| `is_agent_failure_notice` | `src-tauri/src/discord/mod.rs` L93–101 | Checks `"logs: openclaw"` L100, `"openclaw logs"` L101; used at L1143, 1157, 1164, 1295, 1786. |
+| `session_reset_phrases_path` comment | `src-tauri/src/config/mod.rs` L624–625 | "like OpenClaw's resetTriggers, but in an MD file" — present (L625). |
+| Default phrases header | `src-tauri/defaults/session_reset_phrases.md` L4 | "Like OpenClaw's session.resetTriggers …" — present. |
+
+**Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
+
+---
+
 ## 52. Re-verification (2026-03-18, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
@@ -919,9 +937,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 54. Re-verification (2026-03-18, agent run)
+---## 54. Re-verification (2026-03-18, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -937,9 +953,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 55. Re-verification (2026-03-18, agent run)
+---## 55. Re-verification (2026-03-18, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -955,9 +969,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 56. Re-verification (2026-03-18, agent run)
+---## 56. Re-verification (2026-03-18, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -973,9 +985,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 57. Re-verification (2026-03-18, agent run)
+---## 57. Re-verification (2026-03-18, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -991,9 +1001,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 58. Re-verification (2026-03-19, agent run)
+---## 58. Re-verification (2026-03-19, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -1009,9 +1017,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 59. Re-verification (2026-03-19, agent run)
+---## 59. Re-verification (2026-03-19, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -1027,9 +1033,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 60. Re-verification (2026-03-19, agent run)
+---## 60. Re-verification (2026-03-19, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -1045,9 +1049,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 61. Re-verification (2026-03-19, agent run)
+---## 61. Re-verification (2026-03-19, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -1063,9 +1065,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 62. Re-verification (2026-03-19, agent run)
+---## 62. Re-verification (2026-03-19, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -1099,9 +1099,7 @@ All §7 checks re-run against current repo (line numbers as of this run):
 
 **Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
 
----
-
-## 64. Re-verification (2026-03-19, agent run)
+---## 64. Re-verification (2026-03-19, agent run)
 
 All §7 checks re-run against current repo (line numbers as of this run):
 
@@ -1130,6 +1128,24 @@ All §7 checks re-run against current repo (line numbers as of this run):
 | 035 sibling | `docs/035_memory_and_topic_handling.md` L132 | "OpenClaw = `../openclaw`" (sibling repos line) — present. |
 | docs/031, 025, 032, 034, docs/README, data_files_reference | 031 L41,43,79; 025 L53,135; 032 L40; 034 L59; docs/README L307; data_files_reference L105 | OpenClaw mentions match §2 table. |
 | `is_agent_failure_notice` | `src-tauri/src/discord/mod.rs` L91–101 | Doc L91; fn L93–101; checks `"logs: openclaw"` L100, `"openclaw logs"` L101; used at L1143, 1157, 1164, 1295, 1786. |
+| `session_reset_phrases_path` comment | `src-tauri/src/config/mod.rs` L624–625 | "like OpenClaw's resetTriggers, but in an MD file" — present (L625). |
+| Default phrases header | `src-tauri/defaults/session_reset_phrases.md` L4 | "Like OpenClaw's session.resetTriggers …" — present. |
+
+**Outcome:** Review confirmed. No discrepancies. No code or doc changes required.
+
+---
+
+## 66. Re-verification (2026-03-19, agent run)
+
+All §7 checks re-run against current repo (line numbers as of this run):
+
+| Check | Location | Result |
+|-------|----------|--------|
+| README attribution | `README.md` L131 | "Inspired by … [OpenClaw](https://github.com/openclaw/openclaw) …" — present. |
+| agents sibling | `AGENTS.md` L439 | "OpenClaw: `../openclaw` … see docs/035" — present. |
+| 035 sibling | `docs/035_memory_and_topic_handling.md` L132 | "OpenClaw = `../openclaw`" (sibling repos line) — present. |
+| docs/031, 025, 032, 034, docs/README, data_files_reference | 031 L41,43,79; 025 L53,135; 032 L40; 034 L59; docs/README L307; data_files_reference L105 | OpenClaw mentions match §2 table. |
+| `is_agent_failure_notice` | `src-tauri/src/discord/mod.rs` L93–101 | Checks `"logs: openclaw"` L100, `"openclaw logs"` L101; used at L1143, 1157, 1164, 1295, 1786. |
 | `session_reset_phrases_path` comment | `src-tauri/src/config/mod.rs` L624–625 | "like OpenClaw's resetTriggers, but in an MD file" — present (L625). |
 | Default phrases header | `src-tauri/defaults/session_reset_phrases.md` L4 | "Like OpenClaw's session.resetTriggers …" — present. |
 

@@ -112,5 +112,7 @@ The Coder currently edits this repo **in place** (yolo mode) via the mac-stats-a
 | docs/011_local_cmd_agent.md | ~~Review security measures for RUN_CMD~~ | **Done:** § "Security review (measures in place)" in 011 (allowlist, path validation, shell scope, cursor-agent caveat, ALLOW_LOCAL_CMD); 011 Open tasks point to this backlog. |
 | docs/011_local_cmd_agent.md | ~~Improve RUN_CMD retry loop (error handling / UX)~~ | **Done:** only accept RUN_CMD in fix suggestion; one format-only retry when parse fails; clearer messages (format required, could not get corrected command). |
 | docs/011_local_cmd_agent.md | ~~Consider more RUN_CMD features (more commands, path validation)~~ | **Done:** § "More RUN_CMD features (design only)" in 011 (candidate commands table, path validation current + possible improvements); doc only. |
+| docs/025_redmine_api_skill.md | ~~Improve the documentation for the REDMINE_API command~~ | **Done:** Configuration, Error handling (table), Implementation sections in 025. |
+| docs/025_redmine_api_skill.md | ~~Implement a more robust way to handle Redmine API errors~~ | **Done:** 401/404/422 and generic status get clear user-facing messages in `redmine_api_request` (redmine/mod.rs). |
 
 Start with the first FEAT you can complete end-to-end (code or doc), then move to the next. When all rows above are done, check **docs/006_roadmap_ai_tasks.md** (Mail, WhatsApp, Google Docs) or other docs’ "Open tasks" for new candidates.
