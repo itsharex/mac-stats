@@ -84,6 +84,26 @@ Whenever Ollama is asked to decide which agent to use, the app sends the complet
 4. **Fallback**
    When the plan is **AGENT: general-purpose-mommy** (or similar) and the user message clearly matches a single tool (e.g. “screenshot” + URL), the router could **additionally try** the matching tool (e.g. BROWSER_SCREENSHOT) and append that result, or heuristically suggest re-planning with “prefer BROWSER_SCREENSHOT for screenshot + URL requests”.
 
-## Open tasks:
-- Investigate session memory for planning to reduce bias towards delegation.
-- Examine global memory for planning to minimize its impact on tool choice.
+## Planning memory — current behavior and considerations
+
+This section documents what the orchestrator (planning step) receives today and how that relates to the recommendations above (session memory and global memory for planning).
+
+### What planning receives today
+
+- **System content:** Router soul (or skill content), Discord user context (when applicable), planning prompt (`~/.mac-stats/agents/prompts/planning_prompt.md`), agent/tool descriptions. **Planning does not receive the global memory block** (`memory.md` / channel session memory). That block is loaded only for the **execution** step (`load_memory_block_for_request` in `commands/ollama.rs` is used when building the execution system prompt, not the planning system prompt).
+- **Conversation history:** The full `conversation_history` (prior user/assistant turns for the channel) is sent to the planning step as message list, then the current user question is appended. So the orchestrator sees every prior turn in the session, including failed or non-tool replies (e.g. a previous "screenshot" request that was answered with text only). That can bias the next plan toward delegation or "conversation" instead of invoking the tool.
+
+### Session memory for planning
+
+- **Current behavior:** Full session history is sent to planning. So a previous "no tool used" reply in the same thread can influence the next RECOMMEND (e.g. "try another agent" instead of BROWSER_SCREENSHOT).
+- **Recommendations (from above):** Consider not sending the last N turns when the user request is a clear single-tool request, or sending a short summary instead of full prior assistant text so a previous failed attempt doesn't dominate the next plan. These are **future options**; no code change in this pass.
+
+### Global memory for planning
+
+- **Current behavior:** The orchestrator does **not** receive the full global memory block. So "context learned over days" (memory.md, channel session files) is **not** in the planning prompt and does not directly push the planner toward delegation. The main factor for wrong plans in the analyzed log was session conversation history (prior screenshot attempt without tool use), not global memory.
+- **If planning ever gets global memory:** Consider a shorter "planning memory" (e.g. only lessons about which tool to choose) and drop or compress long UNVERIFIED / no-API segments. Documented here for future implementation.
+
+## Open tasks
+
+- ~~Investigate session memory for planning to reduce bias towards delegation.~~ **Done:** Current behavior and options documented above (§ "Planning memory — current behavior and considerations", "Session memory for planning").
+- ~~Examine global memory for planning to minimize its impact on tool choice.~~ **Done:** Planning does not receive global memory today; execution does. If planning ever does, considerations are documented above ("Global memory for planning").
