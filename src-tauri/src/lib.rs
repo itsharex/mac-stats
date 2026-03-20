@@ -356,7 +356,7 @@ fn run_internal(open_cpu_window: bool) {
                 const INTERVAL_SECS: u64 = 30 * 60;
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(INTERVAL_SECS));
-                    rt.block_on(commands::ollama::run_periodic_session_compaction());
+                    rt.block_on(commands::compaction::run_periodic_session_compaction());
                 }
             });
 

@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FEATURE-CODER backlog** — Model management + JS logging extraction and Redmine helpers extraction rows marked done (`006-feature-coder`).
 - **agents.md** — Directory structure updated to include `ollama_models.rs` and `ollama_logging.rs` under `commands/`.
 - **022 testing note** — Closing reviewer smoke test 2026-03-20 (redmine_helpers extraction; cargo build, 114 tests pass, debug.log, agents, monitors UP).
+- **Extract Perplexity helpers, memory loading, and session compaction from `ollama.rs`** — Moved Perplexity/news search helpers (8 functions + 12 tests) into `commands/perplexity_helpers.rs` (454 lines); memory/soul loading (7 functions) into `commands/ollama_memory.rs` (158 lines); session compaction (3 functions + 5 constants) into `commands/compaction.rs` (289 lines). `ollama.rs` 8016→7136 lines (880 extracted). `lib.rs` updated to call `commands::compaction::run_periodic_session_compaction`. No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/compaction.rs`, `commands/ollama_memory.rs`, `commands/perplexity_helpers.rs`, `commands/mod.rs`, `commands/ollama.rs`, `lib.rs`)
+- **Docs: OpenClaw §94 re-verification** — All §7 checks re-run; no discrepancies found (`005-openclaw-reviewer`).
+- **FEATURE-CODER backlog** — Perplexity/memory/compaction extraction row marked done (`006-feature-coder`).
+- **022 testing note** — Closing reviewer smoke test 2026-03-21 (Perplexity/memory/compaction extraction; cargo build, 114 tests pass, debug.log, agents, monitors UP).
 
 ## [0.1.47] - 2026-03-20
 

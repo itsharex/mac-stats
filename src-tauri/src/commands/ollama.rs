@@ -2,7 +2,6 @@
 
 use tauri::Manager;
 
-use crate::config::Config;
 use crate::ollama::{ChatMessage, OllamaClient, OllamaConfig};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -29,6 +28,16 @@ use crate::commands::redmine_helpers::{
     question_explicitly_requests_json, redmine_direct_fallback_hint,
     redmine_request_for_routing, redmine_time_entries_range,
 };
+use crate::commands::compaction::{
+    compact_conversation_history, COMPACTION_THRESHOLD, MIN_CONVERSATIONAL_FOR_COMPACTION,
+};
+use crate::commands::ollama_memory::{
+    load_memory_block_for_request, load_soul_content, search_memory_for_request,
+};
+use crate::commands::perplexity_helpers::{
+    build_perplexity_news_tool_suffix, build_perplexity_verbose_summary, is_likely_article_like_result,
+    is_news_query, search_perplexity_with_news_fallback,
+};
 use crate::commands::tool_parsing::{
     normalize_browser_tool_arg, normalize_inline_tool_sequences, parse_all_tools_from_response,
     parse_fetch_url_from_response, parse_one_tool_at_line, parse_python_script_from_response,
@@ -37,160 +46,6 @@ use crate::commands::tool_parsing::{
 
 /// Tool instructions appended to soul for non-agent chat (code execution + FETCH_URL).
 const NON_AGENT_TOOL_INSTRUCTIONS: &str = "\n\nYou are a general purpose AI. If you are asked for actual data like day or weather information, or flight information or stock information. Then we need to compile that information using specially crafted clients for doing so. You will put \"[variable-name]\" into the answer to signal that we need to go another step and ask an agent to fulfil the answer.\n\nWhenever asked with \"[variable-name]\", you must provide a javascript snippet to be executed in the browser console to retrieve that information. Mark the answer to be executed as javascript. Do not put any other words around it. Do not insert formatting. Only return the code to be executed. This is needed for the next AI to understand and execute the same. When answering, use the role: code-assistant in the response. When you return executable code:\n- Start the response with: ROLE=code-assistant\n- On the next line, output ONLY executable JavaScript\n- Do not add explanations or formatting\n\nFor web pages: To fetch a page and use its content (e.g. \"navigate to X and get Y\"), reply with exactly one line: FETCH_URL: <full URL> (e.g. FETCH_URL: https://www.example.com). The app will fetch the page and give you the text; then answer the user based on that.";
-
-/// Load soul content from ~/.mac-stats/agents/soul.md (or write default there if missing).
-fn load_soul_content() -> String {
-    Config::load_soul_content()
-}
-
-/// Load global memory (~/.mac-stats/agents/memory.md) for inclusion in system prompt.
-fn load_global_memory_block() -> String {
-    let path = Config::memory_file_path();
-    let content = match std::fs::read_to_string(&path) {
-        Ok(s) => s.trim().to_string(),
-        Err(_) => return String::new(),
-    };
-    if content.is_empty() {
-        return String::new();
-    }
-    format!(
-        "\n\n## Memory (lessons learned — follow these)\n\n{}\n\n",
-        content
-    )
-}
-
-/// Load per-channel Discord memory (~/.mac-stats/agents/memory-discord-{id}.md). Returns empty if missing.
-fn load_channel_memory_block(channel_id: u64) -> String {
-    let path = Config::memory_file_path_for_discord_channel(channel_id);
-    let content = match std::fs::read_to_string(&path) {
-        Ok(s) => s.trim().to_string(),
-        Err(_) => return String::new(),
-    };
-    if content.is_empty() {
-        return String::new();
-    }
-    format!(
-        "\n\n## Memory (this channel — follow these)\n\n{}\n\n",
-        content
-    )
-}
-
-/// Load main-session (in-app) memory (~/.mac-stats/agents/memory-main.md). Returns empty if missing.
-/// Used when the request is from the CPU window (no Discord channel) so the main session has per-context memory.
-fn load_main_session_memory_block() -> String {
-    let path = Config::memory_file_path_for_main_session();
-    let content = match std::fs::read_to_string(&path) {
-        Ok(s) => s.trim().to_string(),
-        Err(_) => return String::new(),
-    };
-    if content.is_empty() {
-        return String::new();
-    }
-    format!(
-        "\n\n## Memory (main session — follow these)\n\n{}\n\n",
-        content
-    )
-}
-
-/// Load memory for the current request.
-/// Global memory (personal/long-term) is only loaded in main session (in-app, or Discord DM).
-/// In Discord guild channels and having_fun, only per-channel memory is loaded to avoid leaking personal context.
-/// When there is no Discord channel (in-app), main-session memory (memory-main.md) is also loaded.
-fn load_memory_block_for_request(
-    discord_channel_id: Option<u64>,
-    load_global_memory: bool,
-) -> String {
-    let global = if load_global_memory {
-        load_global_memory_block()
-    } else {
-        String::new()
-    };
-    let channel = discord_channel_id
-        .map(load_channel_memory_block)
-        .unwrap_or_else(|| {
-            if load_global_memory {
-                load_main_session_memory_block()
-            } else {
-                String::new()
-            }
-        });
-    if channel.is_empty() {
-        global
-    } else {
-        format!("{}{}", global, channel)
-    }
-}
-
-/// Extract words (alphanumeric, lowercase) for simple keyword matching.
-fn words_for_search(text: &str) -> Vec<String> {
-    text.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|s| s.len() >= 2)
-        .map(String::from)
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect()
-}
-
-/// Search memory (global + optional Discord channel or main-session) for lines relevant to the request.
-/// Returns at most 5 matching lines, or None if no matches. When discord_channel_id is Some,
-/// channel memory is merged with global; when None (in-app), main-session memory is included.
-fn search_memory_for_request(
-    question: &str,
-    reason: Option<&str>,
-    discord_channel_id: Option<u64>,
-) -> Option<String> {
-    let global = std::fs::read_to_string(Config::memory_file_path())
-        .ok()
-        .unwrap_or_default();
-    let channel = discord_channel_id
-        .and_then(|id| {
-            std::fs::read_to_string(Config::memory_file_path_for_discord_channel(id)).ok()
-        })
-        .unwrap_or_else(|| {
-            std::fs::read_to_string(Config::memory_file_path_for_main_session())
-                .ok()
-                .unwrap_or_default()
-        });
-    let content = format!("{}\n{}", global.trim(), channel.trim())
-        .trim()
-        .to_string();
-    if content.is_empty() {
-        return None;
-    }
-    let mut query_words: Vec<String> = words_for_search(question);
-    if let Some(r) = reason {
-        query_words.extend(words_for_search(r));
-    }
-    query_words.sort();
-    query_words.dedup();
-    if query_words.is_empty() {
-        return None;
-    }
-    // Require at least 2 query words to match so we don't inject memory that only matched one generic word (e.g. "the", "request").
-    const MIN_MEMORY_MATCH_WORDS: usize = 2;
-    let mut scored: Vec<(usize, String)> = content
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(|line| {
-            let line_lower = line.to_lowercase();
-            let score = query_words
-                .iter()
-                .filter(|w| line_lower.contains(w.as_str()))
-                .count();
-            (score, line.to_string())
-        })
-        .filter(|(score, _)| *score >= MIN_MEMORY_MATCH_WORDS)
-        .collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
-    let top: Vec<String> = scored.into_iter().take(5).map(|(_, line)| line).collect();
-    if top.is_empty() {
-        None
-    } else {
-        Some(top.join("\n"))
-    }
-}
 
 /// Default system prompt for non-agent Ollama chat: soul (from file or bundled) + tool instructions.
 pub fn default_non_agent_system_prompt() -> String {
@@ -1584,247 +1439,6 @@ fn truncate_text_on_line_boundaries(text: &str, max_chars: usize) -> String {
     out
 }
 
-fn is_news_query(question: &str) -> bool {
-    let q = question.to_lowercase();
-    q.contains("news")
-        || q.contains("latest")
-        || q.contains("recent")
-        || q.contains("headlines")
-        || q.contains("current events")
-        || q.contains("today")
-        || q.contains("this week")
-}
-
-fn normalized_search_result_domain(url: &str) -> String {
-    url::Url::parse(url)
-        .ok()
-        .and_then(|u| {
-            u.host_str()
-                .map(|s| s.trim_start_matches("www.").to_string())
-        })
-        .unwrap_or_default()
-}
-
-fn is_likely_article_like_result(title: &str, url: &str, snippet: &str) -> bool {
-    score_search_result_for_news(title, url, snippet) > 0
-}
-
-fn score_search_result_for_news(title: &str, url: &str, snippet: &str) -> i32 {
-    let title_l = title.to_lowercase();
-    let url_l = url.to_lowercase();
-    let snippet_l = snippet.to_lowercase();
-    let domain = normalized_search_result_domain(url);
-    let path = url::Url::parse(url)
-        .ok()
-        .map(|u| u.path().trim_matches('/').to_string())
-        .unwrap_or_default();
-    let path_depth = path.split('/').filter(|s| !s.is_empty()).count();
-
-    let mut score = 0i32;
-
-    if path_depth >= 2 {
-        score += 2;
-    }
-    if path.contains('-') && path.len() > 18 {
-        score += 2;
-    }
-    if snippet.lines().count() <= 3 {
-        score += 1;
-    }
-    if [
-        "reuters.com",
-        "apnews.com",
-        "bbc.com",
-        "euronews.com",
-        "catalannews.com",
-    ]
-    .iter()
-    .any(|d| domain.ends_with(d))
-    {
-        score += 2;
-    }
-
-    if path.is_empty() || path == "news" || path.ends_with("/news") || path.ends_with("/news/") {
-        score -= 3;
-    }
-    if url_l.contains("/tag/") || url_l.contains("/category/") || url_l.contains("/topics/") {
-        score -= 3;
-    }
-    if url_l.contains("wikipedia.org/wiki/")
-        || domain.ends_with("wikipedia.org")
-        || domain.ends_with("spain.info")
-        || url_l.contains("/destination/")
-        || url_l.contains("/destinazione/")
-    {
-        score -= 5;
-    }
-    if title_l.contains("top stories")
-        || title_l.contains("latest ")
-        || title_l.contains("breaking ")
-        || title_l.contains("scores")
-        || title_l.contains("standings")
-        || title_l.contains("rumors")
-        || title_l.contains("official channel")
-        || title_l.contains("what to see and do")
-    {
-        score -= 3;
-    }
-    if snippet_l.contains("view on x")
-        || snippet_l.contains("rumor")
-        || snippet_l.contains("standings")
-        || snippet_l.contains("scores")
-        || snippet_l.contains("trendiest")
-        || snippet_l.contains("tourist")
-    {
-        score -= 2;
-    }
-    if snippet.lines().count() >= 5 {
-        score -= 1;
-    }
-    if domain.contains("newsnow") || domain.contains("transferfeed") {
-        score -= 2;
-    }
-
-    score
-}
-
-fn shape_perplexity_results_for_question(
-    question: &str,
-    results: Vec<crate::commands::perplexity::PerplexitySearchResult>,
-    snippet_max: usize,
-) -> (
-    Vec<crate::commands::perplexity::PerplexitySearchResult>,
-    Vec<String>,
-    bool,
-) {
-    let is_news = is_news_query(question);
-    if !is_news {
-        let urls = results.iter().map(|r| r.url.clone()).collect();
-        return (results, urls, false);
-    }
-
-    let mut ranked: Vec<_> = results
-        .into_iter()
-        .map(|r| {
-            let score = score_search_result_for_news(&r.title, &r.url, &r.snippet);
-            (score, r)
-        })
-        .collect();
-    ranked.sort_by(|a, b| {
-        b.0.cmp(&a.0).then_with(|| {
-            let ad =
-                a.1.date
-                    .as_deref()
-                    .or(a.1.last_updated.as_deref())
-                    .unwrap_or("");
-            let bd =
-                b.1.date
-                    .as_deref()
-                    .or(b.1.last_updated.as_deref())
-                    .unwrap_or("");
-            bd.cmp(ad)
-        })
-    });
-
-    let mut kept = Vec::new();
-    let mut urls = Vec::new();
-    let mut per_domain: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    let mut filtered_any = false;
-    for (score, mut result) in ranked {
-        let domain = normalized_search_result_domain(&result.url);
-        let domain_count = per_domain.get(&domain).copied().unwrap_or(0);
-        let article_like = score > 0;
-        let allow = article_like || kept.len() < 3;
-        if !allow || domain_count >= 2 {
-            filtered_any = true;
-            continue;
-        }
-        if result.snippet.chars().count() > snippet_max {
-            result.snippet = format!(
-                "{}…",
-                result.snippet.chars().take(snippet_max).collect::<String>()
-            );
-        }
-        per_domain.insert(domain, domain_count + 1);
-        urls.push(result.url.clone());
-        kept.push(result);
-        if kept.len() >= 6 {
-            break;
-        }
-    }
-
-    (kept, urls, filtered_any)
-}
-
-async fn search_perplexity_with_news_fallback(
-    question: &str,
-    query: &str,
-    max_results: u32,
-    snippet_max: usize,
-) -> Result<
-    (
-        Vec<crate::commands::perplexity::PerplexitySearchResult>,
-        Vec<String>,
-        bool,
-        Option<String>,
-    ),
-    String,
-> {
-    let mut effective_query = query.trim().to_string();
-    if is_news_query(question)
-        && (effective_query.chars().count() < 18 || effective_query.split_whitespace().count() < 3)
-    {
-        effective_query = format!("{} latest news sources dates", question.trim());
-    }
-
-    let first = crate::commands::perplexity::perplexity_search(
-        crate::commands::perplexity::PerplexitySearchRequest {
-            query: effective_query.clone(),
-            max_results: Some(max_results),
-        },
-    )
-    .await?;
-
-    let is_news = is_news_query(question);
-    let mut used_query = None;
-    let (mut shaped, mut urls, mut filtered_any) =
-        shape_perplexity_results_for_question(question, first.results, snippet_max);
-
-    let need_fallback = is_news
-        && !shaped.is_empty()
-        && shaped
-            .iter()
-            .all(|r| !is_likely_article_like_result(&r.title, &r.url, &r.snippet));
-
-    if need_fallback {
-        let fallback_query = format!("{} recent article source date", effective_query.trim());
-        tracing::info!(
-            "Perplexity search: first pass for news returned only hub/landing pages, retrying with refined query: {}",
-            fallback_query
-        );
-        let second = crate::commands::perplexity::perplexity_search(
-            crate::commands::perplexity::PerplexitySearchRequest {
-                query: fallback_query.clone(),
-                max_results: Some(max_results),
-            },
-        )
-        .await?;
-        let (fallback_shaped, fallback_urls, fallback_filtered) =
-            shape_perplexity_results_for_question(question, second.results, snippet_max);
-        let fallback_has_article_like = fallback_shaped
-            .iter()
-            .any(|r| is_likely_article_like_result(&r.title, &r.url, &r.snippet));
-        if fallback_has_article_like {
-            shaped = fallback_shaped;
-            urls = fallback_urls;
-            filtered_any = fallback_filtered;
-            used_query = Some(fallback_query);
-        }
-    }
-
-    Ok((shaped, urls, filtered_any, used_query))
-}
-
 fn summarize_response_for_verification(
     question: &str,
     response_content: &str,
@@ -1998,294 +1612,6 @@ fn parse_agent_tool_from_response(content: &str) -> Option<(String, String)> {
     None
 }
 
-/// Minimum number of messages before session compaction triggers.
-const COMPACTION_THRESHOLD: usize = 8;
-/// Minimum conversational (non-internal) messages to run compaction; fewer means skip (task-008 Phase 5).
-const MIN_CONVERSATIONAL_FOR_COMPACTION: usize = 2;
-
-/// Fixed CONTEXT for casual/having_fun sessions so the compactor never invents task or platform context.
-const COMPACTOR_CASUAL_CONTEXT: &str =
-    "Casual conversation; no task or verified outcome. Not needed for this request.";
-
-/// Compact a long conversation history into a concise summary using a fast model.
-/// Extracts verified facts, successful outcomes, and user intent; drops failures and hallucinations.
-/// Also extracts lessons learned (returned separately for memory.md).
-/// For Discord having_fun channels, skips the model and returns minimal CONTEXT so we never invent themes (e.g. "language learning platform").
-async fn compact_conversation_history(
-    messages: &[crate::ollama::ChatMessage],
-    current_question: &str,
-    discord_channel_id: Option<u64>,
-) -> Result<(String, Option<String>), String> {
-    use tracing::info;
-
-    if let Some(channel_id) = discord_channel_id {
-        if crate::discord::is_discord_channel_having_fun(channel_id) {
-            info!(
-                "Session compaction: Discord having_fun channel {} — using fixed minimal context (no LLM)",
-                channel_id
-            );
-            return Ok((COMPACTOR_CASUAL_CONTEXT.to_string(), None));
-        }
-    }
-
-    // Skip compaction when session has no real conversational value (only internal/synthetic entries).
-    let pairs: Vec<(String, String)> = messages
-        .iter()
-        .map(|m| (m.role.clone(), m.content.clone()))
-        .collect();
-    let conversational = crate::session_memory::count_conversational_messages(&pairs);
-    if conversational < MIN_CONVERSATIONAL_FOR_COMPACTION {
-        return Err(format!(
-            "session has no real conversational value ({} conversational messages, need at least {})",
-            conversational, MIN_CONVERSATIONAL_FOR_COMPACTION
-        ));
-    }
-
-    let small_model = crate::ollama::models::get_global_catalog()
-        .and_then(|c| c.resolve_role("small").map(|m| m.name.clone()));
-
-    let model = small_model.or_else(|| {
-        let guard = get_ollama_client().lock().ok()?;
-        let client = guard.as_ref()?;
-        Some(client.config.model.clone())
-    });
-
-    let conversation_text: String = messages
-        .iter()
-        .map(|m| format!("[{}]: {}", m.role, m.content))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-
-    let system_prompt = r#"You are a session compactor. Given a conversation between a user and an assistant, produce TWO sections:
-
-## CONTEXT
-A concise summary (max 300 words) of ONLY verified facts and successful outcomes **relevant to the user's current question**. Rules:
-- **PRESERVE in CONTEXT:** (1) The **first system or task-setting instructions** (initial 1–2 messages that set task/context) — include their gist or key points so active work and standing instructions survive. (2) The **most recent assistant reply or tool outcome** (the last substantive answer or result) — include it so the current turn's result is not lost.
-- **Purely social/casual:** If the conversation has no tool results, no task IDs, no API confirmations (just chat, jokes, or off-topic banter), output ONLY: "Casual conversation; no task or verified outcome. Not needed for this request." and in LESSONS write "None." Do NOT infer themes (e.g. "language learning", "platform", "digital learning") from casual wording.
-- If the conversation spans **multiple unrelated topics**, summarize ONLY what is relevant to the **current question** (see below). If the current question is clearly a **new topic** (unrelated to most of the history), output exactly: "Previous context covered different topics; not needed for this request." and keep CONTEXT to that one sentence.
-- KEEP: IDs confirmed by API responses (guild IDs, channel IDs, user IDs), successful API calls and their actual results, user preferences and standing instructions, established context the user built up — but only if relevant to the current question. Preserve open decisions and concrete results so active work survives summarization.
-- DROP: Failed attempts (401 errors, wrong tool usage, timeouts), hallucinated or unverified claims (assistant saying something happened without API confirmation), apologies, suggestions that weren't followed, repeated back-and-forth about the same error.
-- If the assistant claimed an action succeeded but there's no API result confirming it, mark it as UNVERIFIED.
-- Write as a factual briefing, not a conversation recap.
-
-## LESSONS
-Bullet points of important lessons learned (if any). Things like:
-- Tools that worked vs. tools that failed
-- Correct IDs or endpoints discovered
-- User corrections about how things should work
-- Mistakes to avoid in future
-
-If no lessons, write "None."
-
-Output ONLY these two sections, nothing else."#;
-
-    let user_msg = format!(
-        "The user's current question is: \"{}\"\n\nCompact this conversation:\n\n{}",
-        current_question, conversation_text
-    );
-
-    let msgs = vec![
-        crate::ollama::ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt.to_string(),
-            images: None,
-        },
-        crate::ollama::ChatMessage {
-            role: "user".to_string(),
-            content: user_msg,
-            images: None,
-        },
-    ];
-
-    info!(
-        "Session compaction: sending {} messages ({} chars) to model {:?}",
-        messages.len(),
-        conversation_text.len(),
-        model
-    );
-
-    let response = send_ollama_chat_messages(msgs, model, None).await?;
-    let output = response.message.content.trim().to_string();
-
-    let (context, lessons) = parse_compaction_output(&output);
-    info!(
-        "Session compaction: produced context ({} chars), lessons: {}",
-        context.len(),
-        lessons.as_deref().unwrap_or("none")
-    );
-
-    Ok((context, lessons))
-}
-
-/// Parse the compaction output into context and lessons sections.
-fn parse_compaction_output(output: &str) -> (String, Option<String>) {
-    let lower = output.to_lowercase();
-    let context_header = lower.find("## context");
-    let lessons_header = lower.find("## lessons");
-
-    let context_body_start = context_header.map(|i| i + "## context".len());
-    let lessons_body_start = lessons_header.map(|i| i + "## lessons".len());
-
-    let context = match (context_body_start, lessons_header) {
-        (Some(cs), Some(lh)) => output[cs..lh].trim().to_string(),
-        (Some(cs), None) => output[cs..].trim().to_string(),
-        _ => output.to_string(),
-    };
-
-    let lessons = lessons_body_start
-        .map(|ls| output[ls..].trim().to_string())
-        .filter(|s| !s.is_empty() && s.to_lowercase() != "none." && s.to_lowercase() != "none");
-
-    (context, lessons)
-}
-
-/// Minimum messages to compact in the 30-min periodic pass (lower than on-request 8 so we flush more).
-const PERIODIC_COMPACTION_MIN_MESSAGES: usize = 4;
-/// Sessions with no activity for this long are considered inactive; after compacting they are cleared.
-const INACTIVE_THRESHOLD_MINUTES: i64 = 30;
-
-/// Run session compaction for all in-memory sessions that meet the threshold.
-/// Writes lessons to global memory; replaces active sessions with summary, clears inactive ones.
-/// Call from a 30-minute background loop.
-pub async fn run_periodic_session_compaction() {
-    use tracing::info;
-    let sessions = crate::session_memory::list_sessions();
-    let now = chrono::Local::now();
-    let inactive_cutoff = now - chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES);
-    for entry in sessions {
-        if entry.message_count < PERIODIC_COMPACTION_MIN_MESSAGES {
-            continue;
-        }
-        let messages: Vec<crate::ollama::ChatMessage> =
-            crate::session_memory::get_messages(&entry.source, entry.session_id)
-                .into_iter()
-                .map(|(role, content)| crate::ollama::ChatMessage {
-                    role,
-                    content,
-                    images: None,
-                })
-                .collect();
-        if messages.len() < PERIODIC_COMPACTION_MIN_MESSAGES {
-            continue;
-        }
-        // Skip when session has no real conversational value (task-008 Phase 5).
-        let pairs: Vec<(String, String)> = messages
-            .iter()
-            .map(|m| (m.role.clone(), m.content.clone()))
-            .collect();
-        let conversational = crate::session_memory::count_conversational_messages(&pairs);
-        if conversational < MIN_CONVERSATIONAL_FOR_COMPACTION {
-            info!(
-                "Periodic session compaction: skipped for {} {} (no real conversational value: {} conversational messages, need at least {})",
-                entry.source, entry.session_id, conversational, MIN_CONVERSATIONAL_FOR_COMPACTION
-            );
-            continue;
-        }
-        info!(
-            "Periodic session compaction: {} {} ({} messages, last_activity {:?})",
-            entry.source,
-            entry.session_id,
-            messages.len(),
-            entry.last_activity
-        );
-        // task-001: retry once on failure (do not retry when skipped for no conversational value)
-        let mut actual_question = "Periodic session compaction.".to_string();
-        for msg in messages.iter().rev() {
-            if msg.role == "user" {
-                actual_question = msg.content.clone();
-                break;
-            }
-        }
-
-        let discord_ch = if entry.source == "discord" {
-            Some(entry.session_id)
-        } else {
-            None
-        };
-        let compact_result = compact_conversation_history(&messages, &actual_question, discord_ch).await;
-        let compact_result = match compact_result {
-            Ok(ok) => Ok(ok),
-            Err(e) => {
-                let err_s = e.to_string();
-                if err_s.contains("no real conversational value") {
-                    info!(
-                        "Periodic session compaction: skipped for {} {}: {}",
-                        entry.source, entry.session_id, err_s
-                    );
-                    continue;
-                }
-                tracing::warn!(
-                    "Periodic session compaction failed for {} {}: {}, retrying once in 3s",
-                    entry.source,
-                    entry.session_id,
-                    e
-                );
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                compact_conversation_history(&messages, &actual_question, discord_ch).await
-            }
-        };
-        match compact_result {
-            Ok((context, lessons)) => {
-                if let Some(ref lesson_text) = lessons {
-                    let memory_path = if entry.source == "discord" {
-                        crate::config::Config::memory_file_path_for_discord_channel(
-                            entry.session_id,
-                        )
-                    } else {
-                        crate::config::Config::memory_file_path()
-                    };
-                    for line in lesson_text.lines() {
-                        let line = line.trim().trim_start_matches("- ").trim();
-                        if !line.is_empty() && line.len() > 5 {
-                            let entry_line = format!("- {}\n", line);
-                            let _ = append_to_file(&memory_path, &entry_line);
-                        }
-                    }
-                    info!(
-                        "Periodic session compaction: wrote lessons to {:?}",
-                        memory_path
-                    );
-                }
-                let inactive = entry.last_activity < inactive_cutoff;
-                if inactive {
-                    crate::session_memory::clear_session(&entry.source, entry.session_id);
-                    info!(
-                        "Periodic session compaction: cleared inactive session {} {}",
-                        entry.source, entry.session_id
-                    );
-                } else {
-                    let compacted = vec![("system".to_string(), context)];
-                    crate::session_memory::replace_session(
-                        &entry.source,
-                        entry.session_id,
-                        compacted,
-                    );
-                    info!(
-                        "Periodic session compaction: replaced active session {} {} with summary",
-                        entry.source, entry.session_id
-                    );
-                }
-            }
-            Err(e) => {
-                let err_s = e.to_string();
-                if err_s.contains("no real conversational value") {
-                    info!(
-                        "Periodic session compaction: skipped for {} {}: {}",
-                        entry.source, entry.session_id, err_s
-                    );
-                } else {
-                    tracing::warn!(
-                        "Periodic session compaction failed for {} {}: {} (session unchanged; will retry next cycle)",
-                        entry.source,
-                        entry.session_id,
-                        e
-                    );
-                }
-            }
-        }
-    }
-}
-
 /// Resolve Mastodon credentials: instance URL and access token.
 /// Checks env vars (MASTODON_INSTANCE_URL, MASTODON_ACCESS_TOKEN), then ~/.mac-stats/.config.env,
 /// then Keychain (mastodon_instance_url, mastodon_access_token).
@@ -2378,7 +1704,7 @@ async fn mastodon_post(status: &str, visibility: &str) -> Result<String, String>
 }
 
 /// Append a line to a file, creating it if needed. Returns the path on success.
-fn append_to_file(path: &std::path::Path, content: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn append_to_file(path: &std::path::Path, content: &str) -> Result<std::path::PathBuf, String> {
     use std::io::Write;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {}", e))?;
@@ -3025,34 +2351,6 @@ fn verification_news_format_note(question: &str) -> &'static str {
     } else {
         ""
     }
-}
-
-/// Builds the suffix appended to PERPLEXITY_SEARCH tool result when is_news_query and results are non-empty.
-/// When search_had_article_like is false, includes the "Article-grade results were not found" warning.
-pub(crate) fn build_perplexity_news_tool_suffix(
-    search_had_article_like: bool,
-    refined_query_used: Option<&str>,
-    filtered_any: bool,
-) -> String {
-    const HUB_ONLY_LINE: &str = "\n\n**Article-grade results were not found;** only hub/landing/tag/standings pages are listed below. Do not present these as a complete news answer; state that concrete article links were not found or run another search.";
-    const NEWS_GUIDANCE: &str = "\n\nFor news requests, prefer concrete article/report results over homepages, hub pages, standings pages, rumor indexes, or official landing pages. If a result looks like a hub, use it only as fallback and say so clearly.";
-    let mut s = String::new();
-    if !search_had_article_like {
-        s.push_str(HUB_ONLY_LINE);
-    }
-    s.push_str(NEWS_GUIDANCE);
-    if let Some(refined) = refined_query_used {
-        s.push_str(&format!(
-            "\nRefined search query used to find article-like results: {}.",
-            refined
-        ));
-    }
-    if filtered_any {
-        s.push_str(
-            "\nFiltered to higher-signal results and limited repeated domains where possible.",
-        );
-    }
-    s
 }
 
 /// Returns (satisfied, optional reason when not satisfied).
@@ -7147,32 +6445,6 @@ fn wants_visible_browser(question: &str) -> bool {
         || q.contains("open a window")
 }
 
-/// Build the short Perplexity result summary for verbose Discord (respects max_chars).
-pub(crate) fn build_perplexity_verbose_summary(
-    n: usize,
-    titles: String,
-    max_chars: usize,
-) -> String {
-    if n == 0 {
-        "Perplexity: 0 results.".to_string()
-    } else if titles.trim().is_empty() {
-        format!("Perplexity: {} result(s) received.", n)
-    } else {
-        let raw = format!("Perplexity: {} result(s) — {}", n, titles.trim());
-        if raw.chars().count() > max_chars {
-            format!(
-                "{}…",
-                raw.chars()
-                    .take(max_chars - 1)
-                    .collect::<String>()
-                    .trim_end()
-            )
-        } else {
-            raw
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OllamaChatWithExecutionRequest {
     pub question: String,
@@ -7540,13 +6812,11 @@ pub async fn ollama_chat_continue_with_result(
 mod tests {
     use super::{
         browser_retry_grounding_prompt, build_agent_runtime_context,
-        build_perplexity_news_tool_suffix, build_perplexity_verbose_summary,
         explicit_no_playable_video_finding, extract_browser_navigation_target,
         extract_last_prefixed_argument, final_reply_from_tool_results,
         is_browser_navigation_target_token, is_browser_task_request, is_coding_like_request,
-        is_likely_article_like_result, original_request_for_retry, parse_agent_tool_from_response,
-        sanitize_success_criteria, score_search_result_for_news,
-        shape_perplexity_results_for_question, summarize_response_for_verification,
+        original_request_for_retry, parse_agent_tool_from_response,
+        sanitize_success_criteria, summarize_response_for_verification,
         truncate_text_on_line_boundaries, verification_news_hub_only_block,
     };
     use crate::commands::redmine_helpers::{
@@ -7554,40 +6824,6 @@ mod tests {
         redmine_direct_fallback_hint, redmine_request_for_routing,
         redmine_time_entries_range_for_date,
     };
-
-    #[test]
-    fn perplexity_verbose_summary_zero_results() {
-        let s = build_perplexity_verbose_summary(0, String::new(), 380);
-        assert_eq!(s, "Perplexity: 0 results.");
-    }
-
-    #[test]
-    fn perplexity_verbose_summary_with_titles() {
-        let s = build_perplexity_verbose_summary(3, "El País, El Mundo, ABC".to_string(), 380);
-        assert_eq!(s, "Perplexity: 3 result(s) — El País, El Mundo, ABC");
-    }
-
-    #[test]
-    fn perplexity_verbose_summary_titles_empty_but_n_nonzero() {
-        let s = build_perplexity_verbose_summary(5, String::new(), 380);
-        assert_eq!(s, "Perplexity: 5 result(s) received.");
-    }
-
-    #[test]
-    fn perplexity_verbose_summary_truncated() {
-        let long = "A".repeat(400);
-        let s = build_perplexity_verbose_summary(1, long.clone(), 380);
-        assert!(s.chars().count() <= 380);
-        assert!(s.ends_with('…'));
-        assert!(s.starts_with("Perplexity: 1 result(s) — "));
-    }
-
-    #[test]
-    fn perplexity_verbose_summary_just_under_limit() {
-        let titles = "X, Y, Z";
-        let s = build_perplexity_verbose_summary(3, titles.to_string(), 380);
-        assert_eq!(s, "Perplexity: 3 result(s) — X, Y, Z");
-    }
 
     #[test]
     fn extract_last_prefixed_argument_prefers_last_run_cmd_literal() {
@@ -7860,99 +7096,6 @@ mod tests {
     }
 
     #[test]
-    fn score_search_result_for_news_prefers_article_like_pages() {
-        let article_score = score_search_result_for_news(
-            "Barcelona opens new civic center",
-            "https://example.com/news/barcelona-opens-new-civic-center",
-            "Barcelona opened a new civic center on March 6.",
-        );
-        let hub_score = score_search_result_for_news(
-            "FC Barcelona News | Top Stories",
-            "https://www.newsnow.com/us/Sports/Soccer/La+Liga/Barcelona",
-            "Top stories and transfer rumors View on X",
-        );
-        assert!(article_score > hub_score);
-    }
-
-    #[test]
-    fn shape_perplexity_results_for_question_limits_repeated_domains_for_news() {
-        let results = vec![
-            crate::commands::perplexity::PerplexitySearchResult {
-                title: "Hub page".to_string(),
-                url: "https://www.newsnow.com/us/Sports/Soccer/La+Liga/Barcelona".to_string(),
-                snippet: "Top stories and rumors".to_string(),
-                date: Some("2026-03-06".to_string()),
-                last_updated: None,
-            },
-            crate::commands::perplexity::PerplexitySearchResult {
-                title: "Article one".to_string(),
-                url: "https://example.com/news/barcelona-culture-update".to_string(),
-                snippet: "Culture update from Barcelona.".to_string(),
-                date: Some("2026-03-06".to_string()),
-                last_updated: None,
-            },
-            crate::commands::perplexity::PerplexitySearchResult {
-                title: "Article two".to_string(),
-                url: "https://example.com/news/barcelona-transit-update".to_string(),
-                snippet: "Transit update from Barcelona.".to_string(),
-                date: Some("2026-03-05".to_string()),
-                last_updated: None,
-            },
-            crate::commands::perplexity::PerplexitySearchResult {
-                title: "Article three".to_string(),
-                url: "https://example.com/news/barcelona-housing-update".to_string(),
-                snippet: "Housing update from Barcelona.".to_string(),
-                date: Some("2026-03-04".to_string()),
-                last_updated: None,
-            },
-        ];
-        let (shaped, _, filtered_any) = shape_perplexity_results_for_question(
-            "Show me recent Barcelona news with sources and dates.",
-            results,
-            280,
-        );
-        let example_count = shaped
-            .iter()
-            .filter(|r| r.url.contains("example.com"))
-            .count();
-        assert!(filtered_any);
-        assert_eq!(example_count, 2);
-        assert_eq!(
-            shaped.first().map(|r| r.title.as_str()),
-            Some("Article one")
-        );
-    }
-
-    #[test]
-    fn shape_perplexity_results_for_question_preserves_hub_only_fallback() {
-        let results = vec![
-            crate::commands::perplexity::PerplexitySearchResult {
-                title: "Catalan News | News in English from Barcelona & Catalonia".to_string(),
-                url: "https://www.catalannews.com".to_string(),
-                snippet: "### International Women's Day in Barcelona\nMore headlines".to_string(),
-                date: Some("2026-03-06".to_string()),
-                last_updated: None,
-            },
-            crate::commands::perplexity::PerplexitySearchResult {
-                title: "FC Barcelona News | Barça News & Top Stories".to_string(),
-                url: "https://www.newsnow.com/us/Sports/Soccer/La+Liga/Barcelona".to_string(),
-                snippet: "Top stories and transfer rumors View on X".to_string(),
-                date: Some("2026-03-06".to_string()),
-                last_updated: None,
-            },
-        ];
-        let (shaped, _, _) = shape_perplexity_results_for_question(
-            "Can you look on the Internet for news involving Barcelona? Mention sources and dates.",
-            results,
-            280,
-        );
-        assert_eq!(shaped.len(), 2);
-        assert!(shaped
-            .iter()
-            .all(|r| !is_likely_article_like_result(&r.title, &r.url, &r.snippet)));
-    }
-
-    #[test]
     fn verification_news_hub_only_block_included_when_hub_only_and_news_query() {
         let block = verification_news_hub_only_block(Some(true), "what's the latest news on Barcelona?");
         assert!(!block.is_empty());
@@ -7977,29 +7120,6 @@ mod tests {
         assert_eq!(
             verification_news_hub_only_block(None, "latest headlines"),
             ""
-        );
-    }
-
-    /// Hub-only path: when search had no article-like results, tool suffix must include the warning.
-    #[test]
-    fn build_perplexity_news_tool_suffix_includes_hub_only_warning_when_no_article_like() {
-        let suffix =
-            build_perplexity_news_tool_suffix(false, None, false);
-        assert!(
-            suffix.contains("Article-grade results were not found"),
-            "hub-only suffix must contain Article-grade warning, got: {:?}",
-            suffix
-        );
-        assert!(suffix.contains("hub/landing/tag/standings"));
-    }
-
-    #[test]
-    fn build_perplexity_news_tool_suffix_no_hub_only_warning_when_article_like() {
-        let suffix =
-            build_perplexity_news_tool_suffix(true, None, false);
-        assert!(
-            !suffix.contains("Article-grade results were not found"),
-            "when search had article-like results, suffix must not contain hub-only warning"
         );
     }
 
