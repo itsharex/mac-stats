@@ -51,6 +51,7 @@ That loop now normalizes `RECOMMEND:` wrappers and inline mixed-tool text before
 ### POST (Create)
 
 - Create issue: `REDMINE_API: POST /issues.json {"issue":{"project_id":2,"tracker_id":1,"status_id":1,"priority_id":2,"is_private":false,"subject":"...","description":""}}` (optional: `assigned_to_id`:5)
+- Log time entry: `REDMINE_API: POST /time_entries.json {"time_entry":{"issue_id":1234,"hours":1.5,"activity_id":9,"comments":"Investigated bug"}}` (use `project_id` instead of `issue_id` for non-issue time; `spent_on` defaults to today if omitted, format `YYYY-MM-DD`)
 
 ### PUT (Add Comment)
 
@@ -90,7 +91,7 @@ All errors are returned as the tool result so the LLM (and user) can see why the
 
 - **Module**: `src-tauri/src/redmine/mod.rs`
 - **Entry**: `redmine_api_request(method, path, body)` — used by the agent router when the model replies with `REDMINE_API: ...`
-- **Create context**: Projects, trackers, statuses, and priorities are fetched and cached (5 min TTL) for the create-issue flow; see `build_agent_descriptions` in the router.
+- **Create context**: Projects, trackers, statuses, priorities, and time entry activities are fetched and cached (5 min TTL) for the create-issue and log-time flows; see `build_agent_descriptions` in the router.
 - **Time entries**: GET `/time_entries.json` is handled by a dedicated path that aggregates and summarizes entries (see `fetch_and_summarize_time_entries`).
 
 ## Open tasks
@@ -99,5 +100,7 @@ Redmine open tasks and completed items are tracked in **006-feature-coder/FEATUR
 
 - ~~Implement a more robust way to handle Redmine API errors.~~ **Done:** 401/404/422 and generic status get clear messages (401: check API key; 404: check ID/path; 422: date format hint); see `redmine_api_request` in `redmine/mod.rs`.
 - ~~Improve the documentation for the `REDMINE_API` command.~~ **Done:** Configuration, Error handling (table), and Implementation sections added above.
+
+- ~~Add time entry creation (POST /time_entries.json).~~ **Done:** allowed POST path, activity IDs in create context, agent prompt updated, "log time/hours/book time" triggers context injection.
 
 Remaining: consider adding support for other Redmine features (e.g. issue attachments, custom fields).

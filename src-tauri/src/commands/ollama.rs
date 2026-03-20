@@ -1190,7 +1190,7 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
         // Short descriptor: when + one-line formats. Full endpoint docs not in prompt; pre-route handles "review ticket N".
         // Time entries: use /time_entries.json with from/to (not /search.json) for spent time / hours this month.
         base.push_str(&format!(
-            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, tickets worked today, create or update issue. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=100 (optional project_id=ID or user_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time, hours, or tickets worked use /time_entries.json with concrete from/to dates and a large enough limit; do not use /search.json. Always .json suffix.",
+            "\n\n{}. **REDMINE_API**: Redmine issues, projects, and time entries. Use for: review ticket, list/search issues, spent time/hours this month, tickets worked today, create or update issue, log time. Invoke one line: REDMINE_API: GET /issues/{{id}}.json?include=journals,attachments — or GET /time_entries.json?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=100 (optional project_id=ID or user_id=ID) for time entries — or GET /search.json?q=<keyword>&issues=1 — or POST /issues.json {{...}} — or POST /time_entries.json {{\"time_entry\":{{\"issue_id\":ID,\"hours\":N,\"activity_id\":ID,\"comments\":\"...\"}}}} to log time (use project_id instead of issue_id for non-issue time) — or PUT /issues/{{id}}.json {{\"issue\":{{\"notes\":\"...\"}}}}. For spent time, hours, or tickets worked use /time_entries.json with concrete from/to dates and a large enough limit; do not use /search.json. Always .json suffix.",
             num
         ));
         // Create context (projects, trackers, statuses) only when user might create/update — avoids polluting prompt for simple "review ticket N".
@@ -1206,6 +1206,11 @@ async fn build_agent_descriptions(from_discord: bool, question: Option<&str>) ->
                     || q_lower.contains("post a comment")
                     || q_lower.contains("write ")
                     || q_lower.contains("put ")
+                    || q_lower.contains("log time")
+                    || q_lower.contains("log hours")
+                    || q_lower.contains("book time")
+                    || q_lower.contains("book hours")
+                    || q_lower.contains("time entry")
             })
             .unwrap_or(false);
         if wants_create_or_update {
@@ -9042,13 +9047,18 @@ mod tests {
 
     #[test]
     fn grounded_redmine_time_entries_failure_reply_for_dns_blocker_is_user_facing() {
+        let today = chrono::Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let text = format!(
+            "Redmine API result:\n\nRedmine GET failed: error sending request for url (https://example.invalid/time_entries.json?from={d}&to={d}&offset=0&limit=100): error trying to connect: dns error: failed to lookup address information: nodename nor servname provided, or not known\n\nUse this data to answer the user's question.",
+            d = today
+        );
         let reply = grounded_redmine_time_entries_failure_reply(
             "Provide me the list of redmine tickets work on today.",
-            "Redmine API result:\n\nRedmine GET failed: error sending request for url (https://example.invalid/time_entries.json?from=2026-03-07&to=2026-03-07&offset=0&limit=100): error trying to connect: dns error: failed to lookup address information: nodename nor servname provided, or not known\n\nUse this data to answer the user's question.",
+            &text,
         )
         .expect("expected grounded failure reply");
 
-        assert!(reply.contains("Could not retrieve Redmine time entries for 2026-03-07"));
+        assert!(reply.contains(&format!("Could not retrieve Redmine time entries for {}", today)));
         assert!(reply.contains("configured Redmine host could not be resolved"));
         assert!(reply.contains("No Redmine data was fetched"));
         assert!(!reply.contains("no time entries were found"));
@@ -9056,9 +9066,14 @@ mod tests {
 
     #[test]
     fn verification_accepts_grounded_redmine_blocked_reply() {
+        let today = chrono::Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let reply = format!(
+            "Could not retrieve Redmine time entries for {} because the configured Redmine host could not be resolved. No Redmine data was fetched. Fix the Redmine configuration or connectivity, then retry.",
+            today
+        );
         assert!(is_grounded_redmine_time_entries_blocked_reply(
             "Provide me the list of redmine tickets work on today.",
-            "Could not retrieve Redmine time entries for 2026-03-07 because the configured Redmine host could not be resolved. No Redmine data was fetched. Fix the Redmine configuration or connectivity, then retry."
+            &reply
         ));
     }
 

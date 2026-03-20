@@ -154,11 +154,14 @@ fn is_allowed_put_path(path: &str) -> bool {
     false
 }
 
-/// POST paths that are allowed. Currently: creating issues only.
+/// POST paths that are allowed: creating issues and logging time entries.
 fn is_allowed_post_path(path: &str) -> bool {
     let path = path.trim().trim_start_matches('/');
     let path_no_query = path.split('?').next().unwrap_or(path);
-    path_no_query == "issues.json" || path_no_query == "issues.xml"
+    matches!(
+        path_no_query,
+        "issues.json" | "issues.xml" | "time_entries.json" | "time_entries.xml"
+    )
 }
 
 /// Internal: perform a GET request to Redmine, return response body or error.
@@ -347,6 +350,24 @@ fn parse_issue_statuses(json: &str) -> Option<String> {
         return None;
     }
     Some(format!("Statuses: {}.", parts.join(", ")))
+}
+
+/// Parse time entry activities from GET /enumerations/time_entry_activities.json response.
+fn parse_time_entry_activities(json: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let arr = v.get("time_entry_activities")?.as_array()?;
+    let parts: Vec<String> = arr
+        .iter()
+        .filter_map(|a| {
+            let id = a.get("id")?.as_i64()?;
+            let name = a.get("name")?.as_str()?;
+            Some(format!("{}={}", id, name))
+        })
+        .collect();
+    if parts.is_empty() {
+        return None;
+    }
+    Some(format!("Time entry activities: {}.", parts.join(", ")))
 }
 
 /// Parse issue priorities from GET /enumerations/issue_priorities.json response.
@@ -732,6 +753,11 @@ pub async fn get_redmine_create_context() -> Option<String> {
             parts.push(s);
         }
     }
+    if let Ok(body) = redmine_get("enumerations/time_entry_activities.json").await {
+        if let Some(s) = parse_time_entry_activities(&body) {
+            parts.push(s);
+        }
+    }
 
     if parts.is_empty() {
         warn!("Redmine create context: no data fetched (all endpoints failed or empty)");
@@ -740,7 +766,7 @@ pub async fn get_redmine_create_context() -> Option<String> {
 
     let context = format!("{}{}", base, parts.join(" "));
     info!(
-        "Redmine create context: {} chars (projects, trackers, statuses, priorities)",
+        "Redmine create context: {} chars (projects, trackers, statuses, priorities, activities)",
         context.len()
     );
 
@@ -994,5 +1020,30 @@ mod tests {
 
         assert!(summary.contains("#7209 Fetched subject from issue lookup — 2.00h"));
         assert!(!summary.contains("#7209 (subject unavailable)"));
+    }
+
+    #[test]
+    fn post_time_entries_path_is_allowed() {
+        assert!(is_allowed_post_path("/time_entries.json"));
+        assert!(is_allowed_post_path("time_entries.json"));
+        assert!(is_allowed_post_path("/issues.json"));
+        assert!(!is_allowed_post_path("/projects.json"));
+        assert!(!is_allowed_post_path("/trackers.json"));
+    }
+
+    #[test]
+    fn parses_time_entry_activities() {
+        let json = r#"{"time_entry_activities":[{"id":9,"name":"Development"},{"id":10,"name":"Code Review"},{"id":14,"name":"Meeting"}]}"#;
+        let result = parse_time_entry_activities(json).unwrap();
+        assert!(result.contains("9=Development"));
+        assert!(result.contains("10=Code Review"));
+        assert!(result.contains("14=Meeting"));
+        assert!(result.starts_with("Time entry activities:"));
+    }
+
+    #[test]
+    fn parses_time_entry_activities_empty() {
+        let json = r#"{"time_entry_activities":[]}"#;
+        assert!(parse_time_entry_activities(json).is_none());
     }
 }
