@@ -126,5 +126,14 @@ The Coder currently edits this repo **in place** (yolo mode) via the mac-stats-a
 | docs/020_agent_task_flow_analysis.md | ~~Documentation: Update for clarity and completeness~~ | **Done:** Tool table completed (RUN_JS, PERPLEXITY_SEARCH, RUN_CMD implementation details); See also for full list (agent_workflow, README). RUN_JS row in docs/README.md fixed (was truncated). |
 | security/mod.rs (codebase) | ~~Keychain list_credentials: proper account list~~ | **Done:** Persisted list at `~/.mac-stats/credential_accounts.json`; updated on store_credential/delete_credential; list_credentials reads from file. Removed TODO and Keychain search (security_framework does not expose account attribute for generic password items). Config::credential_accounts_file_path() added. |
 | docs/data-poster-charts-backend.md | ~~Investigate why frontend is not utilizing historical data buffer effectively~~ | **Done:** Data Poster had history canvases but did not load `history.js`; backend buffer (`get_metrics_history`) was unused. Added `history.js` to `themes/data-poster/cpu.html` so history section uses backend buffer; doc updated. |
+| docs/016_skill_agent.md | ~~Clarify advanced skill features open task as future/backlog~~ | **Done:** Open task bullet in 016 now labeled "Future/backlog" and points to this file for FEAT backlog; advanced features (conditional logic, user-defined variables) remain out of current scope. |
 
-Start with the first FEAT you can complete end-to-end (code or doc), then move to the next. When all rows above are done, check **docs/006_roadmap_ai_tasks.md** (Mail, WhatsApp, Google Docs) or other docs’ "Open tasks" for new candidates.
+Start with the first FEAT you can complete end-to-end (code or doc), then move to the next.
+
+### When backlog is empty
+
+When all rows in "Remaining open" above are done:
+
+1. Check **docs/006_roadmap_ai_tasks.md** for large roadmap items (Mail, WhatsApp, Google Docs).
+2. Scan other docs' "Open tasks" for small candidates (e.g. **docs/014_python_agent.md** security review, **docs/016_skill_agent.md** future items); add suitable ones to this table and pick one.
+3. If nothing scoped is available, add a doc-only or housekeeping FEAT (e.g. trim stale open tasks, point docs to this backlog) and mark it done.
