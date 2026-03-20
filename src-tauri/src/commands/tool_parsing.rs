@@ -1,0 +1,553 @@
+//! Tool parsing: extract tool invocations from model responses.
+//!
+//! All functions here are pure (no state, no I/O) and handle the various
+//! ways models format tool calls: `TOOL: arg`, `RECOMMEND: TOOL: arg`,
+//! numbered lists, inline chains with "then"/"and"/";", etc.
+
+use std::sync::OnceLock;
+
+/// Known tool-line prefixes (upper-case, with trailing colon).
+pub(crate) const TOOL_LINE_PREFIXES: &[&str] = &[
+    "FETCH_URL:",
+    "BRAVE_SEARCH:",
+    "BROWSER_SCREENSHOT:",
+    "BROWSER_NAVIGATE:",
+    "BROWSER_CLICK:",
+    "BROWSER_INPUT:",
+    "BROWSER_SCROLL:",
+    "BROWSER_EXTRACT:",
+    "BROWSER_SEARCH_PAGE:",
+    "PERPLEXITY_SEARCH:",
+    "RUN_JS:",
+    "SKILL:",
+    "AGENT:",
+    "RUN_CMD:",
+    "SCHEDULE:",
+    "SCHEDULER:",
+    "REMOVE_SCHEDULE:",
+    "LIST_SCHEDULES:",
+    "TASK_LIST:",
+    "TASK_SHOW:",
+    "TASK_APPEND:",
+    "TASK_STATUS:",
+    "TASK_CREATE:",
+    "TASK_ASSIGN:",
+    "TASK_SLEEP:",
+    "OLLAMA_API:",
+    "MCP:",
+    "PYTHON_SCRIPT:",
+    "DISCORD_API:",
+    "CURSOR_AGENT:",
+    "REDMINE_API:",
+    "MEMORY_APPEND:",
+    "DONE:",
+];
+
+/// Max browser tools (NAVIGATE, CLICK, INPUT, SCROLL, EXTRACT, SEARCH_PAGE, SCREENSHOT) per run.
+pub(crate) const MAX_BROWSER_TOOLS_PER_RUN: u32 = 15;
+
+/// Max tool invocations parsed from a single model response.
+pub(crate) const MAX_TOOLS_PER_RESPONSE: usize = 5;
+
+/// True if the trimmed line looks like the start of a tool call (e.g. "TASK_APPEND:", "RUN_CMD:").
+pub(crate) fn line_starts_with_tool_prefix(line: &str) -> bool {
+    let line = line.trim();
+    if line.eq_ignore_ascii_case("TASK_LIST") || line.eq_ignore_ascii_case("LIST_SCHEDULES") {
+        return true;
+    }
+    let mut search = line;
+    loop {
+        let upper = search.to_uppercase();
+        if upper.starts_with("RECOMMEND: ") {
+            search = search[11..].trim();
+        } else if search.len() >= 2 && search.as_bytes()[0].is_ascii_digit() {
+            let rest = search.trim_start_matches(|c: char| c.is_ascii_digit());
+            if rest.starts_with(". ") || rest.starts_with(") ") || rest.starts_with(": ") {
+                search = rest[2..].trim();
+            } else {
+                break;
+            }
+        } else if search.starts_with("- ") || search.starts_with("* ") {
+            search = search[2..].trim();
+        } else {
+            break;
+        }
+    }
+    for prefix in TOOL_LINE_PREFIXES {
+        if search.to_uppercase().starts_with(prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Parse one tool starting at the given line index.
+/// Returns ((tool_name, argument), next_line_index).
+pub(crate) fn parse_one_tool_at_line(
+    lines: &[&str],
+    line_index: usize,
+) -> Option<((String, String), usize)> {
+    let prefixes = [
+        "FETCH_URL:",
+        "BRAVE_SEARCH:",
+        "BROWSER_SCREENSHOT:",
+        "BROWSER_NAVIGATE:",
+        "BROWSER_GO_BACK:",
+        "BROWSER_CLICK:",
+        "BROWSER_INPUT:",
+        "BROWSER_SCROLL:",
+        "BROWSER_EXTRACT:",
+        "BROWSER_SEARCH_PAGE:",
+        "PERPLEXITY_SEARCH:",
+        "RUN_JS:",
+        "SKILL:",
+        "AGENT:",
+        "RUN_CMD:",
+        "SCHEDULE:",
+        "SCHEDULER:",
+        "REMOVE_SCHEDULE:",
+        "LIST_SCHEDULES:",
+        "TASK_LIST:",
+        "TASK_SHOW:",
+        "TASK_APPEND:",
+        "TASK_STATUS:",
+        "TASK_CREATE:",
+        "TASK_ASSIGN:",
+        "TASK_SLEEP:",
+        "OLLAMA_API:",
+        "PYTHON_SCRIPT:",
+        "MCP:",
+        "DISCORD_API:",
+        "CURSOR_AGENT:",
+        "REDMINE_API:",
+        "MEMORY_APPEND:",
+        "MASTODON_POST:",
+        "DONE:",
+    ];
+    let line = lines.get(line_index)?.trim();
+    if line.eq_ignore_ascii_case("TASK_LIST") {
+        return Some((("TASK_LIST".to_string(), String::new()), line_index + 1));
+    }
+    if line.eq_ignore_ascii_case("LIST_SCHEDULES") {
+        return Some((
+            ("LIST_SCHEDULES".to_string(), String::new()),
+            line_index + 1,
+        ));
+    }
+    // Lenient: model sometimes replies with bare tool name (no colon)
+    if line.eq_ignore_ascii_case("BROWSER_EXTRACT") {
+        return Some((
+            ("BROWSER_EXTRACT".to_string(), String::new()),
+            line_index + 1,
+        ));
+    }
+    if line.eq_ignore_ascii_case("BROWSER_GO_BACK") {
+        return Some((
+            ("BROWSER_GO_BACK".to_string(), String::new()),
+            line_index + 1,
+        ));
+    }
+    if line.eq_ignore_ascii_case("BROWSER_SCREENSHOT") {
+        return Some((
+            ("BROWSER_SCREENSHOT".to_string(), "current".to_string()),
+            line_index + 1,
+        ));
+    }
+    let mut search = line;
+    loop {
+        let upper = search.to_uppercase();
+        if upper.starts_with("RECOMMEND: ") {
+            search = search[11..].trim();
+        } else if search.len() >= 2 && search.as_bytes()[0].is_ascii_digit() {
+            let rest = search.trim_start_matches(|c: char| c.is_ascii_digit());
+            if rest.starts_with(". ") || rest.starts_with(") ") || rest.starts_with(": ") {
+                search = rest[2..].trim();
+            } else {
+                break;
+            }
+        } else if search.starts_with("- ") || search.starts_with("* ") {
+            search = search[2..].trim();
+        } else {
+            break;
+        }
+    }
+    for prefix in prefixes {
+        let tool_name = prefix.trim_end_matches(':');
+        let search_upper = search.to_uppercase();
+        let bare_prefix = format!("{} ", tool_name);
+        if search_upper.starts_with(prefix) || search_upper.starts_with(&bare_prefix) {
+            let arg_start = if search_upper.starts_with(prefix) {
+                prefix.len()
+            } else {
+                tool_name.len()
+            };
+            let mut arg = search[arg_start..].trim().to_string();
+            // RUN_CMD: never pass a trailing tool chain as the command.
+            if tool_name.eq_ignore_ascii_case("RUN_CMD") {
+                if let Some(pos) = arg.find(" then ").or_else(|| arg.find(" and ")) {
+                    arg = arg[..pos].trim().to_string();
+                }
+            }
+            if arg.is_empty()
+                && prefix != "TASK_LIST:"
+                && prefix != "TASK_SHOW:"
+                && prefix != "LIST_SCHEDULES:"
+                && prefix != "BROWSER_EXTRACT:"
+                && prefix != "BROWSER_SCREENSHOT:"
+                && prefix != "DONE:"
+            {
+                continue;
+            }
+            let tool_name = if tool_name.eq_ignore_ascii_case("SCHEDULER") {
+                "SCHEDULE".to_string()
+            } else {
+                tool_name.to_string()
+            };
+            let next_line = if tool_name == "TASK_APPEND" || tool_name == "TASK_CREATE" {
+                line_index
+                    + 1
+                    + lines[line_index + 1..]
+                        .iter()
+                        .take_while(|l| !line_starts_with_tool_prefix(l))
+                        .count()
+            } else {
+                line_index + 1
+            };
+            if tool_name == "FETCH_URL"
+                || tool_name == "BRAVE_SEARCH"
+                || tool_name == "BROWSER_SCREENSHOT"
+                || tool_name == "BROWSER_SEARCH_PAGE"
+                || tool_name == "PERPLEXITY_SEARCH"
+            {
+                if let Some(idx) = arg.find(';') {
+                    arg = arg[..idx].trim().to_string();
+                }
+            }
+            if tool_name == "FETCH_URL" || tool_name == "BROWSER_SCREENSHOT" {
+                if let Some(first_space) = arg.find(' ') {
+                    arg = arg[..first_space].trim().to_string();
+                }
+                arg = arg.trim_end_matches(['.', ',', ';', ':']).to_string();
+            }
+            if tool_name == "BROWSER_SEARCH_PAGE" {
+                arg = arg.trim_end_matches(['.', ',', ';', ':']).to_string();
+            }
+            if tool_name != "TASK_APPEND" && tool_name != "TASK_CREATE" {
+                if let Some(pos) = arg.find(|c: char| c.is_ascii_digit()).and_then(|_| {
+                    let bytes = arg.as_bytes();
+                    for i in 1..bytes.len().saturating_sub(2) {
+                        if bytes[i].is_ascii_digit()
+                            && bytes[i - 1] == b' '
+                            && (bytes.get(i + 1) == Some(&b'.') || bytes.get(i + 1) == Some(&b')'))
+                            && bytes.get(i + 2) == Some(&b' ')
+                        {
+                            return Some(i - 1);
+                        }
+                    }
+                    None
+                }) {
+                    arg = arg[..pos].trim().to_string();
+                }
+            }
+            if tool_name == "PERPLEXITY_SEARCH" || tool_name == "BRAVE_SEARCH" {
+                arg = truncate_search_query_arg(&arg);
+            }
+            if !arg.is_empty()
+                || tool_name == "TASK_LIST"
+                || tool_name == "TASK_SHOW"
+                || tool_name == "LIST_SCHEDULES"
+                || tool_name == "BROWSER_EXTRACT"
+                || tool_name == "BROWSER_SCREENSHOT"
+                || (tool_name == "TASK_SLEEP" && !arg.is_empty())
+            {
+                return Some(((tool_name, arg), next_line));
+            }
+        }
+    }
+    None
+}
+
+/// Truncate search query arguments that contain trailing plan steps.
+pub(crate) fn truncate_search_query_arg(arg: &str) -> String {
+    let arg = arg.trim();
+    let arg_lower = arg.to_lowercase();
+    let earliest = [
+        " then ",
+        " extract ",
+        " → ",
+        "\n",
+        " browser_navigate",
+        " browser_navigate:",
+        " browser_screenshot:",
+        " and then ",
+    ]
+    .iter()
+    .filter_map(|sep| arg_lower.find(sep))
+    .min();
+    let base = earliest.map(|i| arg[..i].trim()).unwrap_or(arg);
+    base.chars()
+        .take(150)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+/// Rewrite inline tool chains ("... then TOOL: arg") into separate lines.
+pub(crate) fn normalize_inline_tool_sequences(content: &str) -> String {
+    static INLINE_TOOL_CHAIN_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = INLINE_TOOL_CHAIN_RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)(?:\b(?:then|and then|and|after that|afterward|afterwards|next|finally)\b|;|->)\s+(FETCH_URL|BRAVE_SEARCH|BROWSER_SCREENSHOT|BROWSER_NAVIGATE|BROWSER_GO_BACK|BROWSER_CLICK|BROWSER_INPUT|BROWSER_SCROLL|BROWSER_EXTRACT|BROWSER_SEARCH_PAGE|PERPLEXITY_SEARCH|RUN_JS|SKILL|AGENT|RUN_CMD|SCHEDULE|SCHEDULER|REMOVE_SCHEDULE|LIST_SCHEDULES|TASK_LIST|TASK_SHOW|TASK_APPEND|TASK_STATUS|TASK_CREATE|TASK_ASSIGN|TASK_SLEEP|OLLAMA_API|MCP|PYTHON_SCRIPT|DISCORD_API|CURSOR_AGENT|REDMINE_API|MEMORY_APPEND|MASTODON_POST|DONE)(?::)?\s+",
+        )
+        .expect("inline tool chain regex must compile")
+    });
+    re.replace_all(content, |caps: &regex::Captures| {
+        format!("\n{}: ", &caps[1].to_ascii_uppercase())
+    })
+    .into_owned()
+}
+
+/// Parse first tool from response (first match only).
+pub(crate) fn parse_tool_from_response(content: &str) -> Option<(String, String)> {
+    let normalized = normalize_inline_tool_sequences(content);
+    let lines: Vec<&str> = normalized.lines().collect();
+    parse_one_tool_at_line(&lines, 0).map(|(pair, _)| pair)
+}
+
+/// Normalize (tool, arg) for repetition detection.
+pub(crate) fn normalize_browser_tool_arg(tool: &str, arg: &str) -> String {
+    let a = arg.trim();
+    match tool {
+        "BROWSER_NAVIGATE" => a.to_lowercase(),
+        "BROWSER_CLICK" => a.split_whitespace().next().unwrap_or(a).to_string(),
+        "BROWSER_INPUT" => a.split_whitespace().next().unwrap_or(a).to_string(),
+        "BROWSER_SCROLL" => a.to_lowercase(),
+        "BROWSER_EXTRACT" => "extract".to_string(),
+        "BROWSER_SEARCH_PAGE" => a.to_lowercase(),
+        "BROWSER_SCREENSHOT" => a.to_lowercase(),
+        _ => a.to_string(),
+    }
+}
+
+/// Parse all tool invocations from a response (up to `MAX_TOOLS_PER_RESPONSE`).
+pub(crate) fn parse_all_tools_from_response(content: &str) -> Vec<(String, String)> {
+    let normalized = normalize_inline_tool_sequences(content);
+    let lines: Vec<&str> = normalized.lines().collect();
+    let mut out = Vec::with_capacity(MAX_TOOLS_PER_RESPONSE);
+    let mut idx = 0;
+    while idx < lines.len() && out.len() < MAX_TOOLS_PER_RESPONSE {
+        if let Some(((tool, arg), next)) = parse_one_tool_at_line(&lines, idx) {
+            out.push((tool, arg));
+            idx = next;
+        } else {
+            idx += 1;
+        }
+    }
+    out
+}
+
+/// Parse PYTHON_SCRIPT from full response: (id, topic, script_body).
+/// Script body is taken from a ` ```python ... ``` ` block, or from all lines
+/// after PYTHON_SCRIPT: until another tool line or end.
+pub(crate) fn parse_python_script_from_response(
+    content: &str,
+) -> Option<(String, String, String)> {
+    let prefix = "PYTHON_SCRIPT:";
+    let mut id_topic_line: Option<&str> = None;
+    let mut python_line_index = None::<usize>;
+    for (idx, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        let search = if trimmed.to_uppercase().starts_with("RECOMMEND: ") {
+            trimmed[11..].trim()
+        } else {
+            trimmed
+        };
+        if search.to_uppercase().starts_with(prefix) {
+            id_topic_line = Some(search[prefix.len()..].trim());
+            python_line_index = Some(idx);
+            break;
+        }
+    }
+    let id_topic_line = id_topic_line?;
+    let parts: Vec<&str> = id_topic_line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let id = parts[0].to_string();
+    let topic = parts[1].to_string();
+
+    if let Some(start) = content.find("```python") {
+        let after_marker = &content[start + 9..];
+        if let Some(close) = after_marker.find("```") {
+            let body = after_marker[..close].trim().to_string();
+            if !body.is_empty() {
+                return Some((id, topic, body));
+            }
+        }
+    }
+    if let Some(start) = content.find("```") {
+        let after_newline = content[start + 3..]
+            .find('\n')
+            .map(|i| start + 3 + i + 1)
+            .unwrap_or(start + 3);
+        let rest = &content[after_newline..];
+        if let Some(close) = rest.find("```") {
+            let body = rest[..close].trim().to_string();
+            if !body.is_empty() {
+                return Some((id, topic, body));
+            }
+        }
+    }
+
+    let python_line_index = python_line_index.unwrap_or(0);
+    let lines: Vec<&str> = content.lines().collect();
+    let mut body_lines = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if i <= python_line_index {
+            continue;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            body_lines.push(trimmed);
+            continue;
+        }
+        let is_other_tool = TOOL_LINE_PREFIXES
+            .iter()
+            .any(|p| trimmed.to_uppercase().starts_with(p));
+        if is_other_tool {
+            break;
+        }
+        body_lines.push(trimmed);
+    }
+    let body = body_lines.join("\n").trim().to_string();
+    if body.is_empty() {
+        return None;
+    }
+    Some((id, topic, body))
+}
+
+/// Parse `FETCH_URL: <url>` from assistant response (first valid URL).
+pub(crate) fn parse_fetch_url_from_response(content: &str) -> Option<String> {
+    let prefix = "FETCH_URL:";
+    for line in content.lines() {
+        let line = line.trim();
+        if line.to_uppercase().starts_with(prefix) {
+            let arg = line[prefix.len()..].trim();
+            if let Some(url) = crate::commands::browser::extract_first_url(arg) {
+                return Some(url);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_inline_then_chain() {
+        assert_eq!(
+            parse_all_tools_from_response(
+                "RECOMMEND: RUN_CMD: date +%Y-%m-%d then REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
+            ),
+            vec![
+                ("RUN_CMD".to_string(), "date +%Y-%m-%d".to_string()),
+                (
+                    "REDMINE_API".to_string(),
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100".to_string()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn splits_inline_semicolon_chain() {
+        assert_eq!(
+            parse_all_tools_from_response(
+                "RECOMMEND: RUN_CMD: date; REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
+            ),
+            vec![
+                ("RUN_CMD".to_string(), "date".to_string()),
+                (
+                    "REDMINE_API".to_string(),
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100".to_string()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn splits_inline_and_chain() {
+        assert_eq!(
+            parse_all_tools_from_response(
+                "RUN_CMD: date +%Y-%m-%d and REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
+            ),
+            vec![
+                ("RUN_CMD".to_string(), "date +%Y-%m-%d".to_string()),
+                (
+                    "REDMINE_API".to_string(),
+                    "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100".to_string()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn supports_recommend_without_colon() {
+        assert_eq!(
+            parse_tool_from_response(
+                "RECOMMEND: REDMINE_API GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100"
+            ),
+            Some((
+                "REDMINE_API".to_string(),
+                "GET /time_entries.json?from=2026-03-06&to=2026-03-06&limit=100".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn line_prefix_detects_task_list() {
+        assert!(line_starts_with_tool_prefix("TASK_LIST"));
+        assert!(line_starts_with_tool_prefix("  TASK_LIST  "));
+    }
+
+    #[test]
+    fn line_prefix_detects_numbered_recommend() {
+        assert!(line_starts_with_tool_prefix("1. RECOMMEND: RUN_CMD: date"));
+        assert!(line_starts_with_tool_prefix("2) FETCH_URL: https://example.com"));
+    }
+
+    #[test]
+    fn normalize_browser_arg_lowercase_navigate() {
+        assert_eq!(
+            normalize_browser_tool_arg("BROWSER_NAVIGATE", "HTTPS://Example.COM/Page"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn normalize_browser_arg_click_first_token() {
+        assert_eq!(
+            normalize_browser_tool_arg("BROWSER_CLICK", "5 some label"),
+            "5"
+        );
+    }
+
+    #[test]
+    fn truncate_search_query_strips_plan() {
+        assert_eq!(
+            truncate_search_query_arg("spanish newspapers then BROWSER_NAVIGATE: ..."),
+            "spanish newspapers"
+        );
+    }
+
+    #[test]
+    fn parse_fetch_url_extracts_url() {
+        let content = "Let me fetch that.\nFETCH_URL: https://example.com\nDone.";
+        assert_eq!(
+            parse_fetch_url_from_response(content),
+            Some("https://example.com".to_string())
+        );
+    }
+}

@@ -17,4 +17,5 @@ pub mod run_cmd;
 pub mod scheduler;
 pub mod security;
 pub mod skills;
+pub mod tool_parsing;
 pub mod window;

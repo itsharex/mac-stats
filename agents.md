@@ -210,7 +210,8 @@ mac-stats/
 │   │   │   ├── alerts.rs         ← Alert management
 │   │   │   ├── security.rs       ← Keychain/credential management
 │   │   │   ├── logging.rs        ← Generic JS console logging bridge
-│   │   │   └── plugins.rs        ← Plugin system commands
+│   │   │   ├── plugins.rs        ← Plugin system commands
+│   │   │   └── tool_parsing.rs   ← Tool invocation parsing from model responses
 │   │   │
 │   │   ├── metrics/              ← System metrics collection
 │   │   │   └── mod.rs            ← CPU, RAM, GPU, disk, temperature, frequency
