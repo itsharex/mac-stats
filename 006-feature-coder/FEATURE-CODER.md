@@ -140,6 +140,7 @@ The Coder currently edits this repo **in place** (yolo mode) via the mac-stats-a
 | docs/017_llm_agents.md | ~~Define fallback behavior for cloud model roles~~ | **Done:** § "Cloud model as default — fallback behavior" in 017 (scenario table: cloud default + role/explicit/none; entry-point prefers local; sub-agent uses default; improved warning log in agents/mod.rs when only cloud models exist). |
 | docs/017_llm_agents.md | ~~Add CLI command for agent reset/defaults~~ | **Done:** `mac_stats agent reset-defaults [id]` CLI subcommand; `Config::reset_agent_defaults()` force-overwrites all bundled default files (agent.json, skill.md, testing.md, soul.md); optional single-agent filter by id. |
 | docs (multiple) | ~~Trim stale open tasks, point docs to FEATURE-CODER backlog~~ | **Done:** docs/004, 012, 015, 020, 100 — stale/vague open tasks marked deferred or done; each doc now points to 006-feature-coder/FEATURE-CODER.md for the active backlog. |
+| alerts/rules.rs + alerts/mod.rs | ~~Fix TemperatureHigh/CpuHigh sustained-duration enforcement~~ | **Done:** `AlertRule::required_duration_secs()` returns the configured duration; `AlertManager` tracks `condition_since` per alert and only fires when threshold is exceeded for >= `duration_secs` consecutive seconds. Previously `duration_secs` was ignored and alerts fired on any single reading. |
 
 Start with the first FEAT you can complete end-to-end (code or doc), then move to the next.
 

@@ -25,6 +25,16 @@ pub enum AlertRule {
 }
 
 impl AlertRule {
+    /// Duration (in seconds) that the condition must be sustained before the alert fires.
+    /// Returns 0 for rules that fire immediately on a single reading.
+    pub fn required_duration_secs(&self) -> u64 {
+        match self {
+            AlertRule::TemperatureHigh { duration_secs, .. } => *duration_secs,
+            AlertRule::CpuHigh { duration_secs, .. } => *duration_secs,
+            _ => 0,
+        }
+    }
+
     /// Evaluate rule against context
     pub fn evaluate(&self, context: &AlertContext) -> Result<bool> {
         match self {
@@ -72,6 +82,9 @@ impl AlertRule {
                 }
                 Ok(false)
             }
+            // NOTE: TemperatureHigh/CpuHigh return true for the instantaneous
+            // condition (threshold exceeded). The sustained-duration check
+            // (duration_secs) is enforced by AlertManager::evaluate().
             AlertRule::Custom {
                 plugin_id: _,
                 config: _,

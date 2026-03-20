@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.47] - 2026-03-20
+
+### Fixed
+- **Alert sustained-duration enforcement (TemperatureHigh, CpuHigh)** — `AlertManager` now tracks `condition_since` per alert and only fires when the threshold is exceeded for >= `duration_secs` consecutive seconds. Previously `duration_secs` was ignored and alerts fired on any single reading. New `required_duration_secs()` method on `AlertRule`. (`alerts/mod.rs`, `alerts/rules.rs`)
+
 ### Added
 - **CLI: `agent reset-defaults [id]`** — New subcommand to force-overwrite bundled default agent files (agent.json, skill.md, testing.md, soul.md). Optional id filter to reset a single agent. `Config::reset_agent_defaults()` in config/mod.rs.
 

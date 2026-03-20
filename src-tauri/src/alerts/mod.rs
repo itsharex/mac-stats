@@ -74,6 +74,9 @@ pub struct AlertContext {
 pub struct AlertManager {
     alerts: HashMap<String, Alert>,
     channels: HashMap<String, Box<dyn AlertChannel>>,
+    /// Tracks when each alert's condition first became true (for sustained-duration rules).
+    /// Key: alert id. Cleared when the condition becomes false.
+    condition_since: HashMap<String, DateTime<Utc>>,
 }
 
 impl AlertManager {
@@ -81,6 +84,7 @@ impl AlertManager {
         Self {
             alerts: HashMap::new(),
             channels: HashMap::new(),
+            condition_since: HashMap::new(),
         }
     }
 
@@ -107,36 +111,66 @@ impl AlertManager {
         self.channels.keys().cloned().collect()
     }
 
-    /// Evaluate all alerts against context
+    /// Evaluate all alerts against context.
+    /// For rules with a `duration_secs` requirement (TemperatureHigh, CpuHigh), the condition
+    /// must be true for at least that many consecutive seconds before the alert fires.
     pub fn evaluate(&mut self, context: AlertContext) -> Result<Vec<String>> {
         let mut triggered_alerts = Vec::new();
+        let now = Utc::now();
 
-        for (alert_id, alert) in self.alerts.iter_mut() {
+        let alert_ids: Vec<String> = self.alerts.keys().cloned().collect();
+        for alert_id in alert_ids {
+            let alert = match self.alerts.get(&alert_id) {
+                Some(a) => a,
+                None => continue,
+            };
             if !alert.should_trigger() {
                 continue;
             }
 
-            // Evaluate rule
-            if alert.rule.evaluate(&context)? {
-                // Trigger alert
-                let message = format!("Alert triggered: {}", alert.name);
+            let condition_met = alert.rule.evaluate(&context)?;
+            let required_secs = alert.rule.required_duration_secs();
 
-                // Send to all configured channels
-                for channel_id in &alert.channels {
-                    if let Some(channel) = self.channels.get_mut(channel_id.as_str()) {
-                        if let Err(e) = channel.send(&message, &context) {
-                            tracing::error!(
-                                "Failed to send alert to channel {}: {}",
-                                channel_id,
-                                e
-                            );
-                        }
+            if condition_met {
+                if required_secs == 0 {
+                    // Immediate rule — fire right away
+                } else {
+                    let first_true = *self
+                        .condition_since
+                        .entry(alert_id.clone())
+                        .or_insert(now);
+                    let sustained = now
+                        .signed_duration_since(first_true)
+                        .num_seconds();
+                    if sustained < required_secs as i64 {
+                        continue; // not sustained long enough yet
+                    }
+                    // Sustained long enough; clear tracker so cooldown governs re-fire
+                    self.condition_since.remove(&alert_id);
+                }
+            } else {
+                self.condition_since.remove(&alert_id);
+                continue;
+            }
+
+            // Trigger alert
+            let alert = self.alerts.get_mut(&alert_id).unwrap();
+            let message = format!("Alert triggered: {}", alert.name);
+
+            for channel_id in &alert.channels {
+                if let Some(channel) = self.channels.get_mut(channel_id.as_str()) {
+                    if let Err(e) = channel.send(&message, &context) {
+                        tracing::error!(
+                            "Failed to send alert to channel {}: {}",
+                            channel_id,
+                            e
+                        );
                     }
                 }
-
-                alert.last_triggered = Some(Utc::now());
-                triggered_alerts.push(alert_id.clone());
             }
+
+            alert.last_triggered = Some(now);
+            triggered_alerts.push(alert_id);
         }
 
         Ok(triggered_alerts)
