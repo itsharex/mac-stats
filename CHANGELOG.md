@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docs: OpenClaw §91 re-verification** — All §7 checks re-run; no discrepancies found (`005-openclaw-reviewer`).
 - **022 testing note** — Closing reviewer smoke tests 2026-03-20 (code detection tightening, tool_parsing extraction; cargo build, debug.log, agents, monitors UP).
 - **037 follow-up marked done** — Code detection tightening follow-up noted as implemented (`docs/037`).
+- **Extract model management + JS logging from `ollama.rs`** — Moved 9 Ollama model management Tauri commands (`list_ollama_models`, `list_ollama_models_full`, `get_ollama_version`, `list_ollama_running_models`, `pull_ollama_model`, `delete_ollama_model`, `ollama_embeddings`, `unload_ollama_model`, `load_ollama_model`) into `commands/ollama_models.rs` (237 lines) and 4 JS execution logging commands (`log_ollama_js_execution`, `log_ollama_js_check`, `log_ollama_js_extraction`, `log_ollama_js_no_blocks`) into `commands/ollama_logging.rs` (116 lines). `ollama.rs` shrinks by 344 lines. `get_ollama_client` made `pub(crate)` for cross-module access. No behavioral changes; zero clippy warnings, all tests pass. (`commands/ollama_models.rs`, `commands/ollama_logging.rs`, `commands/mod.rs`, `commands/ollama.rs`, `lib.rs`)
+- **Docs: OpenClaw §92 re-verification** — All §7 checks re-run; no discrepancies found (`005-openclaw-reviewer`).
+- **FEATURE-CODER backlog** — Model management + JS logging extraction row marked done (`006-feature-coder`).
+- **agents.md** — Directory structure updated to include `ollama_models.rs` and `ollama_logging.rs` under `commands/`.
 
 ## [0.1.47] - 2026-03-20
 

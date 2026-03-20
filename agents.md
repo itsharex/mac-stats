@@ -205,6 +205,8 @@ mac-stats/
 │   │   ├── commands/             ← Tauri commands (exposed to frontend)
 │   │   │   ├── mod.rs            ← Command module exports
 │   │   │   ├── ollama.rs         ← Ollama AI chat commands (chat, code execution, FETCH_URL, BROWSER_SCREENSHOT)
+│   │   │   ├── ollama_models.rs  ← Ollama model management (list, pull, delete, embed, load/unload)
+│   │   │   ├── ollama_logging.rs ← Ollama JS execution logging bridge
 │   │   │   ├── browser.rs        ← fetch_page for Ollama web tasks (no CORS)
 │   │   │   ├── monitors.rs       ← Monitor management (add, remove, check)
 │   │   │   ├── alerts.rs         ← Alert management

@@ -10,6 +10,8 @@ pub mod logging;
 pub mod monitors;
 pub mod judge;
 pub mod ollama;
+pub mod ollama_logging;
+pub mod ollama_models;
 pub mod perplexity;
 pub mod plugins;
 pub mod python_agent;
