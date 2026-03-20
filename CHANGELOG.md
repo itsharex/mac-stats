@@ -21,7 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FEATURE-CODER backlog** — Clippy clean builds, Chrome lean flags, Redmine time entry creation, and tool parsing extraction rows marked done (`006-feature-coder`).
 - **Docs 025: Redmine API skill** — POST time entry documented; create context description updated; open task marked done.
 - **agents.md** — Directory structure updated to include `tool_parsing.rs` under `commands/`.
-- **022 testing note** — Closing reviewer smoke tests 2026-03-20 (tool_parsing extraction, Chrome lean flags, configurable idle timeout, Redmine time entry creation; cargo build, debug.log, agents, monitors UP).
+- **Tighten JS code detection to reduce spurious execution rounds** — Replaced over-broad keyword-based fallback (`"function"`, `"=>"`, `"console.log"` anywhere in text) with fenced-code-block detection: only `ROLE=code-assistant` prefix or a markdown ` ```javascript`/` ```js`/` ``` ` block with executable JS patterns triggers code execution. Prose that merely *mentions* code no longer fires. Shared helper `detect_and_extract_js_code()` in `tool_parsing.rs` (DRY); both `ollama_chat_with_execution` and `ollama_chat_continue_with_result` use it. 12 new tests, 109 total pass, zero clippy warnings. (`commands/tool_parsing.rs`, `commands/ollama.rs`)
+- **Docs: OpenClaw §91 re-verification** — All §7 checks re-run; no discrepancies found (`005-openclaw-reviewer`).
+- **022 testing note** — Closing reviewer smoke tests 2026-03-20 (code detection tightening, tool_parsing extraction; cargo build, debug.log, agents, monitors UP).
+- **037 follow-up marked done** — Code detection tightening follow-up noted as implemented (`docs/037`).
 
 ## [0.1.47] - 2026-03-20
 

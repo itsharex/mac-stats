@@ -441,6 +441,143 @@ pub(crate) fn parse_fetch_url_from_response(content: &str) -> Option<String> {
     None
 }
 
+/// Detect and extract JavaScript code from an Ollama response for execution.
+///
+/// Returns `Some(code)` when the response should trigger code execution.
+/// Returns `None` for regular prose (including prose that merely *mentions* code keywords).
+///
+/// Detection rules:
+/// 1. Explicit: starts with `ROLE=code-assistant` — code is everything after the first line.
+/// 2. Fenced code block: response contains a markdown code block (` ```javascript ` / ` ```js ` / plain ` ``` `)
+///    whose content looks like executable JavaScript. Prose that mentions code patterns
+///    like "you can use `console.log(x)`" does NOT trigger code execution.
+pub fn detect_and_extract_js_code(content: &str) -> Option<String> {
+    let trimmed = content.trim();
+
+    // 1. Explicit ROLE=code-assistant prefix
+    let lower_start = &trimmed.to_lowercase();
+    if lower_start.starts_with("role=code-assistant") {
+        let code = extract_after_role_line(trimmed);
+        let code = strip_code_fences(&code);
+        let code = unwrap_console_log_wrapper(&code);
+        if !code.is_empty() {
+            return Some(code);
+        }
+    }
+
+    // 2. Fenced code block fallback — only fires when a real ``` block exists
+    if let Some(code) = extract_fenced_js_code_block(trimmed) {
+        let code = unwrap_console_log_wrapper(&code);
+        if !code.is_empty() {
+            return Some(code);
+        }
+    }
+
+    None
+}
+
+fn extract_after_role_line(content: &str) -> String {
+    let lines: Vec<&str> = content.split('\n').collect();
+    if lines.len() >= 2 {
+        lines[1..].join("\n").trim().to_string()
+    } else {
+        let lower = content.to_lowercase();
+        let idx = lower.find("role=code-assistant").unwrap_or(0) + "role=code-assistant".len();
+        content[idx..].trim().to_string()
+    }
+}
+
+fn strip_code_fences(code: &str) -> String {
+    code.replace("```javascript", "")
+        .replace("```js", "")
+        .replace("```", "")
+        .trim()
+        .to_string()
+}
+
+/// Extract code from the first fenced markdown code block in the response.
+/// Accepts blocks tagged `javascript` / `js`, or untagged blocks that contain
+/// executable JS patterns (fetch, console.log, Date, DOM access).
+fn extract_fenced_js_code_block(content: &str) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut in_block = false;
+    let mut block_lines: Vec<&str> = Vec::new();
+    let mut is_js_tagged = false;
+
+    for line in &lines {
+        let stripped = line.trim();
+        if !in_block {
+            if stripped.starts_with("```javascript") || stripped.starts_with("```js") {
+                in_block = true;
+                is_js_tagged = true;
+                continue;
+            }
+            if stripped == "```" {
+                in_block = true;
+                is_js_tagged = false;
+                continue;
+            }
+        } else if stripped == "```" || stripped.starts_with("```") && !stripped[3..].contains('`') {
+            in_block = false;
+            let code = block_lines.join("\n").trim().to_string();
+
+            if is_js_tagged && !code.is_empty() {
+                return Some(code);
+            }
+            if !is_js_tagged && !code.is_empty() {
+                let lower = code.to_lowercase();
+                if lower.contains("console.log")
+                    || lower.contains("new date(")
+                    || lower.contains("fetch(")
+                    || lower.contains("document.get")
+                    || lower.contains("document.query")
+                    || lower.contains("window.location")
+                    || lower.contains("window.open")
+                {
+                    return Some(code);
+                }
+            }
+            block_lines.clear();
+            is_js_tagged = false;
+            continue;
+        } else {
+            block_lines.push(line);
+        }
+    }
+
+    None
+}
+
+/// Unwrap a `console.log(expression)` wrapper, returning just `expression`.
+fn unwrap_console_log_wrapper(code: &str) -> String {
+    let trimmed = code.trim();
+    if !trimmed.to_lowercase().starts_with("console.log(") {
+        return trimmed.to_string();
+    }
+    let start = trimmed.find("console.log(").unwrap_or(0) + "console.log(".len();
+    let mut paren_count: i32 = 1;
+    let mut end = start;
+    let chars: Vec<char> = trimmed.chars().collect();
+    for (i, ch) in chars.iter().enumerate().skip(start) {
+        match ch {
+            '(' => paren_count += 1,
+            ')' => {
+                paren_count -= 1;
+                if paren_count == 0 {
+                    end = i;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if end > start {
+        trimmed[start..end].trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -549,5 +686,96 @@ mod tests {
             parse_fetch_url_from_response(content),
             Some("https://example.com".to_string())
         );
+    }
+
+    // --- detect_and_extract_js_code tests ---
+
+    #[test]
+    fn code_detect_role_prefix() {
+        let content = "ROLE=code-assistant\nconsole.log(new Date().toISOString())";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "new Date().toISOString()");
+    }
+
+    #[test]
+    fn code_detect_role_prefix_case_insensitive() {
+        let content = "role=code-assistant\nfetch('https://api.example.com')";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("fetch("));
+    }
+
+    #[test]
+    fn code_detect_fenced_js_block() {
+        let content = "Here is the code:\n```javascript\nconsole.log('hello')\n```\nThat should work.";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), "'hello'");
+    }
+
+    #[test]
+    fn code_detect_fenced_js_tag() {
+        let content = "```js\nfetch('https://api.weather.com/today')\n```";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("fetch("));
+    }
+
+    #[test]
+    fn code_detect_untagged_block_with_js_patterns() {
+        let content = "Try this:\n```\nfetch('https://example.com').then(r => r.json())\n```";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("fetch("));
+    }
+
+    #[test]
+    fn code_detect_prose_mentioning_code_no_trigger() {
+        let content = "You can use `console.log(x)` to debug your JavaScript code. The function keyword defines a function, and => creates an arrow function.";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_none(), "Prose mentioning code should not trigger code execution");
+    }
+
+    #[test]
+    fn code_detect_prose_with_window_mention_no_trigger() {
+        let content = "The window.location property returns the URL of the current page. You can also use document.getElementById to access elements.";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn code_detect_prose_about_functions_no_trigger() {
+        let content = "In JavaScript, a function is a block of code that performs a task. Arrow functions (=>) provide a shorter syntax.";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn code_detect_empty_content() {
+        assert!(detect_and_extract_js_code("").is_none());
+        assert!(detect_and_extract_js_code("   ").is_none());
+    }
+
+    #[test]
+    fn code_detect_untagged_block_without_js_no_trigger() {
+        let content = "```\nSELECT * FROM users WHERE id = 1;\n```";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_none(), "SQL in untagged block should not trigger JS execution");
+    }
+
+    #[test]
+    fn code_detect_console_log_unwrap() {
+        let content = "ROLE=code-assistant\nconsole.log(navigator.userAgent)";
+        let result = detect_and_extract_js_code(content);
+        assert_eq!(result.unwrap(), "navigator.userAgent");
+    }
+
+    #[test]
+    fn code_detect_multiline_fenced_block() {
+        let content = "```javascript\nconst now = new Date();\nconst day = now.toLocaleDateString();\nconsole.log(day);\n```";
+        let result = detect_and_extract_js_code(content);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("new Date()"));
     }
 }

@@ -7990,101 +7990,7 @@ pub async fn ollama_chat_with_execution(
     // Remove "javascript\n" if present
     processed_content = processed_content.replace("javascript\n", "");
 
-    // Check if this is a code-assistant response
-    let trimmed = processed_content.trim();
-    let is_code_assistant = trimmed.starts_with("ROLE=code-assistant")
-        || trimmed.to_lowercase().starts_with("role=code-assistant");
-
-    // Fallback: Detect JavaScript code patterns even without ROLE=code-assistant prefix
-    // This handles cases where Ollama returns code directly
-    let looks_like_javascript = if !is_code_assistant {
-        let lower = trimmed.to_lowercase();
-        // Check for common JavaScript patterns
-        lower.contains("console.log")
-            || lower.contains("new date()")
-            || lower.contains("document.")
-            || lower.contains("window.")
-            || lower.contains("function")
-            || lower.contains("=>")
-            || (lower.contains("(")
-                && lower.contains(")")
-                && (lower.contains("tostring")
-                    || lower.contains("tolocaledate")
-                    || lower.contains("tolocalestring")
-                    || lower.contains("getday")
-                    || lower.contains("getdate")
-                    || lower.contains("getmonth")
-                    || lower.contains("getfullyear")))
-    } else {
-        false
-    };
-
-    let needs_code_execution = is_code_assistant || looks_like_javascript;
-
-    if needs_code_execution {
-        if is_code_assistant {
-            info!("Ollama Chat with Execution: Detected code-assistant response");
-        } else {
-            info!(
-                "Ollama Chat with Execution: Detected JavaScript code pattern (fallback detection)"
-            );
-        }
-
-        // Extract code
-        let code = if is_code_assistant {
-            // Extract code (everything after the first line if ROLE=code-assistant)
-            let lines: Vec<&str> = processed_content.split('\n').collect();
-            if lines.len() >= 2 {
-                lines[1..].join("\n").trim().to_string()
-            } else {
-                processed_content
-                    .replace("ROLE=code-assistant", "")
-                    .trim()
-                    .to_string()
-            }
-        } else {
-            // Use the entire content as code (no ROLE prefix)
-            trimmed.to_string()
-        };
-
-        // Remove markdown code block markers
-        let code = code
-            .replace("```javascript", "")
-            .replace("```js", "")
-            .replace("```", "")
-            .trim()
-            .to_string();
-
-        // Handle console.log() - extract the expression inside
-        // If code is "console.log(expression)", extract just "expression"
-        let code = if code.trim_start().to_lowercase().starts_with("console.log(") {
-            // Extract content between console.log( and the matching closing paren
-            let start = code.find("console.log(").unwrap_or(0) + "console.log(".len();
-            let mut paren_count = 1;
-            let mut end = start;
-            let chars: Vec<char> = code.chars().collect();
-            for (i, ch) in chars.iter().enumerate().skip(start) {
-                match ch {
-                    '(' => paren_count += 1,
-                    ')' => {
-                        paren_count -= 1;
-                        if paren_count == 0 {
-                            end = i;
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if end > start {
-                code[start..end].trim().to_string()
-            } else {
-                code
-            }
-        } else {
-            code
-        };
-
+    if let Some(code) = crate::commands::tool_parsing::detect_and_extract_js_code(&processed_content) {
         info!(
             "Ollama Chat with Execution: Extracted code ({} chars):\n{}",
             code.len(),
@@ -8102,7 +8008,6 @@ pub async fn ollama_chat_with_execution(
             });
         }
 
-        // Return code for execution
         return Ok(OllamaChatWithExecutionResponse {
             needs_code_execution: true,
             code: Some(code),
@@ -8222,99 +8127,7 @@ pub async fn ollama_chat_continue_with_result(
     // Remove "javascript\n" if present
     processed_content = processed_content.replace("javascript\n", "");
 
-    // Check if Ollama is asking for more code execution (ping-pong)
-    let trimmed = processed_content.trim();
-    let is_code_assistant = trimmed.starts_with("ROLE=code-assistant")
-        || trimmed.to_lowercase().starts_with("role=code-assistant");
-
-    // Fallback: Detect JavaScript code patterns even without ROLE=code-assistant prefix
-    let looks_like_javascript = if !is_code_assistant {
-        let lower = trimmed.to_lowercase();
-        lower.contains("console.log")
-            || lower.contains("new date()")
-            || lower.contains("document.")
-            || lower.contains("window.")
-            || lower.contains("function")
-            || lower.contains("=>")
-            || (lower.contains("(")
-                && lower.contains(")")
-                && (lower.contains("tostring")
-                    || lower.contains("tolocaledate")
-                    || lower.contains("tolocalestring")
-                    || lower.contains("getday")
-                    || lower.contains("getdate")
-                    || lower.contains("getmonth")
-                    || lower.contains("getfullyear")))
-    } else {
-        false
-    };
-
-    let needs_code_execution = is_code_assistant || looks_like_javascript;
-
-    if needs_code_execution {
-        if is_code_assistant {
-            info!("Ollama Chat Continue: Detected another code-assistant response (ping-pong)");
-        } else {
-            info!(
-                "Ollama Chat Continue: Detected JavaScript code pattern (ping-pong, fallback detection)"
-            );
-        }
-
-        // Extract code
-        let code = if is_code_assistant {
-            // Extract code (everything after the first line if ROLE=code-assistant)
-            let lines: Vec<&str> = processed_content.split('\n').collect();
-            if lines.len() >= 2 {
-                lines[1..].join("\n").trim().to_string()
-            } else {
-                processed_content
-                    .replace("ROLE=code-assistant", "")
-                    .trim()
-                    .to_string()
-            }
-        } else {
-            // Use the entire content as code (no ROLE prefix)
-            trimmed.to_string()
-        };
-
-        // Remove markdown code block markers
-        let code = code
-            .replace("```javascript", "")
-            .replace("```js", "")
-            .replace("```", "")
-            .trim()
-            .to_string();
-
-        // Handle console.log() - extract the expression inside
-        // If code is "console.log(expression)", extract just "expression"
-        let code = if code.trim_start().to_lowercase().starts_with("console.log(") {
-            // Extract content between console.log( and the matching closing paren
-            let start = code.find("console.log(").unwrap_or(0) + "console.log(".len();
-            let mut paren_count = 1;
-            let mut end = start;
-            let chars: Vec<char> = code.chars().collect();
-            for (i, ch) in chars.iter().enumerate().skip(start) {
-                match ch {
-                    '(' => paren_count += 1,
-                    ')' => {
-                        paren_count -= 1;
-                        if paren_count == 0 {
-                            end = i;
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if end > start {
-                code[start..end].trim().to_string()
-            } else {
-                code
-            }
-        } else {
-            code
-        };
-
+    if let Some(code) = crate::commands::tool_parsing::detect_and_extract_js_code(&processed_content) {
         info!(
             "Ollama Chat Continue: Extracted code for re-execution ({} chars):\n{}",
             code.len(),
@@ -8331,7 +8144,6 @@ pub async fn ollama_chat_continue_with_result(
             });
         }
 
-        // Return code for execution (ping-pong)
         return Ok(OllamaChatContinueResponse {
             needs_code_execution: true,
             code: Some(code),
