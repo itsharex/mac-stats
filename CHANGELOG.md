@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Auto-dismiss JS dialogs in CDP browser agent** — Registered a `PageJavascriptDialogOpening` event listener that automatically dismisses `alert`, `confirm`, `prompt`, and `beforeunload` dialogs on CDP tabs. Prevents the browser agent from hanging when a page triggers a JS dialog. Handler is idempotent (tracked per tab pointer in a global `HashSet`), clears on browser session reset. Applied on `get_current_tab`, new-tab navigation, and screenshot flows. (`browser_agent/mod.rs`)
+
 ### Changed
 - **Extract task and schedule tool handlers from `ollama.rs`** — Moved 10 tool handler match arms (TASK_APPEND, TASK_STATUS, TASK_CREATE, TASK_SHOW, TASK_ASSIGN, TASK_SLEEP, TASK_LIST, SCHEDULE, REMOVE_SCHEDULE, LIST_SCHEDULES) into `commands/task_tool_handlers.rs` (505 lines). Each handler is a standalone function taking only its required parameters. `ollama.rs` 3502→3145 lines (357 extracted). Removed unused `schedule_helpers` import from `ollama.rs`. No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/task_tool_handlers.rs`, `commands/mod.rs`, `commands/ollama.rs`)
 - **Extract pre-routing into `commands/pre_routing.rs`** — Moved deterministic pre-routing logic (screenshot→BROWSER_SCREENSHOT, "run …"→RUN_CMD, ticket→REDMINE_API) from `ollama.rs` into `commands/pre_routing.rs` (107 lines). Deduplicated Redmine pre-routing code that was copy-pasted in two branches. No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/pre_routing.rs`, `commands/mod.rs`, `commands/ollama.rs`)

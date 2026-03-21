@@ -12,7 +12,7 @@ mod http_fallback;
 
 pub use http_fallback::{click_http, extract_http, input_http, navigate_http};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -21,6 +21,8 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
+use headless_chrome::protocol::cdp::Page::DialogType;
+use headless_chrome::protocol::cdp::types::Event;
 use headless_chrome::types::Bounds;
 use headless_chrome::Browser;
 use headless_chrome::LaunchOptions;
@@ -671,6 +673,58 @@ pub fn prefer_headless_for_run() -> bool {
     PREFER_HEADLESS.load(Ordering::Relaxed)
 }
 
+/// Tracks tabs where the JS dialog auto-dismiss handler has been registered (by Arc raw pointer).
+static DIALOG_REGISTERED_TABS: OnceLock<Mutex<HashSet<usize>>> = OnceLock::new();
+
+fn dialog_registered_tabs() -> &'static Mutex<HashSet<usize>> {
+    DIALOG_REGISTERED_TABS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Register a JS dialog (alert/confirm/prompt/beforeunload) auto-dismiss handler on a tab.
+/// Idempotent: skips if the handler was already registered on this exact tab instance.
+fn register_dialog_auto_dismiss(tab: &Arc<headless_chrome::Tab>) {
+    let ptr = Arc::as_ptr(tab) as usize;
+    if let Ok(mut set) = dialog_registered_tabs().lock() {
+        if !set.insert(ptr) {
+            return;
+        }
+    }
+    let tab_weak = Arc::downgrade(tab);
+    let listener = Arc::new(move |event: &Event| {
+        if let Event::PageJavascriptDialogOpening(ev) = event {
+            let dialog_type = &ev.params.Type;
+            let message = &ev.params.message;
+            let accept = !matches!(dialog_type, DialogType::Prompt);
+            debug!(
+                "Browser agent [CDP]: JS dialog opened (type={:?}, message={:?}) — auto-dismissing (accept={})",
+                dialog_type, message, accept
+            );
+            if let Some(tab) = tab_weak.upgrade() {
+                let dialog = tab.get_dialog();
+                let result = if accept {
+                    dialog.accept(None)
+                } else {
+                    dialog.dismiss()
+                };
+                if let Err(e) = result {
+                    warn!("Browser agent [CDP]: failed to auto-dismiss JS dialog: {}", e);
+                } else {
+                    info!(
+                        "Browser agent [CDP]: auto-dismissed JS {:?} dialog: {:?}",
+                        dialog_type,
+                        message.chars().take(100).collect::<String>()
+                    );
+                }
+            }
+        }
+    });
+    if let Err(e) = tab.add_event_listener(listener) {
+        warn!("Browser agent [CDP]: failed to register dialog auto-dismiss handler: {}", e);
+    } else {
+        debug!("Browser agent [CDP]: registered JS dialog auto-dismiss handler on tab");
+    }
+}
+
 fn browser_session() -> &'static Mutex<Option<(Browser, Instant, bool)>> {
     BROWSER_SESSION.get_or_init(|| Mutex::new(None))
 }
@@ -760,6 +814,10 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     }
     *guard = None;
     drop(guard);
+
+    if let Ok(mut set) = dialog_registered_tabs().lock() {
+        set.clear();
+    }
 
     // Serialize creation so only one thread launches at a time; kill orphaned headless Chrome before launching.
     let _launch_guard = launch_mutex().lock().map_err(|e| e.to_string())?;
@@ -895,6 +953,7 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
             e
         );
     }
+    register_dialog_auto_dismiss(&tab);
     Ok((browser, tab))
 }
 
@@ -940,6 +999,7 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
             *guard = idx;
         }
         new_tab.bring_to_front().ok();
+        register_dialog_auto_dismiss(&new_tab);
         (browser, new_tab)
     } else {
         get_current_tab().inspect_err(|e| clear_browser_session_on_error(e))?
@@ -1550,6 +1610,7 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     })?;
     let tab = tabs.first().cloned().ok_or_else(|| "No tab".to_string())?;
     drop(tabs);
+    register_dialog_auto_dismiss(&tab);
     info!("Browser agent [CDP]: navigating to: {}", url_normalized);
     tab.navigate_to(&url_normalized).map_err(|e| {
         let s = format!("Navigate: {}", e);
