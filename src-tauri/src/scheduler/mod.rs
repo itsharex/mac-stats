@@ -554,7 +554,23 @@ async fn scheduler_loop() {
         let now_after_sleep = Local::now();
         if now_after_sleep >= next_time {
             let entry = &entries[idx];
-            let result = execute_task(entry).await;
+            let timeout_secs = Config::scheduler_task_timeout_secs();
+            let timeout_dur = Duration::from_secs(timeout_secs);
+            let id_label = entry.id.as_deref().unwrap_or("(no id)");
+            info!(
+                "Scheduler: executing task id={} (timeout={}s)",
+                id_label, timeout_secs
+            );
+            let result = match tokio::time::timeout(timeout_dur, execute_task(entry)).await {
+                Ok(inner) => inner,
+                Err(_elapsed) => {
+                    error!(
+                        "Scheduler: task id={} timed out after {}s",
+                        id_label, timeout_secs
+                    );
+                    Err(format!("task timed out after {}s", timeout_secs))
+                }
+            };
             match result {
                 Ok(Some((ref text, already_sent))) => {
                     if let Some(ref channel_id_str) = entry.reply_to_channel_id {

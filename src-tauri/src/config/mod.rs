@@ -287,6 +287,34 @@ impl Config {
         default_secs
     }
 
+    /// Wall-clock timeout per scheduler task in seconds. Prevents one stuck task from blocking the
+    /// scheduler loop indefinitely. Default 600 (10 minutes).
+    /// Config: config.json `schedulerTaskTimeoutSecs`; override: env `MAC_STATS_SCHEDULER_TASK_TIMEOUT_SECS`.
+    /// Clamped to 30..=3600.
+    pub fn scheduler_task_timeout_secs() -> u64 {
+        const DEFAULT_SECS: u64 = 600;
+        const MIN_SECS: u64 = 30;
+        const MAX_SECS: u64 = 3600;
+        let from_env = std::env::var("MAC_STATS_SCHEDULER_TASK_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok());
+        if let Some(secs) = from_env {
+            return secs.clamp(MIN_SECS, MAX_SECS);
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(n) = json
+                    .get("schedulerTaskTimeoutSecs")
+                    .and_then(|v| v.as_u64())
+                {
+                    return n.clamp(MIN_SECS, MAX_SECS);
+                }
+            }
+        }
+        DEFAULT_SECS
+    }
+
     /// Ollama /api/chat request timeout in seconds. Used for all chat requests (UI, Discord, session compaction).
     /// Default 300 (5 min). Config: config.json `ollamaChatTimeoutSecs`;
     /// override: env `MAC_STATS_OLLAMA_CHAT_TIMEOUT_SECS`. Clamped to 15..=900.
