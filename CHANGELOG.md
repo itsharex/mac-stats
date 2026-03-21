@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **BRAVE_SEARCH / PERPLEXITY_SEARCH pre-routing** — Requests with clear web search intent now skip the LLM planning step and route directly to the configured search tool. Explicit prefixes (`BRAVE_SEARCH: <query>`, `PERPLEXITY_SEARCH: <query>`) always pre-route. Keyword patterns ("search for …", "google …", "look up …", "web search …", "search the web for …", "search online for …", "research …") detect search intent and route to BRAVE_SEARCH (default) or PERPLEXITY_SEARCH ("research …" prefers Perplexity when configured; falls back to Brave). Multi-step requests ("and then …", "send to …", browser actions) are excluded and go through normal LLM planning. Only routes when the respective API key is configured. 21 new tests for `extract_search_query`; 177 total pass, zero clippy warnings. (`commands/pre_routing.rs`)
+
 ## [0.1.51] - 2026-03-21
 
 ### Added

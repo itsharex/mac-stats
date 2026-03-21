@@ -353,3 +353,12 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] `cargo clippy` — zero warnings.
 - [x] `cargo test` — 156 tests pass (17 new).
 - [x] Code review: `try_pre_route_fetch_url()` in `commands/pre_routing.rs` (56 lines). Detects explicit `FETCH_URL:` prefix and keyword patterns ("fetch", "get the page/content/html", "read the page/url/site", "what's on", "summarize the/this page/url/site") combined with a URL. Browser/navigate/screenshot/click patterns excluded. Wired into pre-route chain after RUN_CMD, before Redmine. No behavioral changes to existing pre-routes.
+
+### Closing reviewer smoke test 2026-03-21 (BRAVE_SEARCH / PERPLEXITY_SEARCH pre-routing)
+
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy` — zero warnings.
+- [x] `cargo test` — 177 tests pass (21 new).
+- [x] `cargo build --release` succeeds.
+- [x] `./target/release/mac_stats -vv` starts; 4 monitors loaded, 8 agents loaded, 15 models classified, Ollama connected (qwen3:latest), Discord connected, scheduler running. Zero errors/warnings/panics in log.
+- [x] Code review: `try_pre_route_web_search()` and `extract_search_query()` in `commands/pre_routing.rs`. Detects explicit prefixes (`BRAVE_SEARCH:`, `PERPLEXITY_SEARCH:`) and keyword patterns ("search for", "google", "look up", "web search", "search the web for", "search online for", "research"). Routes to BRAVE_SEARCH (default) or PERPLEXITY_SEARCH ("research" prefers Perplexity). Multi-step exclusions (browser, "and then", "send to"). Gated on API key availability. Fall-through prevention: empty query after keyword match returns `None` instead of matching shorter patterns. Wired into pre-route chain after FETCH_URL, before Redmine. No behavioral changes to existing pre-routes.
