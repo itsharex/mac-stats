@@ -106,7 +106,7 @@ Ollama invokes the Discord API by replying with exactly one line:
 - **Send message**: `DISCORD_API: POST /channels/<channel_id>/messages {"content":"Hello"}`  
   The path and optional JSON body are on the same line (body after a space and `{`).
 
-Only **GET** is allowed for general read endpoints. **POST** is allowed only for `/channels/{channel_id}/messages`. Heavy use may hit Discord’s rate limits; see [Discord rate limits](https://discord.com/developers/docs/topics/rate-limits).
+Only **GET** is allowed for general read endpoints. **POST** is allowed only for `/channels/{channel_id}/messages`. All Discord HTTP calls honour **429 rate limits**: on a 429 the app parses `Retry-After` (header or JSON body), waits that duration plus jitter, and retries up to 3 times. Each 429 is logged at warn level. Heavy use may still hit Discord’s rate limits; see [Discord rate limits](https://discord.com/developers/docs/topics/rate-limits).
 
 ## 8. SCHEDULE and REMOVE_SCHEDULE (reminders and recurring tasks)
 

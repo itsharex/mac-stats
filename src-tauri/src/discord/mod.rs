@@ -2374,6 +2374,7 @@ fn allowed_attachment_path(path: &Path) -> bool {
 
 /// Send a message to a Discord channel with optional file attachments (e.g. screenshots).
 /// Paths must be under ~/.mac-stats/screenshots/; others are skipped.
+/// Respects Discord 429 rate limits (up to 3 retries with Retry-After + jitter).
 pub async fn send_message_to_channel_with_attachments(
     channel_id: u64,
     content: &str,
@@ -2404,40 +2405,61 @@ pub async fn send_message_to_channel_with_attachments(
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("HTTP client: {}", e))?;
-    let mut form = reqwest::multipart::Form::new().text("content", content);
-    for (i, path) in allowed.iter().enumerate() {
-        let name = format!("files[{}]", i);
-        let data = tokio::fs::read(path.as_path())
+
+    let route = format!("send_message_with_attachments({})", channel_id);
+    let mut rate_limit_retries: u32 = 0;
+
+    loop {
+        let mut form = reqwest::multipart::Form::new().text("content", content.clone());
+        for (i, path) in allowed.iter().enumerate() {
+            let name = format!("files[{}]", i);
+            let data = tokio::fs::read(path.as_path())
+                .await
+                .map_err(|e| format!("Read attachment {}: {}", path.display(), e))?;
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("screenshot.png")
+                .to_string();
+            form = form.part(
+                name,
+                reqwest::multipart::Part::bytes(data).file_name(filename),
+            );
+        }
+
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bot {}", token))
+            .multipart(form)
+            .send()
             .await
-            .map_err(|e| format!("Read attachment {}: {}", path.display(), e))?;
-        let filename = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("screenshot.png")
-            .to_string();
-        form = form.part(
-            name,
-            reqwest::multipart::Part::bytes(data).file_name(filename),
-        );
-    }
-    // Do not log request/response headers or bodies that may contain credentials.
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bot {}", token))
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| crate::discord::api::user_message_for_discord_request_error(&e))?;
-    if !resp.status().is_success() {
+            .map_err(|e| crate::discord::api::user_message_for_discord_request_error(&e))?;
+
         let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("Discord API {}: {}", status, body));
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after_hdr = crate::discord::api::retry_after_from_headers(resp.headers());
+            let body = resp.text().await.unwrap_or_default();
+            crate::discord::api::wait_for_rate_limit(
+                retry_after_hdr,
+                &body,
+                &mut rate_limit_retries,
+                &route,
+            )
+            .await?;
+            continue;
+        }
+
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Discord API {}: {}", status, body));
+        }
+        return Ok(());
     }
-    Ok(())
 }
 
 /// Send a message to a Discord channel (DM or guild channel). Used by the scheduler to post task results.
 /// Requires the bot token; uses Discord HTTP API so it works from any thread/runtime.
+/// Respects Discord 429 rate limits (up to 3 retries with Retry-After + jitter).
 pub async fn send_message_to_channel(channel_id: u64, content: &str) -> Result<(), String> {
     const MAX_LEN: usize = 2000;
     let token = match get_discord_token() {
@@ -2463,21 +2485,40 @@ pub async fn send_message_to_channel(channel_id: u64, content: &str) -> Result<(
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("HTTP client: {}", e))?;
-    // Do not log request/response headers or bodies that may contain credentials.
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bot {}", token))
-        .header("Content-Type", "application/json")
-        .json(&serde_json::json!({ "content": content }))
-        .send()
-        .await
-        .map_err(|e| crate::discord::api::user_message_for_discord_request_error(&e))?;
-    if !resp.status().is_success() {
+
+    let route = format!("send_message_to_channel({})", channel_id);
+    let mut rate_limit_retries: u32 = 0;
+
+    loop {
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bot {}", token))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({ "content": content }))
+            .send()
+            .await
+            .map_err(|e| crate::discord::api::user_message_for_discord_request_error(&e))?;
+
         let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("Discord API {}: {}", status, body));
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after_hdr = crate::discord::api::retry_after_from_headers(resp.headers());
+            let body = resp.text().await.unwrap_or_default();
+            crate::discord::api::wait_for_rate_limit(
+                retry_after_hdr,
+                &body,
+                &mut rate_limit_retries,
+                &route,
+            )
+            .await?;
+            continue;
+        }
+
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Discord API {}: {}", status, body));
+        }
+        return Ok(());
     }
-    Ok(())
 }
 
 /// Get Discord token: DISCORD_BOT_TOKEN env, then .config.env (cwd then ~/.mac-stats), then Keychain.

@@ -5,11 +5,12 @@
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 const BASE_URL: &str = "https://discord.com/api/v10";
 const MAX_RESPONSE_CHARS: usize = 8000;
 const RETRY_DELAY_SECS: u64 = 2;
+const MAX_RATE_LIMIT_RETRIES: u32 = 3;
 
 /// Map a reqwest::Error from a Discord API request to a short user-facing message when the API
 /// is unavailable (connection refused, timeout). Used by discord_api_request and send_message_*.
@@ -40,6 +41,67 @@ pub fn sanitize_discord_api_error(err: &str) -> String {
         return "Message could not be sent (permission missing). Check bot permissions (e.g. operator.read scope).".to_string();
     }
     err.to_string()
+}
+
+/// Extract retry-after seconds from the Retry-After header value and/or the JSON body's
+/// `retry_after` field.  Falls back to 5 s when neither source provides a value.
+fn parse_retry_after(header_value: Option<f64>, body: &str) -> f64 {
+    if let Some(secs) = header_value {
+        return secs;
+    }
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(secs) = json.get("retry_after").and_then(|v| v.as_f64()) {
+            return secs;
+        }
+    }
+    5.0
+}
+
+/// Pseudo-random jitter (100–499 ms) derived from the system clock.
+fn jitter_millis() -> u64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos() as u64;
+    (nanos % 400) + 100
+}
+
+/// Wait out a Discord 429 rate-limit with jitter, or return Err when retries are exhausted.
+/// `retry_after_header` is the parsed Retry-After header (seconds, float) if present.
+pub(crate) async fn wait_for_rate_limit(
+    retry_after_header: Option<f64>,
+    body: &str,
+    rate_limit_retries: &mut u32,
+    route: &str,
+) -> Result<(), String> {
+    if *rate_limit_retries >= MAX_RATE_LIMIT_RETRIES {
+        warn!(
+            "Discord rate limited after {} retries on {}",
+            MAX_RATE_LIMIT_RETRIES, route
+        );
+        return Err("Discord API rate limited after max retries. Try again later.".to_string());
+    }
+    let retry_secs = parse_retry_after(retry_after_header, body);
+    let jitter = Duration::from_millis(jitter_millis());
+    let total = Duration::from_secs_f64(retry_secs) + jitter;
+    warn!(
+        "Discord 429 on {} (retry {}/{}), waiting {:.1}s",
+        route,
+        *rate_limit_retries + 1,
+        MAX_RATE_LIMIT_RETRIES,
+        total.as_secs_f64()
+    );
+    tokio::time::sleep(total).await;
+    *rate_limit_retries += 1;
+    Ok(())
+}
+
+/// Extract the Retry-After header as f64 seconds from a response's headers.
+pub(crate) fn retry_after_from_headers(headers: &reqwest::header::HeaderMap) -> Option<f64> {
+    headers
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<f64>().ok())
 }
 
 /// POST paths that are allowed (e.g. send message). All other POST/PATCH/DELETE are rejected.
@@ -111,7 +173,11 @@ pub async fn discord_api_request(
         None
     };
 
-    for attempt in 0..2 {
+    let mut conn_attempt: u32 = 0;
+    let mut rate_limit_retries: u32 = 0;
+    let route = format!("{} {}", method_upper, path);
+
+    loop {
         let mut req = client
             .request(
                 method_upper
@@ -132,11 +198,11 @@ pub async fn discord_api_request(
             Ok(r) => r,
             Err(e) => {
                 let retryable = e.is_connect() || e.is_timeout();
-                if retryable && attempt < 1 {
+                if retryable && conn_attempt < 1 {
+                    conn_attempt += 1;
                     info!(
                         "Discord API request failed (connection/timeout), retrying in {}s (attempt {})",
-                        RETRY_DELAY_SECS,
-                        attempt + 1
+                        RETRY_DELAY_SECS, conn_attempt
                     );
                     tokio::time::sleep(Duration::from_secs(RETRY_DELAY_SECS)).await;
                     continue;
@@ -146,7 +212,19 @@ pub async fn discord_api_request(
         };
 
         let status = resp.status();
+        let retry_after_hdr = retry_after_from_headers(resp.headers());
         let body_text = resp.text().await.unwrap_or_default();
+
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            wait_for_rate_limit(
+                retry_after_hdr,
+                &body_text,
+                &mut rate_limit_retries,
+                &route,
+            )
+            .await?;
+            continue;
+        }
 
         if status.is_success() {
             return if body_text.chars().count() > MAX_RESPONSE_CHARS {
@@ -156,24 +234,23 @@ pub async fn discord_api_request(
             };
         }
 
-        if status.is_server_error() && attempt < 1 {
+        if status.is_server_error() && conn_attempt < 1 {
+            conn_attempt += 1;
             info!(
-                "Discord API {} {} (attempt {}), retrying in {}s",
-                method_upper, path, attempt + 1, RETRY_DELAY_SECS
+                "Discord API {} (attempt {}), retrying in {}s",
+                route, conn_attempt, RETRY_DELAY_SECS
             );
             tokio::time::sleep(Duration::from_secs(RETRY_DELAY_SECS)).await;
             continue;
         }
 
-        debug!("Discord API {} {}: {}", method_upper, path, status);
+        debug!("Discord API {}: {}", route, status);
         return Err(format!(
             "Discord API {}: {}",
             status,
             crate::logging::ellipse(&body_text, 500)
         ));
     }
-
-    Err("Discord API is temporarily unavailable. Try again in a moment.".to_string())
 }
 
 /// Fetch guild and channel metadata for the given channel via the Discord API.
