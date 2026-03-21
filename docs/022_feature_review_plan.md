@@ -371,3 +371,29 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] `cargo build --release` succeeds.
 - [x] `./target/release/mac_stats -vv` starts; 8 agents loaded, 15 models classified, Ollama connected, Discord connected. Zero errors/warnings/panics in log.
 - [x] Code review: `try_pre_route_management_commands()` with sub-functions `try_pre_route_list_schedules()`, `try_pre_route_task_commands()`, `try_pre_route_ollama_api()` in `commands/pre_routing.rs`. Explicit prefixes (LIST_SCHEDULES:, TASK_LIST:, TASK_SHOW:, OLLAMA_API:) always pre-route. Keyword patterns for schedules ("list schedules", "show schedules", "what's scheduled", "schedules"), tasks ("list tasks", "show tasks", "tasks", "open tasks", "all tasks", "show task <id>"), and Ollama API ("list models", "show models", "what models are installed", "available models", "pull model <name>", "unload model <name>", "running models"). Multi-step exclusion ("and then", "after that", "send to", "post to"). Wired into pre-route chain after web search, before Redmine. No behavioral changes to existing pre-routes.
+
+### OpenClaw §96 re-verification (2026-03-21)
+
+- [x] OpenClaw AGENTS.md (23.9 KB, last modified 2026-03-21) read and all §7 checks re-run.
+- [x] **Directory structure:** `src/provider-web.ts` still does not exist (actual: `src/channel-web.ts`). `src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`, `src/web` still do not exist as top-level dirs — channel runtimes under `src/plugins/runtime/`, shared channel logic under `src/channels/`, channel extensions under `extensions/`.
+- [x] **Build commands:** `pnpm build`, `pnpm check`, `pnpm test`, `pnpm test:coverage` all exist. `pnpm tsgo` is not a declared script — relies on `@typescript/native-preview` (v7.0.0-dev.20260317.1) providing `tsgo` binary; works after `pnpm install` but undocumented as a dependency-provided binary.
+- [x] **Format commands:** `pnpm format` runs `oxfmt --write` (not `--check` as AGENTS.md line 71 claims). `pnpm format:check` runs `oxfmt --check`. `pnpm format:fix` runs `oxfmt --write` (matches AGENTS.md line 72).
+- [x] **Test thresholds:** Vitest branch coverage threshold is 55%, not 70% as AGENTS.md line 109 claims. Lines/functions/statements are correctly 70%.
+- [x] **Extensions:** 82 dirs under `extensions/` (up from ~80 at §95; new: `wecom`, `kimi-coding`). `anthropic-vertex`, `chutes`, `fal` still lack dedicated English provider pages. `phone-control` and `thread-ownership` still only in zh-CN plugin list.
+- [x] **SSRF tests:** OpenClaw has 54 `it()` cases in 7 dedicated `*ssrf*.test.ts` files, ~68 total SSRF-related tests. Significantly more than previous reviews counted.
+- [x] **Recent activity:** Discord routed through plugin SDK, plugin split runtime state, Claude bundle commands, context compaction notification, Matrix agentId mention fix, webchat image persistence, GitHub Copilot dynamic model IDs, Telegram DM topic rename.
+- [x] **`scripts/committer`:** Exists and works as documented (safe, path-scoped commit helper).
+- [x] No code bugs found; all discrepancies are documentation-only.
+
+### Closing reviewer smoke test 2026-03-21 (HTML noise stripping for FETCH_URL)
+
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy` — zero warnings.
+- [x] `cargo test` — 221 tests pass (11 new in `html_cleaning`).
+- [x] `cargo build --release` succeeds.
+- [x] `./target/release/mac_stats -vv` starts; 8 agents loaded, 15 models classified, Ollama connected (qwen3:latest, 40960 ctx), scheduler running (2 entries). Zero errors/warnings/panics in log.
+- [x] Code review: new `commands/html_cleaning.rs` (284 lines, 11 tests). `clean_html()` parses with `scraper::Html::parse_document`, walks DOM tree stripping SKIP_TAGS (`script`, `style`, `head`, `meta`, `link`, `noscript`, `svg`, `iframe`, `object`, `embed`). Preserves semantic structure: headings as `# …`, absolute links as `[text](href)`, list items as `- …`, table cells pipe-separated, block elements as newlines. `collapse_whitespace()` normalizes runs of blank lines (3+ → 2) and inline whitespace. Empty output (all-JS pages) produces helpful "Try BROWSER_NAVIGATE instead" message.
+- [x] Integration: `clean_html` called from exactly two FETCH_URL paths — `network_tool_dispatch.rs` (Discord/agent tool loop) and `ollama_frontend_chat.rs` (CPU-window chat). Both paths: fetch → clean → log compression ratio → empty check with fallback → pass to LLM. HTTP fallback and BROWSER_NAVIGATE/BROWSER_SCREENSHOT paths confirmed unaffected (no `html_cleaning` usage).
+- [x] CHANGELOG entry verified: "11 new tests; 221 total pass" — confirmed. Compression ratio logging at info level — confirmed. File list (`html_cleaning.rs`, `network_tool_dispatch.rs`, `ollama_frontend_chat.rs`) — matches diff.
+- [x] Minor observations (non-blocking): (1) `walk_node` uses unbounded recursion — theoretical stack overflow on pathologically deep DOM, unlikely for real web pages. (2) No `<img>` alt text extraction — images silently dropped, acceptable for LLM text context. (3) NBSP (U+00A0) not collapsed by `split_whitespace` — cosmetic edge case. (4) Markdown-special characters in link text/href not escaped — minor formatting noise, not a bug for LLM consumption.
+- [x] `scraper = "0.19"` dependency already present in `Cargo.toml` — no new dependencies added.

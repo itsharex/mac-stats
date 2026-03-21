@@ -88,8 +88,23 @@ pub(crate) async fn handle_fetch_url(
 
     match fetch_result {
         Ok(body) => {
+            let original_len = body.len();
+            let cleaned = crate::commands::html_cleaning::clean_html(&body);
+            let cleaned_len = cleaned.len();
+            if original_len > 0 {
+                let ratio = (cleaned_len as f64 / original_len as f64 * 100.0) as u32;
+                info!(
+                    "FETCH_URL: HTML cleaned {} → {} bytes ({}% of original)",
+                    original_len, cleaned_len, ratio
+                );
+            }
+            let body_for_llm = if cleaned.trim().is_empty() {
+                "Page fetched but no readable text content found (page may require JavaScript rendering). Try BROWSER_NAVIGATE instead.".to_string()
+            } else {
+                cleaned
+            };
             let body_fit = reduce_fetched_content_to_fit(
-                &body,
+                &body_for_llm,
                 context_size_tokens,
                 (estimated_context_used / CHARS_PER_TOKEN + 50) as u32,
                 model_override,

@@ -152,15 +152,24 @@ pub async fn ollama_chat_with_execution(
         fetch_count += 1;
         info!("Ollama Chat with Execution: FETCH_URL requested: {}", url);
 
-        let page_content = crate::commands::browser::fetch_page_content(&url)
+        let raw_content = crate::commands::browser::fetch_page_content(&url)
             .map_err(|e| format!("Fetch page failed: {}", e))?;
-        info!(
-            "Ollama Chat with Execution: Fetched {} chars from {}",
-            page_content.len(),
-            url
-        );
+        let original_len = raw_content.len();
+        let page_content = crate::commands::html_cleaning::clean_html(&raw_content);
+        let cleaned_len = page_content.len();
+        if original_len > 0 {
+            let ratio = (cleaned_len as f64 / original_len as f64 * 100.0) as u32;
+            info!(
+                "Ollama Chat: FETCH_URL HTML cleaned {} → {} bytes ({}%)",
+                original_len, cleaned_len, ratio
+            );
+        }
+        let page_content = if page_content.trim().is_empty() {
+            "Page fetched but no readable text content found (page may require JavaScript rendering). Try BROWSER_NAVIGATE instead.".to_string()
+        } else {
+            page_content
+        };
 
-        // Build follow-up: current messages + assistant's FETCH_URL message + user with page content
         let mut follow_up_messages = messages.clone();
         follow_up_messages.push(crate::ollama::ChatMessage {
             role: "assistant".to_string(),

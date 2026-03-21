@@ -43,5 +43,6 @@ pub mod delegation_tool_dispatch;
 pub mod prompt_assembly;
 pub mod session_history;
 pub mod loop_guard;
+pub mod html_cleaning;
 pub mod tool_loop;
 pub mod window;
