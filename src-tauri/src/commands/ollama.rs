@@ -17,11 +17,7 @@ use crate::commands::content_reduction::{
     reduce_fetched_content_to_fit, run_skill_ollama_session, run_js_via_node,
     CHARS_PER_TOKEN,
 };
-use crate::commands::ollama_models::{
-    delete_ollama_model, get_ollama_version, list_ollama_models, list_ollama_models_full,
-    list_ollama_running_models, load_ollama_model, ollama_embeddings, pull_ollama_model,
-    unload_ollama_model,
-};
+use crate::commands::ollama_models::list_ollama_models;
 use crate::commands::redmine_helpers::{
     extract_redmine_time_entries_summary_for_reply,
     grounded_redmine_time_entries_failure_reply,
@@ -32,7 +28,6 @@ use crate::commands::redmine_helpers::{
 use crate::commands::reply_helpers::{
     append_to_file, final_reply_from_tool_results, is_agent_unavailable_error,
     is_bare_done_plan, is_final_same_as_intermediate, looks_like_discord_401_confusion,
-    mastodon_post,
 };
 use crate::commands::pre_routing::compute_pre_routed_recommendation;
 use crate::commands::compaction::{
@@ -61,10 +56,9 @@ use crate::commands::agent_descriptions::{
     build_agent_descriptions, DISCORD_GROUP_CHANNEL_GUIDANCE, DISCORD_PLATFORM_FORMATTING,
 };
 use crate::commands::browser_helpers::{
-    append_latest_browser_state_guidance, browser_retry_grounding_prompt,
-    extract_browser_navigation_target,
+    browser_retry_grounding_prompt,
     is_browser_task_request,
-    should_use_http_fallback_after_browser_action_error, wants_visible_browser,
+    wants_visible_browser,
 };
 
 
@@ -1229,321 +1223,47 @@ pub fn answer_with_ollama_and_fetch(
                         }
                     }
                     "BROWSER_SCREENSHOT" => {
-                        let url_arg = arg.trim().to_string();
-                        let is_current =
-                            url_arg.is_empty() || url_arg.eq_ignore_ascii_case("current");
-                        // Browser-use style: screenshot only works on current page. Reject BROWSER_SCREENSHOT: <url>.
-                        if !is_current {
-                            info!(
-                                "Agent router: rejecting BROWSER_SCREENSHOT: {} — use NAVIGATE first, then SCREENSHOT: current",
-                                crate::logging::ellipse(&url_arg, 60)
-                            );
-                            format!(
-                                "BROWSER_SCREENSHOT only works on the current page. Use BROWSER_NAVIGATE: {} first, then BROWSER_SCREENSHOT: current. Never use BROWSER_SCREENSHOT: <url>.",
-                                url_arg
-                            )
-                        } else {
-                            send_status("📸 Taking screenshot of current page");
-                            match tokio::task::spawn_blocking(
-                                crate::browser_agent::take_screenshot_current_page,
-                            )
-                            .await
-                            {
-                                Ok(Ok(path)) => {
-                                    attachment_paths.push(path.clone());
-                                    if let Some(ref tx) = status_tx {
-                                        let _ = tx.send(format!("ATTACH:{}", path.display()));
-                                    }
-                                    format!(
-                                        "Screenshot of current page saved to: {}.\n\nTell the user the screenshot was taken; the app will attach it in Discord.",
-                                        path.display()
-                                    )
-                                }
-                                Ok(Err(e)) => {
-                                    info!(
-                                        "Agent router [{}]: BROWSER_SCREENSHOT (current) failed: {}",
-                                        request_id,
-                                        crate::logging::ellipse(&e, 200)
-                                    );
-                                    format!(
-                                        "Screenshot of current page failed: {}. (Use BROWSER_NAVIGATE and BROWSER_CLICK first with CDP; then BROWSER_SCREENSHOT: current. Chrome may need to be on port 9222.)",
-                                        e
-                                    )
-                                }
-                                Err(e) => format!("Screenshot task error: {}", e),
-                            }
+                        let result = crate::commands::browser_tool_dispatch::handle_browser_screenshot(
+                            &arg, &request_id, status_tx.as_ref(),
+                        ).await;
+                        if let Some(path) = result.attachment_path {
+                            attachment_paths.push(path);
                         }
+                        result.message
                     }
                     "BROWSER_NAVIGATE" => {
-                        let raw_arg = arg.trim().to_string();
-                        if raw_arg.is_empty() {
-                            "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string()
-                        } else if let Some(url_arg) = extract_browser_navigation_target(&raw_arg) {
-                            let new_tab = raw_arg
-                                .split_whitespace()
-                                .any(|w| w.eq_ignore_ascii_case("new_tab"));
-                            send_status(&format!(
-                                "🧭 Navigating to {}…{}",
-                                url_arg,
-                                if new_tab { " (new tab)" } else { "" }
-                            ));
-                            info!(
-                                "Agent router [{}]: BROWSER_NAVIGATE: URL sent to CDP: {} new_tab={}",
-                                request_id, url_arg, new_tab
-                            );
-                            match tokio::task::spawn_blocking({
-                                let u = url_arg.clone();
-                                move || crate::browser_agent::navigate_and_get_state_with_options(&u, new_tab)
-                            })
-                            .await
-                            {
-                                Ok(Ok(state_str)) => state_str,
-                                Ok(Err(cdp_err)) => {
-                                    info!(
-                                        "BROWSER_NAVIGATE CDP failed, ensuring Chrome on 9222 and retrying: {}",
-                                        crate::logging::ellipse(&cdp_err, 120)
-                                    );
-                                    tokio::task::spawn_blocking(|| {
-                                        crate::browser_agent::ensure_chrome_on_port(9222)
-                                    })
-                                    .await
-                                    .ok();
-                                    match tokio::task::spawn_blocking({
-                                        let u = url_arg.clone();
-                                        move || crate::browser_agent::navigate_and_get_state_with_options(&u, new_tab)
-                                    })
-                                    .await
-                                    {
-                                        Ok(Ok(state_str)) => state_str,
-                                        Ok(Err(cdp_err2)) => {
-                                            info!(
-                                                "BROWSER_NAVIGATE CDP retry failed, trying HTTP fallback: {}",
-                                                crate::logging::ellipse(&cdp_err2, 120)
-                                            );
-                                            match tokio::task::spawn_blocking(move || {
-                                                crate::browser_agent::navigate_http(&url_arg)
-                                            })
-                                            .await
-                                            {
-                                                Ok(Ok(state_str)) => state_str,
-                                                Ok(Err(http_err)) => format!(
-                                                    "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
-                                                    crate::logging::ellipse(&cdp_err2, 80),
-                                                    http_err
-                                                ),
-                                                Err(e) => format!(
-                                                    "BROWSER_NAVIGATE HTTP fallback task error: {}",
-                                                    e
-                                                ),
-                                            }
-                                        }
-                                        Err(e) => {
-                                            format!("BROWSER_NAVIGATE CDP retry task error: {}", e)
-                                        }
-                                    }
-                                }
-                                Err(e) => format!("BROWSER_NAVIGATE task error: {}", e),
-                            }
-                        } else {
-                            append_latest_browser_state_guidance(&format!(
-                                "BROWSER_NAVIGATE requires a concrete URL. The step {:?} was not executed because it did not contain a grounded browser target. This was an agent planning/parsing issue, not evidence about the site.",
-                                raw_arg
-                            ))
-                        }
+                        crate::commands::browser_tool_dispatch::handle_browser_navigate(
+                            &arg, &request_id, status_tx.as_ref(),
+                        ).await
                     }
                     "BROWSER_GO_BACK" => {
-                        send_status("🔙 Going back…");
-                        info!("Agent router [{}]: BROWSER_GO_BACK", request_id);
-                        match tokio::task::spawn_blocking(crate::browser_agent::go_back).await {
-                            Ok(Ok(state_str)) => state_str,
-                            Ok(Err(e)) => append_latest_browser_state_guidance(&format!(
-                                "BROWSER_GO_BACK failed: {}",
-                                e
-                            )),
-                            Err(e) => format!("BROWSER_GO_BACK task error: {}", e),
-                        }
+                        crate::commands::browser_tool_dispatch::handle_browser_go_back(
+                            &request_id, status_tx.as_ref(),
+                        ).await
                     }
                     "BROWSER_CLICK" => {
-                        let index_arg = arg.split_whitespace().next().unwrap_or("").trim();
-                        let index = index_arg.parse::<u32>().ok();
-                        let status_msg = match index {
-                            Some(idx) => {
-                                let label = crate::browser_agent::get_last_element_label(idx);
-                                if let Some(l) = label {
-                                    format!(
-                                        "🖱️ Clicking element {} ({})",
-                                        idx,
-                                        crate::logging::ellipse(&l, 30)
-                                    )
-                                } else {
-                                    format!("🖱️ Clicking element {}", idx)
-                                }
-                            }
-                            None => format!(
-                                "🖱️ Clicking element {}",
-                                if index_arg.is_empty() { "?" } else { index_arg }
-                            ),
-                        };
-                        send_status(&status_msg);
-                        match index {
-                    Some(idx) => {
-                        info!("BROWSER_CLICK: index {}", idx);
-                        match tokio::task::spawn_blocking(move || crate::browser_agent::click_by_index(idx)).await {
-                            Ok(Ok(state_str)) => state_str,
-                            Ok(Err(cdp_err)) => {
-                                if should_use_http_fallback_after_browser_action_error(
-                                    "BROWSER_CLICK",
-                                    &cdp_err,
-                                ) {
-                                    match tokio::task::spawn_blocking(move || crate::browser_agent::click_http(idx)).await {
-                                        Ok(Ok(state_str)) => state_str,
-                                        Ok(Err(e)) => append_latest_browser_state_guidance(&format!("BROWSER_CLICK failed: {}", e)),
-                                        Err(e) => format!("BROWSER_CLICK task error: {}", e),
-                                    }
-                                } else {
-                                    append_latest_browser_state_guidance(&format!(
-                                        "BROWSER_CLICK failed: {}",
-                                        cdp_err
-                                    ))
-                                }
-                            }
-                            Err(e) => append_latest_browser_state_guidance(&format!("BROWSER_CLICK task error: {}", e)),
-                        }
-                    }
-                    None => append_latest_browser_state_guidance("BROWSER_CLICK requires a numeric index (e.g. BROWSER_CLICK: 3). Use the index from the Current page Elements list."),
-                }
+                        crate::commands::browser_tool_dispatch::handle_browser_click(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "BROWSER_INPUT" => {
-                        let mut parts = arg.trim().splitn(2, |c: char| c.is_whitespace());
-                        let index_arg = parts.next().unwrap_or("").trim();
-                        let index_for_status = index_arg.parse::<u32>().ok();
-                        let status_msg = match index_for_status {
-                            Some(idx) => {
-                                let label = crate::browser_agent::get_last_element_label(idx);
-                                if let Some(l) = label {
-                                    format!(
-                                        "✍️ Typing into element {} ({})…",
-                                        idx,
-                                        crate::logging::ellipse(&l, 30)
-                                    )
-                                } else {
-                                    format!("✍️ Typing into element {}…", idx)
-                                }
-                            }
-                            None => format!(
-                                "✍️ Typing into element {}…",
-                                if index_arg.is_empty() { "?" } else { index_arg }
-                            ),
-                        };
-                        send_status(&status_msg);
-                        let text = parts.next().unwrap_or("").trim().to_string();
-                        let index = index_arg.parse::<u32>().ok();
-                        match index {
-                    Some(idx) => {
-                        info!("BROWSER_INPUT: index {} ({} chars)", idx, text.len());
-                        let text_clone = text.clone();
-                        match tokio::task::spawn_blocking(move || crate::browser_agent::input_by_index(idx, &text_clone)).await {
-                            Ok(Ok(state_str)) => state_str,
-                            Ok(Err(cdp_err)) => {
-                                if should_use_http_fallback_after_browser_action_error(
-                                    "BROWSER_INPUT",
-                                    &cdp_err,
-                                ) {
-                                    match tokio::task::spawn_blocking(move || crate::browser_agent::input_http(idx, &text)).await {
-                                    Ok(Ok(state_str)) => state_str,
-                                    Ok(Err(e)) => append_latest_browser_state_guidance(&format!("BROWSER_INPUT failed: {}", e)),
-                                    Err(e) => format!("BROWSER_INPUT task error: {}", e),
-                                }
-                                } else {
-                                    append_latest_browser_state_guidance(&format!(
-                                        "BROWSER_INPUT failed: {}",
-                                        cdp_err
-                                    ))
-                                }
-                            }
-                            Err(e) => append_latest_browser_state_guidance(&format!("BROWSER_INPUT task error: {}", e)),
-                        }
-                    }
-                    None => append_latest_browser_state_guidance("BROWSER_INPUT requires a numeric index and text (e.g. BROWSER_INPUT: 4 search query). Use the index from the Current page Elements list."),
-                }
+                        crate::commands::browser_tool_dispatch::handle_browser_input(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "BROWSER_SCROLL" => {
-                        let scroll_arg = if arg.trim().is_empty() {
-                            "down".to_string()
-                        } else {
-                            arg.trim().to_string()
-                        };
-                        send_status(&format!(
-                            "📜 Scrolling {}…",
-                            crate::logging::ellipse(&scroll_arg, 20)
-                        ));
-                        match tokio::task::spawn_blocking(move || {
-                            crate::browser_agent::scroll_page(&scroll_arg)
-                        })
-                        .await
-                        {
-                            Ok(Ok(state_str)) => state_str,
-                            Ok(Err(e)) => {
-                                info!(
-                                    "BROWSER_SCROLL failed: {}",
-                                    crate::logging::ellipse(&e, 200)
-                                );
-                                format!("BROWSER_SCROLL failed: {}", e)
-                            }
-                            Err(e) => format!("BROWSER_SCROLL task error: {}", e),
-                        }
+                        crate::commands::browser_tool_dispatch::handle_browser_scroll(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "BROWSER_EXTRACT" => {
                         send_status("📄 Extracting page text…");
-                        match tokio::task::spawn_blocking(crate::browser_agent::extract_page_text)
-                            .await
-                        {
-                            Ok(Ok(text)) => text,
-                            Ok(Err(_cdp_err)) => {
-                                match tokio::task::spawn_blocking(
-                                    crate::browser_agent::extract_http,
-                                )
-                                .await
-                                {
-                                    Ok(Ok(text)) => text,
-                                    Ok(Err(e)) => format!(
-                                        "BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
-                                        e
-                                    ),
-                                    Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
-                                }
-                            }
-                            Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
-                        }
+                        crate::commands::browser_tool_dispatch::handle_browser_extract().await
                     }
                     "BROWSER_SEARCH_PAGE" => {
-                        let pattern = arg.trim().to_string();
-                        if pattern.is_empty() {
-                            "BROWSER_SEARCH_PAGE requires a search pattern (e.g. BROWSER_SEARCH_PAGE: Ralf Röber). Use to find specific text on the current page.".to_string()
-                        } else {
-                            send_status(&format!(
-                                "🔍 Searching page for \"{}\"…",
-                                crate::logging::ellipse(&pattern, 30)
-                            ));
-                            match tokio::task::spawn_blocking(move || {
-                                crate::browser_agent::search_page_text(&pattern)
-                            })
-                            .await
-                            {
-                                Ok(Ok(result)) => result,
-                                Ok(Err(e)) => {
-                                    info!(
-                                        "BROWSER_SEARCH_PAGE failed: {}",
-                                        crate::logging::ellipse(&e, 200)
-                                    );
-                                    format!(
-                                        "BROWSER_SEARCH_PAGE failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
-                                        e
-                                    )
-                                }
-                                Err(e) => format!("BROWSER_SEARCH_PAGE task error: {}", e),
-                            }
-                        }
+                        crate::commands::browser_tool_dispatch::handle_browser_search_page(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "BRAVE_SEARCH" => {
                         send_status(&format!(
@@ -2119,111 +1839,9 @@ pub fn answer_with_ollama_and_fetch(
                         }
                     }
                     "OLLAMA_API" => {
-                        let arg = arg.trim();
-                        let (action, rest) = match arg.find(' ') {
-                            Some(i) => (arg[..i].trim().to_lowercase(), arg[i..].trim()),
-                            None => (arg.to_lowercase(), ""),
-                        };
-                        let status_detail = if rest.is_empty() {
-                            format!("Ollama API: {}…", action)
-                        } else {
-                            let preview: String = rest.chars().take(40).collect();
-                            format!("Ollama API: {} {}…", action, preview)
-                        };
-                        send_status(&status_detail);
-                        info!(
-                            "Agent router: OLLAMA_API requested: action={}, rest={} chars",
-                            action,
-                            rest.chars().count()
-                        );
-                        let result = match action.as_str() {
-                            "list_models" => list_ollama_models_full().await.map(|r| {
-                                serde_json::to_string_pretty(&r)
-                                    .unwrap_or_else(|_| "[]".to_string())
-                            }),
-                            "version" => get_ollama_version().await.map(|r| r.version),
-                            "running" => list_ollama_running_models().await.map(|r| {
-                                serde_json::to_string_pretty(&r)
-                                    .unwrap_or_else(|_| "[]".to_string())
-                            }),
-                            "pull" => {
-                                let parts: Vec<&str> = rest.split_whitespace().collect();
-                                let model =
-                                    parts.first().map(|s| (*s).to_string()).unwrap_or_default();
-                                let stream = parts.get(1).map(|s| *s == "true").unwrap_or(true);
-                                if model.is_empty() {
-                                    Err("OLLAMA_API pull requires a model name.".to_string())
-                                } else {
-                                    pull_ollama_model(model, stream)
-                                        .await
-                                        .map(|_| "Pull completed.".to_string())
-                                }
-                            }
-                            "delete" => {
-                                let model = rest.to_string();
-                                if model.is_empty() {
-                                    Err("OLLAMA_API delete requires a model name.".to_string())
-                                } else {
-                                    delete_ollama_model(model)
-                                        .await
-                                        .map(|_| "Model deleted.".to_string())
-                                }
-                            }
-                            "embed" => {
-                                let parts: Vec<&str> = rest.splitn(2, ' ').map(str::trim).collect();
-                                if parts.len() < 2 || parts[1].is_empty() {
-                                    Err("OLLAMA_API embed requires: embed <model> <text>."
-                                        .to_string())
-                                } else {
-                                    let model = parts[0].to_string();
-                                    let input = serde_json::Value::String(parts[1].to_string());
-                                    ollama_embeddings(model, input, None).await.map(|r| {
-                                        serde_json::to_string_pretty(&r)
-                                            .unwrap_or_else(|_| "{}".to_string())
-                                    })
-                                }
-                            }
-                            "load" => {
-                                let parts: Vec<&str> =
-                                    rest.splitn(2, char::is_whitespace).map(str::trim).collect();
-                                let model =
-                                    parts.first().map(|s| (*s).to_string()).unwrap_or_default();
-                                let keep_alive = parts
-                                    .get(1)
-                                    .filter(|s| !s.is_empty())
-                                    .map(|s| (*s).to_string());
-                                if model.is_empty() {
-                                    Err("OLLAMA_API load requires a model name.".to_string())
-                                } else {
-                                    load_ollama_model(model, keep_alive)
-                                        .await
-                                        .map(|_| "Model loaded.".to_string())
-                                }
-                            }
-                            "unload" => {
-                                let model = rest.to_string();
-                                if model.is_empty() {
-                                    Err("OLLAMA_API unload requires a model name.".to_string())
-                                } else {
-                                    unload_ollama_model(model)
-                                        .await
-                                        .map(|_| "Model unloaded.".to_string())
-                                }
-                            }
-                            _ => Err(format!(
-                                "Unknown OLLAMA_API action: {}. Use list_models, version, running, pull, delete, embed, load, or unload.",
-                                action
-                            )),
-                        };
-                        match result {
-                            Ok(msg) => format!(
-                                "Ollama API result:\n\n{}\n\nUse this to answer the user's question.",
-                                msg
-                            ),
-                            Err(e) => {
-                                format!("OLLAMA_API failed: {}. Answer without this result.", e)
-                            }
-                        }
+                        crate::commands::misc_tool_dispatch::handle_ollama_api(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "TASK_APPEND" => {
                         crate::commands::task_tool_handlers::handle_task_append(
@@ -2274,114 +1892,14 @@ pub fn answer_with_ollama_and_fetch(
                         )
                     }
                     "MCP" => {
-                        send_status("Calling MCP tool…");
-                        info!(
-                            "Agent router: MCP requested (arg len={})",
-                            arg.chars().count()
-                        );
-                        match crate::mcp::get_mcp_server_url() {
-                            Some(server_url) => {
-                                let (mcp_tool_name, mcp_args) = if let Some(space) = arg.find(' ') {
-                                    let (name, rest) = arg.split_at(space);
-                                    let rest = rest.trim();
-                                    let args = if rest.starts_with('{') {
-                                        serde_json::from_str(rest).ok()
-                                    } else {
-                                        Some(serde_json::json!({ "input": rest }))
-                                    };
-                                    (name.to_string(), args)
-                                } else {
-                                    (arg.clone(), None)
-                                };
-                                match crate::mcp::call_tool(&server_url, &mcp_tool_name, mcp_args)
-                                    .await
-                                {
-                                    Ok(result) => {
-                                        info!(
-                                            "Agent router: MCP tool {} completed ({} chars)",
-                                            mcp_tool_name,
-                                            result.len()
-                                        );
-                                        format!(
-                                            "MCP tool \"{}\" result:\n\n{}\n\nUse this to answer the user's question.",
-                                            mcp_tool_name, result
-                                        )
-                                    }
-                                    Err(e) => {
-                                        info!(
-                                            "Agent router: MCP tool {} failed: {}",
-                                            mcp_tool_name, e
-                                        );
-                                        format!(
-                                            "MCP tool \"{}\" failed: {}. Answer the user without this result.",
-                                            mcp_tool_name, e
-                                        )
-                                    }
-                                }
-                            }
-                            None => {
-                                info!("Agent router: MCP not configured (no MCP_SERVER_URL)");
-                                "MCP is not configured (set MCP_SERVER_URL in env or .config.env). Answer without using MCP.".to_string()
-                            }
-                        }
+                        crate::commands::misc_tool_dispatch::handle_mcp(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "CURSOR_AGENT" => {
-                        if !crate::commands::cursor_agent::is_cursor_agent_available() {
-                            "CURSOR_AGENT is not available (cursor-agent CLI not found on PATH). Answer without it.".to_string()
-                        } else {
-                            let prompt = arg.trim().to_string();
-                            if prompt.is_empty() {
-                                "CURSOR_AGENT requires a prompt: CURSOR_AGENT: <detailed coding task>".to_string()
-                            } else {
-                                let preview: String = prompt.chars().take(80).collect();
-                                send_status(&format!("Running Cursor Agent: {}…", preview));
-                                info!(
-                                    "Agent router: CURSOR_AGENT running prompt ({} chars)",
-                                    prompt.len()
-                                );
-                                match tokio::task::spawn_blocking({
-                                    let p = prompt.clone();
-                                    move || crate::commands::cursor_agent::run_cursor_agent(&p)
-                                })
-                                .await
-                                .map_err(|e| format!("CURSOR_AGENT task: {}", e))
-                                .and_then(|r| r)
-                                {
-                                    Ok(output) => {
-                                        info!(
-                                            "Agent router: CURSOR_AGENT completed ({} chars output)",
-                                            output.len()
-                                        );
-                                        let truncated = if output.chars().count() > 4000 {
-                                            let half = 1800;
-                                            let start: String = output.chars().take(half).collect();
-                                            let end: String = output
-                                                .chars()
-                                                .rev()
-                                                .take(half)
-                                                .collect::<String>()
-                                                .chars()
-                                                .rev()
-                                                .collect();
-                                            format!("{}...\n[truncated]\n...{}", start, end)
-                                        } else {
-                                            output
-                                        };
-                                        format!(
-                                            "Cursor Agent result:\n\n{}\n\nUse this to answer the user's question.",
-                                            truncated
-                                        )
-                                    }
-                                    Err(e) => {
-                                        info!("Agent router: CURSOR_AGENT failed: {}", e);
-                                        format!(
-                                            "CURSOR_AGENT failed: {}. Answer the user without this result.",
-                                            e
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        crate::commands::misc_tool_dispatch::handle_cursor_agent(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "REDMINE_API" => {
                         let arg = arg.trim();
@@ -2462,98 +1980,14 @@ pub fn answer_with_ollama_and_fetch(
                         }
                     }
                     "MASTODON_POST" => {
-                        let arg = arg.trim();
-                        if arg.is_empty() {
-                            "MASTODON_POST requires text. Usage: MASTODON_POST: <text to post>. Optional visibility prefix: MASTODON_POST: unlisted: <text> (default: public).".to_string()
-                        } else {
-                            let (visibility, text) = if let Some(rest) = arg
-                                .strip_prefix("unlisted:")
-                                .or_else(|| arg.strip_prefix("unlisted "))
-                            {
-                                ("unlisted", rest.trim())
-                            } else if let Some(rest) = arg
-                                .strip_prefix("private:")
-                                .or_else(|| arg.strip_prefix("private "))
-                            {
-                                ("private", rest.trim())
-                            } else if let Some(rest) = arg
-                                .strip_prefix("direct:")
-                                .or_else(|| arg.strip_prefix("direct "))
-                            {
-                                ("direct", rest.trim())
-                            } else if let Some(rest) = arg
-                                .strip_prefix("public:")
-                                .or_else(|| arg.strip_prefix("public "))
-                            {
-                                ("public", rest.trim())
-                            } else {
-                                ("public", arg)
-                            };
-                            send_status(&format!("Posting to Mastodon ({})…", visibility));
-                            info!(
-                                "Agent router: MASTODON_POST visibility={} text={}",
-                                visibility,
-                                crate::logging::ellipse(text, 100)
-                            );
-                            match mastodon_post(text, visibility).await {
-                                Ok(msg) => msg,
-                                Err(e) => format!("Mastodon post failed: {}", e),
-                            }
-                        }
+                        crate::commands::misc_tool_dispatch::handle_mastodon_post(
+                            &arg, status_tx.as_ref(),
+                        ).await
                     }
                     "MEMORY_APPEND" => {
-                        let arg = arg.trim();
-                        if arg.is_empty() {
-                            "MEMORY_APPEND requires content. Usage: MEMORY_APPEND: <lesson> or MEMORY_APPEND: agent:<slug-or-id> <lesson>".to_string()
-                        } else {
-                            let (target, lesson) = if arg.to_lowercase().starts_with("agent:") {
-                                let rest = arg["agent:".len()..].trim();
-                                if let Some(space_idx) = rest.find(' ') {
-                                    let (sel, content) = rest.split_at(space_idx);
-                                    (Some(sel.trim().to_string()), content.trim().to_string())
-                                } else {
-                                    (None, arg.to_string())
-                                }
-                            } else {
-                                (None, arg.to_string())
-                            };
-                            let lesson_line = format!("- {}\n", lesson.trim_start_matches("- "));
-                            let result = if let Some(selector) = target {
-                                let agents = crate::agents::load_agents();
-                                if let Some(agent) =
-                                    crate::agents::find_agent_by_id_or_name(&agents, &selector)
-                                {
-                                    if let Some(dir) = crate::agents::get_agent_dir(&agent.id) {
-                                        let path = dir.join("memory.md");
-                                        append_to_file(&path, &lesson_line)
-                                    } else {
-                                        Err(format!("Agent directory not found for '{}'", selector))
-                                    }
-                                } else {
-                                    Err(format!("Agent '{}' not found", selector))
-                                }
-                            } else {
-                                let path = discord_reply_channel_id
-                                    .map(
-                                        crate::config::Config::memory_file_path_for_discord_channel,
-                                    )
-                                    .unwrap_or_else(crate::config::Config::memory_file_path);
-                                append_to_file(&path, &lesson_line)
-                            };
-                            match result {
-                                Ok(path) => {
-                                    info!("Agent router: MEMORY_APPEND wrote to {:?}", path);
-                                    format!(
-                                        "Memory updated ({}). The lesson will be included in future prompts.",
-                                        path.display()
-                                    )
-                                }
-                                Err(e) => {
-                                    info!("Agent router: MEMORY_APPEND failed: {}", e);
-                                    format!("Failed to update memory: {}", e)
-                                }
-                            }
-                        }
+                        crate::commands::misc_tool_dispatch::handle_memory_append(
+                            &arg, discord_reply_channel_id,
+                        )
                     }
                     _ => {
                         let msg = format!(

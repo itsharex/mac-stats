@@ -64,7 +64,7 @@ fn is_blocked_ip(ip: &IpAddr) -> bool {
                 || v6.is_unspecified()
                 || is_ipv6_link_local(v6)
                 || is_ipv6_unique_local(v6)
-                || v6.to_ipv4_mapped().map_or(false, |v4| {
+                || v6.to_ipv4_mapped().is_some_and(|v4| {
                     v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
                 })
         }

@@ -308,3 +308,16 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] `cargo build --release` succeeds.
 - [x] `./target/release/mac_stats -vv` starts; 4 monitors UP (mix-online 202ms, amvara 307ms, cometa 361ms, app-monitor 184ms), 8 agents loaded, 15 models classified, Ollama connected (qwen3:latest, 40960 ctx), scheduler running (2 entries). Zero errors/warnings/panics in log.
 - [x] Code review: 10 handler functions extracted to `task_tool_handlers.rs` (505 lines). Each takes only required params. All 10 call sites in `ollama.rs` wired correctly. Unused `schedule_helpers` import removed. `ollama.rs` 3502→3145 lines (357 extracted). No behavioral changes.
+
+### Closing reviewer smoke test 2026-03-21 (browser + misc tool dispatch extraction)
+
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy` — zero warnings.
+- [x] `cargo test` — 129 tests pass.
+- [x] `cargo build --release` succeeds.
+- [x] `./target/release/mac_stats -vv` starts; 8 agents loaded, 15 models classified, Ollama connected (qwen3:latest, 40960 ctx), scheduler running (2 entries). Zero errors/warnings/panics in log.
+- [x] Code review: 8 browser tool handlers extracted to `browser_tool_dispatch.rs` (422 lines). 5 misc tool handlers (OLLAMA_API, MCP, CURSOR_AGENT, MASTODON_POST, MEMORY_APPEND) extracted to `misc_tool_dispatch.rs` (346 lines). All 13 call sites in `ollama.rs` wired correctly. Unused imports removed (`mastodon_post`, 8 `ollama_models` functions, 3 `browser_helpers` functions). Pre-existing clippy warning fixed in `browser.rs` (`map_or(false, ...)` → `is_some_and`). `ollama.rs` 3145→2579 lines (566 extracted). No behavioral changes.
+- [x] `BROWSER_SCREENSHOT` call site correctly uses `BrowserScreenshotResult` struct to propagate `attachment_path` into `attachment_paths` vec — no data lost vs. inline original.
+- [x] `MEMORY_APPEND` correctly passes `discord_reply_channel_id` (not `status_tx`) — channel-scoped memory preserved.
+- [x] Both new modules have private `send_status()` helpers (same pattern as `task_tool_handlers.rs`); `browser_tool_dispatch` takes `Option<&UnboundedSender>` while `task_tool_handlers` takes `&Option<UnboundedSender>` — both work, minor style inconsistency, non-blocking.
+- [x] `CHANGELOG.md` entries present and accurate.

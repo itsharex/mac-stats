@@ -29,6 +29,8 @@ pub mod security;
 pub mod skills;
 pub mod agent_descriptions;
 pub mod browser_helpers;
+pub mod browser_tool_dispatch;
+pub mod misc_tool_dispatch;
 pub mod schedule_helpers;
 pub mod ollama_frontend_chat;
 pub mod pre_routing;
