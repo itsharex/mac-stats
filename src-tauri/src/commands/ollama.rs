@@ -817,6 +817,7 @@ pub fn answer_with_ollama_and_fetch(
         // For news requests: if the last PERPLEXITY_SEARCH returned only hub/landing/tag/standings pages, verification must not accept a confident news answer.
         let mut last_news_search_was_hub_only: Option<bool> = None;
         let budget_warning_ratio = crate::config::Config::tool_budget_warning_ratio();
+        let mut loop_guard = crate::commands::loop_guard::ToolLoopGuard::new();
 
         while tool_count < max_tool_iterations {
             let tools = parse_all_tools_from_response(&response_content);
@@ -869,6 +870,18 @@ pub fn answer_with_ollama_and_fetch(
                         "Agent router: running tool {}/{} — {} (arg: {})",
                         tool_count, max_tool_iterations, tool, arg_preview
                     );
+                }
+
+                // General loop guard: detect repeated tool calls and cycles across all tools.
+                if tool != "DONE" {
+                    if let Some(reason) = loop_guard.record_and_check(&tool, &arg) {
+                        info!(
+                            "Agent router: loop guard blocked {} — {}",
+                            tool, reason
+                        );
+                        tool_results.push(reason);
+                        continue;
+                    }
                 }
 
                 // Cap browser tools per run to prevent runaway loops (032_browser_loop_and_status_fix_plan).

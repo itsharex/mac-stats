@@ -42,4 +42,5 @@ pub mod network_tool_dispatch;
 pub mod delegation_tool_dispatch;
 pub mod prompt_assembly;
 pub mod session_history;
+pub mod loop_guard;
 pub mod window;
