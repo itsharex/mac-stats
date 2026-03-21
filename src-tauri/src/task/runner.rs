@@ -67,28 +67,13 @@ pub async fn run_task_until_finished(
             assignee
         );
         let reply = crate::commands::ollama::answer_with_ollama_and_fetch(
-            &question,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            agent_override,
-            false,
-            None,
-            false,
-            true,
-            true,
-            None,
-            None,
-            false,
-            None,
-            None,
-            None, // discord_is_dm: not Discord, load global memory
-            None,
-            0, // request_id_override, retry_count
+            crate::commands::ollama::OllamaRequest {
+                question: question.clone(),
+                agent_override,
+                retry_on_verification_no: true,
+                from_remote: true,
+                ..Default::default()
+            },
         )
         .await?;
         last_reply = reply.text;

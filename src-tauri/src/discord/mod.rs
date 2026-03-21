@@ -2074,28 +2074,25 @@ impl EventHandler for Handler {
         );
         let (reply_text, attachment_paths) =
             match crate::commands::ollama::answer_with_ollama_and_fetch(
-                &question_for_ollama,
-                Some(status_tx),
-                Some(channel_id_u64),
-                Some(author_id_u64),
-                Some(display_name),
-                model_override,
-                options_override,
-                skill_content,
-                agent_override,
-                true,
-                conversation_history,
-                escalation,
-                true, // retry once when verification says NO
-                true, // from_remote: use headless browser unless user asks to see it
-                attachment_images_for_ollama,
-                None,  // discord_intermediate: set only when recursing from retry path
-                false, // is_verification_retry
-                None,  // original_user_request
-                None,  // success_criteria_override
-                Some(is_dm), // load global memory only in main session (DM or in-app)
-                None,  // request_id_override: generated on first run
-                0,     // retry_count
+                crate::commands::ollama::OllamaRequest {
+                    question: question_for_ollama.clone(),
+                    status_tx: Some(status_tx),
+                    discord_reply_channel_id: Some(channel_id_u64),
+                    discord_user_id: Some(author_id_u64),
+                    discord_user_name: Some(display_name),
+                    model_override,
+                    options_override,
+                    skill_content,
+                    agent_override,
+                    allow_schedule: true,
+                    conversation_history,
+                    escalation,
+                    retry_on_verification_no: true,
+                    from_remote: true,
+                    attachment_images_base64: attachment_images_for_ollama,
+                    discord_is_dm: Some(is_dm),
+                    ..Default::default()
+                },
             )
             .await
             {

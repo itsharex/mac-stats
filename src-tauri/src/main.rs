@@ -202,18 +202,13 @@ fn main() {
                     mac_stats::config::Config::ensure_defaults();
                     mac_stats::ensure_ollama_agent_ready_at_startup().await;
                     match mac_stats::answer_with_ollama_and_fetch(
-                        &question, None, None, None, None, None, None, None, None,
-                        true, // allow_schedule
-                        None, false, // escalation
-                        true,  // retry_on_verification_no
-                        true,  // from_remote: headless browser
-                        None,  // attachment_images_base64
-                        None,  // discord_intermediate
-                        false, // is_verification_retry
-                        None,  // original_user_request
-                        None,  // success_criteria_override
-                        None,  // discord_is_dm: not Discord, load global memory
-                        None, 0, // request_id_override, retry_count
+                        mac_stats::OllamaRequest {
+                            question: question.clone(),
+                            allow_schedule: true,
+                            retry_on_verification_no: true,
+                            from_remote: true,
+                            ..Default::default()
+                        },
                     )
                     .await
                     {

@@ -321,3 +321,12 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] `MEMORY_APPEND` correctly passes `discord_reply_channel_id` (not `status_tx`) — channel-scoped memory preserved.
 - [x] Both new modules have private `send_status()` helpers (same pattern as `task_tool_handlers.rs`); `browser_tool_dispatch` takes `Option<&UnboundedSender>` while `task_tool_handlers` takes `&Option<UnboundedSender>` — both work, minor style inconsistency, non-blocking.
 - [x] `CHANGELOG.md` entries present and accurate.
+
+### Closing reviewer smoke test 2026-03-21 (OllamaRequest struct refactoring)
+
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy` — zero warnings.
+- [x] `cargo test` — 139 tests pass.
+- [x] `cargo build --release` succeeds.
+- [x] `./target/release/mac_stats -vv` starts; 4 monitors loaded, 8 agents loaded, 15 models classified, Ollama connected (qwen3:latest, 40960 ctx), Discord connected, scheduler running (2 entries). Zero errors/warnings/panics in log.
+- [x] Code review: `OllamaRequest` struct replaces 24 positional parameters on `answer_with_ollama_and_fetch`. `#[derive(Default)]` so all fields default to `None`/`false`/`0`. All 5 call sites updated: recursive retry (`ollama.rs`), Discord (`discord/mod.rs`), CLI (`main.rs`), scheduler (`scheduler/mod.rs`), task runner (`task/runner.rs`). Re-exported from `lib.rs`. No behavioral changes.

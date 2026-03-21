@@ -49,62 +49,88 @@ use crate::commands::prompt_assembly::build_execution_system_content;
 use crate::commands::session_history::{prepare_conversation_history, CONVERSATION_HISTORY_CAP};
 use crate::commands::verification::build_verification_retry_hint;
 
+/// All parameters for an `answer_with_ollama_and_fetch` invocation.
+///
+/// Fields default to `None` / `false` / `0` via `Default`, so callers only
+/// need to set the fields they care about:
+///
+/// ```ignore
+/// let reply = answer_with_ollama_and_fetch(OllamaRequest {
+///     question: "What time is it?".into(),
+///     from_remote: true,
+///     ..Default::default()
+/// }).await?;
+/// ```
+#[derive(Default)]
+pub struct OllamaRequest {
+    pub question: String,
+    pub status_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    pub discord_reply_channel_id: Option<u64>,
+    pub discord_user_id: Option<u64>,
+    pub discord_user_name: Option<String>,
+    pub model_override: Option<String>,
+    pub options_override: Option<crate::ollama::ChatOptions>,
+    pub skill_content: Option<String>,
+    pub agent_override: Option<crate::agents::Agent>,
+    pub allow_schedule: bool,
+    pub conversation_history: Option<Vec<crate::ollama::ChatMessage>>,
+    pub escalation: bool,
+    pub retry_on_verification_no: bool,
+    /// When true (Discord, scheduler, task runner), browser defaults to headless.
+    pub from_remote: bool,
+    /// Base64-encoded images from Discord message attachments (vision models).
+    pub attachment_images_base64: Option<Vec<String>>,
+    /// When set (retry path from Discord), format reply as "Intermediate + Final".
+    pub discord_intermediate: Option<String>,
+    /// When true, keep conversation history and skip NEW_TOPIC check.
+    pub is_verification_retry: bool,
+    /// Original end-user request. When set, verification uses this instead of inferring.
+    pub original_user_request: Option<String>,
+    /// Request-local criteria extracted on the first pass; reused on retry.
+    pub success_criteria_override: Option<Vec<String>>,
+    /// Some(true) = Discord DM (load global memory), Some(false) = Discord guild (skip), None = not Discord (load).
+    pub discord_is_dm: Option<bool>,
+    /// Shared request id so retries correlate in logs.
+    pub request_id_override: Option<String>,
+    /// 0 = first run; 1 = verification retry.
+    pub retry_count: u32,
+}
 
-
-/// When set, `skill_content` is prepended to system prompts (from ~/.mac-stats/agents/skills/skill-<n>-<topic>.md).
-/// When set, `agent_override` uses that agent's model and combined_prompt (soul+mood+skill) for the main run (e.g. Discord "agent: 001").
-/// When `allow_schedule` is false (e.g. when running from the scheduler), the SCHEDULE tool is disabled so a scheduled task cannot create more schedules.
-/// When `conversation_history` is set (e.g. from Discord session memory), it is prepended so the model sees prior turns and can resolve "there", "it", etc.
-/// When `escalation` is true (e.g. user said "think harder" or "get it done"), we inject a stronger "you MUST complete the task" instruction and allow more tool steps.
-/// When `retry_on_verification_no` is true and verification says we didn't satisfy the request, we run one retry with a "complete the remaining steps" prompt; the retry run is called with `retry_on_verification_no: false` so we don't retry indefinitely.
-/// When `from_remote` is true (Discord, scheduler, task runner), browser runs default to headless (no visible window) unless the question explicitly asks to see the browser (e.g. "visible", "show me").
+/// Main orchestrator: plan → execute tools → verify → optionally retry.
 /// Returns a boxed future to allow one level of async recursion (retry path).
-#[allow(clippy::too_many_arguments)]
 pub fn answer_with_ollama_and_fetch(
-    question: &str,
-    status_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
-    discord_reply_channel_id: Option<u64>,
-    discord_user_id: Option<u64>,
-    discord_user_name: Option<String>,
-    model_override: Option<String>,
-    options_override: Option<crate::ollama::ChatOptions>,
-    skill_content: Option<String>,
-    agent_override: Option<crate::agents::Agent>,
-    allow_schedule: bool,
-    conversation_history: Option<Vec<crate::ollama::ChatMessage>>,
-    escalation: bool,
-    retry_on_verification_no: bool,
-    from_remote: bool,
-    // When set (e.g. from Discord message attachments), the first user message is sent with these base64-encoded images for vision models.
-    attachment_images_base64: Option<Vec<String>>,
-    // When set (retry path from Discord), we format the reply as "--- Intermediate answer:\n\n{this}\n\n---" + final or "Final answer is the same as intermediate."
-    discord_intermediate: Option<String>,
-    // When true (verification retry path), we keep conversation history and skip NEW_TOPIC check so the model retains context.
-    is_verification_retry: bool,
-    // Original end-user request for this run. When set, verification/criteria extraction use this
-    // instead of inferring from retry prompts or conversation history.
-    original_user_request: Option<String>,
-    // Request-local criteria extracted on the first pass. Reused on retry to avoid context bleed.
-    success_criteria_override: Option<Vec<String>>,
-    // When Some(true) = Discord DM (main session, load global memory). When Some(false) = Discord guild (do not load global memory). When None = not Discord (load global memory).
-    discord_is_dm: Option<bool>,
-    // When Some, use this request id so retries share the same id for end-to-end log correlation (task-008 Phase 1).
-    request_id_override: Option<String>,
-    // 0 = first run; 1 = verification retry. Logged for request tracing.
-    retry_count: u32,
+    req: OllamaRequest,
 ) -> Pin<Box<dyn Future<Output = Result<OllamaReply, String>> + Send>> {
+    let OllamaRequest {
+        question,
+        status_tx,
+        discord_reply_channel_id,
+        discord_user_id,
+        discord_user_name,
+        model_override,
+        options_override,
+        skill_content,
+        agent_override,
+        allow_schedule,
+        mut conversation_history,
+        escalation,
+        retry_on_verification_no,
+        from_remote,
+        attachment_images_base64,
+        discord_intermediate,
+        is_verification_retry,
+        original_user_request,
+        success_criteria_override,
+        discord_is_dm,
+        request_id_override,
+        retry_count,
+    } = req;
     let load_global_memory = discord_is_dm.is_none_or(|dm| dm);
     if discord_is_dm == Some(false) {
         tracing::info!(
             "Agent router: Discord guild channel — not loading global memory (main-session only)"
         );
     }
-    let question = question.to_string();
-    let mut conversation_history = conversation_history.map(|v| v.to_vec());
-    let attachment_images_base64 = attachment_images_base64.map(|v| v.to_vec());
-    let discord_intermediate = discord_intermediate.map(|s| s.to_string());
-    let original_user_request = original_user_request.map(|s| s.to_string());
-    let success_criteria_override = success_criteria_override.map(|v| v.to_vec());
     Box::pin(async move {
         use tracing::info;
         let question = question.as_str();
@@ -1549,8 +1575,8 @@ pub fn answer_with_ollama_and_fetch(
                     });
                     let pass_intermediate =
                         discord_reply_channel_id.map(|_| response_content.clone());
-                    return answer_with_ollama_and_fetch(
-                        retry_question.as_str(),
+                    return answer_with_ollama_and_fetch(OllamaRequest {
+                        question: retry_question,
                         status_tx,
                         discord_reply_channel_id,
                         discord_user_id,
@@ -1560,19 +1586,19 @@ pub fn answer_with_ollama_and_fetch(
                         skill_content,
                         agent_override,
                         allow_schedule,
-                        Some(updated_history),
+                        conversation_history: Some(updated_history),
                         escalation,
-                        false, // don't retry again
+                        retry_on_verification_no: false,
                         from_remote,
-                        None,              // don't re-send attachment images on retry
-                        pass_intermediate, // format reply as Intermediate + Final when returning to Discord
-                        true,              // is_verification_retry: keep context, skip NEW_TOPIC
-                        Some(request_for_verification.clone()),
-                        success_criteria.clone(),
+                        discord_intermediate: pass_intermediate,
+                        is_verification_retry: true,
+                        original_user_request: Some(request_for_verification.clone()),
+                        success_criteria_override: success_criteria.clone(),
                         discord_is_dm,
-                        Some(request_id.clone()), // same request_id for end-to-end log correlation
-                        1,                       // retry_count
-                    )
+                        request_id_override: Some(request_id.clone()),
+                        retry_count: 1,
+                        ..Default::default()
+                    })
                     .await;
                 }
                 let reason_preview = reason

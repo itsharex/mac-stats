@@ -118,7 +118,7 @@ pub use metrics::{
 };
 // Re-export for CLI (e.g. discord run-ollama)
 pub use commands::ollama::{
-    answer_with_ollama_and_fetch, ensure_ollama_agent_ready_at_startup, OllamaReply,
+    answer_with_ollama_and_fetch, ensure_ollama_agent_ready_at_startup, OllamaReply, OllamaRequest,
 };
 pub use commands::judge::run_judge_if_enabled;
 
