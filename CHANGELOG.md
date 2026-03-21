@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Redmine query utility scripts** — `scripts/redmine_query.py` (Python, grouped time entry reports by ticket and day) and `scripts/redmine_query.sh` (curl wrapper). Both read credentials from `.config.env`.
+
+### Removed
+- **Cleanup: old agent definition files** — Removed `005-openclaw-reviewer/005-openclaw-reviewer.md` and `006-feature-coder/FEATURE-CODER.md` (agent definitions now live in `~/.mac-stats/agents/`).
+- **Cleanup: stale release notes** — Removed `release_notes_0.1.18.md`.
+- **Cleanup: repetitive testing sections in `docs/022_feature_review_plan.md`** — Trimmed ~460 lines of duplicate closing-reviewer smoke test logs (content preserved in git history).
+
 ### Changed
 - **Extract verification pipeline and agent session runner from `ollama.rs`** — Moved verification pipeline (`OllamaReply`, `RequestRunContext`, `verify_completion`, `extract_success_criteria`, `sanitize_success_criteria`, `detect_new_topic`, `summarize_last_turns`, `first_image_as_base64`, `original_request_for_retry`, `user_explicitly_asked_for_screenshot`, `truncate_text_on_line_boundaries`, `summarize_response_for_verification` + 12 tests) into `commands/verification.rs` (770 lines); agent session runner (`run_agent_ollama_session`, `execute_agent_tool_call`, `parse_agent_tool_from_response`, `build_agent_runtime_context`, `normalize_discord_api_path` + 4 tests) into `commands/agent_session.rs` (291 lines). `ollama.rs` 6543→5523 lines (1020 extracted). No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/verification.rs`, `commands/agent_session.rs`, `commands/mod.rs`, `commands/ollama.rs`)
 - **Extract Ollama config/startup and reply helpers from `ollama.rs`** — Moved Ollama configuration, startup, and env-variable resolution (`get_ollama_client`, `configure_ollama`, `get_ollama_config`, `list_ollama_models_at_endpoint`, `check_ollama_connection`, `ensure_ollama_agent_ready_at_startup`, `default_non_agent_system_prompt`, `get_default_ollama_system_prompt`, `ChatRequest`, `OllamaConfigRequest`, `OllamaConfigResponse` + env helpers) into `commands/ollama_config.rs` (513 lines); reply-routing helpers (`final_reply_from_tool_results`, `get_mastodon_config`, `mastodon_post`, `append_to_file`, `looks_like_discord_401_confusion`, `extract_url_from_question`, `extract_screenshot_recommendation`, `extract_last_prefixed_argument`, `is_bare_done_plan`, `is_final_same_as_intermediate`, `is_agent_unavailable_error` + tests) into `commands/reply_helpers.rs` (375 lines). `ollama.rs` 5523→4634 lines (889 extracted). No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/ollama_config.rs`, `commands/reply_helpers.rs`, `commands/mod.rs`, `commands/ollama.rs`, `commands/agent_descriptions.rs`, `commands/compaction.rs`, `commands/ollama_models.rs`, `lib.rs`)
