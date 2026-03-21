@@ -575,6 +575,24 @@ impl Config {
         DEFAULT
     }
 
+    /// Optional SSRF allowlist: hostnames that are permitted even when they resolve to private IPs.
+    /// Config: config.json `ssrfAllowedHosts` (JSON array of strings, e.g. `["my-local-service", "192.168.1.50"]`).
+    /// Default: empty (no exceptions). Use when the user explicitly wants to allow fetching from a local service.
+    pub fn ssrf_allowed_hosts() -> Vec<String> {
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(arr) = json.get("ssrfAllowedHosts").and_then(|v| v.as_array()) {
+                    return arr
+                        .iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
+                }
+            }
+        }
+        Vec::new()
+    }
+
     /// Skills directory for agent prompt overlays: `$HOME/.mac-stats/agents/skills/`
     /// Files: skill-<number>-<topic>.md (e.g. skill-1-summarize.md, skill-2-code.md).
     pub fn skills_dir() -> PathBuf {

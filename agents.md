@@ -36,6 +36,85 @@ cd src-tauri && cargo build --release
 ./target/release/mac_stats --frequency
 ```
 
+## Keep mac-stats running (uptime)
+
+Discord, the scheduler, website monitors, background compaction, and Ollama-sidecar behaviour **only exist while the `mac_stats` process is alive**. The repo does **not** ship a LaunchAgent or login-item installer—if nothing starts the app after exit or reboot, you get **zero** background automation until someone launches it again.
+
+### Why it “randomly” stopped (typical causes)
+
+- **User quit** — ⌘Q, or “Quit” from the menu bar app menu.
+- **Reboot, logout, or forced log out** — the process does not survive; it must be started again at login unless you configure that (see below).
+- **Deploy / agent workflow** — Instructions often use `pkill -f mac_stats` before a new build. If the **follow-up start** (`./run`, `cargo run --release`, or `open -a mac-stats`) **fails or is skipped**, the app stays down. This is a common source of “it was fine yesterday.”
+- **Crash or SIGKILL** — Panic, `kill -9`, or the OS terminating the app; no automatic restart unless `KeepAlive` (below) or a watchdog is configured.
+- **Sleep / disk unmount** — Unusual for menu-bar apps, but running from a **network or external volume** that unmounts will kill the binary path; prefer `/Applications` or a stable local path for always-on installs.
+
+### Operator checklist (minimal downtime)
+
+1. **After any intentional kill** — In the **same** session or script, start mac-stats again and confirm: `pgrep -fl mac_stats` returns a PID, and `~/.mac-stats/debug.log` shows a fresh startup block within the last minute.
+2. **After reboot** — Either enable a **LaunchAgent** or add **mac-stats** to **System Settings → General → Login Items** (for an `/Applications/mac-stats.app` install).
+3. **Before assuming “Discord/scheduler is broken”** — Verify the process is running first; most “it stopped working” reports are an **absent process**, not a logic bug.
+
+### Recommended: LaunchAgent with `KeepAlive` (production)
+
+Use a user LaunchAgent so macOS starts the app at login and **restarts it if it exits** (including crash). Adjust paths to match **your** install.
+
+**Installed app (DMG / `/Applications`):** confirm the executable name with  
+`ls "/Applications/mac-stats.app/Contents/MacOS/"`  
+(often `mac-stats`).
+
+Create `~/Library/LaunchAgents/com.raro42.mac-stats.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.raro42.mac-stats</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/mac-stats.app/Contents/MacOS/mac-stats</string>
+    <string>-vv</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>
+```
+
+Load and start once:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.raro42.mac-stats.plist 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.raro42.mac-stats.plist
+launchctl kickstart -k gui/$(id -u)/com.raro42.mac-stats
+```
+
+To unload (stop auto-restart): `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.raro42.mac-stats.plist`
+
+**Dev tree (release binary):** point `ProgramArguments` at  
+`$HOME/projects/mac-stats/src-tauri/target/release/mac_stats`  
+(and the same `-vv` or flags you use). Prefer a **stable path**; rebuilding replaces the binary but keeps the same path.
+
+### Optional: lightweight watchdog (no plist)
+
+If you cannot use LaunchAgent, a **cron** or separate **launchd** job can run every few minutes:
+
+```bash
+pgrep -f mac_stats >/dev/null || open -a mac-stats
+```
+
+(Use `open -a` only for an **installed** `.app`; for dev, replace the right-hand side with `cd "$HOME/projects/mac-stats" && ./run`.) This reduces **silent** downtime but is coarser than `KeepAlive`.
+
+### For coding agents (discipline)
+
+- Treat **“restart mac-stats”** as **kill + start + verify PID + check log tail**, not kill alone.
+- After **macOS updates or reboot**, do not assume the app relaunched unless LaunchAgent or Login Items are configured.
+
 ## Tech Stack
 - Rust (core logic + FFI)
 - Tauri (UI shell)
@@ -50,7 +129,7 @@ cd src-tauri && cargo build --release
 - Execute the app yourself, read the logs, understand if changes are working from the logs - iterate until you are confident the change is good to be test by a human.
 - **ALWAYS check for build errors before starting the app**: Run `cargo check` in `src-tauri/` directory and fix any compilation errors before attempting to start the app.
 - **Commits**: Do **not** add `Co-authored-by:`, `Signed-off-by:`, or any Cursor/agent/IDE attribution to commit messages. Do not advertise the agent or tool in commits or in the repo. To enforce this locally, run `./scripts/install-git-hooks.sh` once (installs a prepare-commit-msg hook that strips such lines).
-- **After changes that affect runtime behavior** (Redmine, tasks, agent prompts, scheduler, Discord, Ollama tools): **restart mac-stats automatically** (e.g. `pkill -f mac_stats; cd src-tauri && cargo run --release`). Default verbosity is -vv so logs are visible. Then test (run a relevant task, trigger the feature, or check `~/.mac-stats/debug.log`). Do not assume it works without restart and verification. Do not skip the restart step.
+- **After changes that affect runtime behavior** (Redmine, tasks, agent prompts, scheduler, Discord, Ollama tools): **restart mac-stats automatically** — **always** run a **start** after any `pkill` (see [Keep mac-stats running](#keep-mac-stats-running-uptime)). Example: `pkill -f mac_stats; cd src-tauri && cargo run --release`. Default verbosity is -vv so logs are visible. Then **verify the process** (`pgrep -fl mac_stats`) and test (relevant task, feature, or `~/.mac-stats/debug.log`). Skipping the start after kill is a common cause of prolonged downtime.
 - Never install software on the host. Always ask before installing.
 - If you need to install software, use containers.  
 - No "god files": split into `metrics/`, `ffi/`, `ui/`, `config/`, `logging/`.

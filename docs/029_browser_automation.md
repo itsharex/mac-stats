@@ -118,6 +118,15 @@ When the model returns multiple tools in one turn, page-changing browser actions
 
 This prevents wrong clicks or inputs caused by stale element indices from the previous page. The model can emit new browser actions in the next turn using the fresh state.
 
+### SSRF protection
+All server-side URL fetches and browser navigations triggered by the model are protected against SSRF (Server-Side Request Forgery). Before any HTTP request (`FETCH_URL`) or CDP navigation (`BROWSER_NAVIGATE`, `BROWSER_SCREENSHOT` with a URL), the target URL is validated:
+
+- **Blocked targets:** loopback (127.0.0.0/8, ::1), RFC 1918 private (10/8, 172.16/12, 192.168/16), link-local (169.254.0.0/16, fe80::/10), cloud metadata (169.254.169.254), IPv6 unique-local (fc00::/7), unspecified (0.0.0.0, ::), broadcast, and IPv4-mapped IPv6 variants.
+- **Userinfo rejected:** URLs with embedded credentials (e.g. `http://user:pass@host/`) are blocked.
+- **DNS resolution check:** The hostname is resolved to IP addresses and each is checked against the blocklist, catching hostnames that resolve to private IPs.
+- **Redirect protection:** For HTTP fetches (reqwest), a custom redirect policy checks each redirect hop against the same blocklist, preventing redirect-to-private chains.
+- **Allowlist:** To explicitly allow fetching from a local service (e.g. a local Redmine), add `"ssrfAllowedHosts": ["hostname-or-ip"]` in `~/.mac-stats/config.json`. Default: empty (no exceptions). The same allowlist applies to the initial URL and to redirect targets matching the allowed host.
+
 ### Summary
 | Requirement | What mac-stats does |
 |------------|----------------------|

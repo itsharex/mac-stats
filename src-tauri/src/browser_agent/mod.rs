@@ -910,6 +910,13 @@ pub fn navigate_and_get_state_with_options(url: &str, new_tab: bool) -> Result<S
 
 fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, String> {
     let url_normalized = normalize_url_for_screenshot(url);
+
+    // SSRF guard: block private/loopback/link-local URLs before CDP navigation
+    if let Ok(parsed) = Url::parse(&url_normalized) {
+        let allowed = crate::config::Config::ssrf_allowed_hosts();
+        crate::commands::browser::validate_url_no_ssrf(&parsed, &allowed)?;
+    }
+
     let nav_timeout_secs = crate::config::Config::browser_navigation_timeout_secs();
     let same_domain_timeout_secs = crate::config::Config::browser_same_domain_navigation_timeout_secs();
     info!(
@@ -1525,6 +1532,13 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     );
     let url_normalized = normalize_url_for_screenshot(url_trimmed);
     info!("Browser agent [CDP]: normalized URL: {}", url_normalized);
+
+    // SSRF guard: block private/loopback/link-local URLs before CDP navigation
+    if let Ok(parsed) = Url::parse(&url_normalized) {
+        let allowed = crate::config::Config::ssrf_allowed_hosts();
+        crate::commands::browser::validate_url_no_ssrf(&parsed, &allowed)?;
+    }
+
     let port = 9222u16;
     let browser = get_or_create_browser(port).inspect_err(|e| {
         clear_browser_session_on_error(e);

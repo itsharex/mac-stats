@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Extract pre-routing into `commands/pre_routing.rs`** — Moved deterministic pre-routing logic (screenshot→BROWSER_SCREENSHOT, "run …"→RUN_CMD, ticket→REDMINE_API) from `ollama.rs` into `commands/pre_routing.rs` (107 lines). Deduplicated Redmine pre-routing code that was copy-pasted in two branches. No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/pre_routing.rs`, `commands/mod.rs`, `commands/ollama.rs`)
 - **Extract PERPLEXITY_SEARCH handler into `perplexity_helpers.rs`** — Moved the entire PERPLEXITY_SEARCH tool handler (~200 lines: search, result formatting, auto-screenshot) from `ollama.rs` into `perplexity_helpers.rs` as `handle_perplexity_search()`, `format_search_results_markdown()`, and `auto_screenshot_urls()`. Returns `PerplexitySearchHandlerResult` struct. `ollama.rs` 3809→3502 lines (307 extracted). No behavioral changes; zero clippy warnings, 114 tests pass. (`commands/perplexity_helpers.rs`, `commands/ollama.rs`)
 
+## [0.1.50] - 2026-03-21
+
+### Added
+- **SSRF protection for all server-side URL fetches and browser navigations** — All model-triggered HTTP requests (`FETCH_URL`) and CDP navigations (`BROWSER_NAVIGATE`, `BROWSER_SCREENSHOT`) are now validated against a blocklist before execution: loopback (127.0.0.0/8, ::1), RFC 1918 private (10/8, 172.16/12, 192.168/16), link-local (169.254.0.0/16, fe80::/10), cloud metadata (169.254.169.254), IPv6 unique-local (fc00::/7), unspecified, broadcast, and IPv4-mapped IPv6 variants are all blocked. URLs with embedded credentials (userinfo) are rejected. DNS resolution is checked against the blocklist (catches hostnames resolving to private IPs). HTTP redirects are validated per-hop via a custom reqwest redirect policy. Configurable allowlist via `ssrfAllowedHosts` in `~/.mac-stats/config.json`. 14 new tests. (`commands/browser.rs`, `browser_agent/mod.rs`, `config/mod.rs`)
+
+### Changed
+- **agents.md: uptime section** — Added "Keep mac-stats running (uptime)" section with LaunchAgent recipe, operator checklist, lightweight watchdog, and coding-agent discipline notes. Updated restart coding principle to reference the new section.
+- **Docs: SSRF protection** — Documented blocked targets, userinfo rejection, DNS resolution check, redirect protection, and allowlist in `docs/029_browser_automation.md`.
+
 ## [0.1.49] - 2026-03-21
 
 ### Added
