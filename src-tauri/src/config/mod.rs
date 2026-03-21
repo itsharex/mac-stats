@@ -409,6 +409,27 @@ impl Config {
         0.75
     }
 
+    /// Maximum number of conversation history messages sent to the planning step.
+    /// Fewer messages reduce bias from past tool outputs; more messages help with follow-up context.
+    /// Default 6 (3 user + 3 assistant turns). 0 disables planning history entirely.
+    /// Config: config.json `planningHistoryCap`; override: env `MAC_STATS_PLANNING_HISTORY_CAP`.
+    pub fn planning_history_cap() -> usize {
+        if let Ok(s) = std::env::var("MAC_STATS_PLANNING_HISTORY_CAP") {
+            if let Ok(v) = s.parse::<usize>() {
+                return v.min(40);
+            }
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(v) = json.get("planningHistoryCap").and_then(|v| v.as_u64()) {
+                    return (v as usize).min(40);
+                }
+            }
+        }
+        6
+    }
+
     /// Get the user-info file path
     ///
     /// Returns a path in the user's home directory: `$HOME/.mac-stats/user-info.json`
@@ -1149,5 +1170,124 @@ impl Config {
                 default.trim().to_string()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn paragraph_key_first_line() {
+        assert_eq!(
+            Config::paragraph_key("**Tool-first rule:** If the user...\nMore text here"),
+            "**Tool-first rule:** If the user..."
+        );
+    }
+
+    #[test]
+    fn paragraph_key_empty() {
+        assert_eq!(Config::paragraph_key(""), "");
+        assert_eq!(Config::paragraph_key("  "), "");
+    }
+
+    #[test]
+    fn paragraph_key_truncates_at_80_chars() {
+        let long_line = "A".repeat(120);
+        let key = Config::paragraph_key(&long_line);
+        assert_eq!(key.len(), 80);
+    }
+
+    #[test]
+    fn merge_prompt_content_empty_existing_returns_default() {
+        let result = Config::merge_prompt_content("", "Default paragraph one.\n\nDefault paragraph two.");
+        assert_eq!(result, "Default paragraph one.\n\nDefault paragraph two.");
+    }
+
+    #[test]
+    fn merge_prompt_content_identical_no_change() {
+        let content = "Paragraph A.\n\nParagraph B.";
+        let result = Config::merge_prompt_content(content, content);
+        assert_eq!(result, content);
+    }
+
+    #[test]
+    fn merge_prompt_content_adds_missing_block() {
+        let existing = "Paragraph A.\n\nParagraph B.";
+        let default = "Paragraph A.\n\nParagraph B.\n\nParagraph C (new).";
+        let result = Config::merge_prompt_content(existing, default);
+        assert!(result.contains("Paragraph A."));
+        assert!(result.contains("Paragraph B."));
+        assert!(result.contains("Paragraph C (new)."));
+    }
+
+    #[test]
+    fn merge_prompt_content_preserves_user_edits() {
+        let existing = "Paragraph A — user edited this.\n\nParagraph B.";
+        let default = "Paragraph A.\n\nParagraph B.\n\nParagraph C.";
+        let result = Config::merge_prompt_content(existing, default);
+        assert!(
+            result.contains("user edited this"),
+            "User edits should be preserved"
+        );
+        assert!(
+            result.contains("Paragraph C."),
+            "New default paragraph should be appended"
+        );
+    }
+
+    #[test]
+    fn merge_prompt_content_does_not_duplicate() {
+        let existing = "Block one.\n\nBlock two.\n\nBlock three.";
+        let default = "Block one.\n\nBlock two.\n\nBlock three.";
+        let result = Config::merge_prompt_content(existing, default);
+        assert_eq!(result.matches("Block one.").count(), 1);
+        assert_eq!(result.matches("Block two.").count(), 1);
+        assert_eq!(result.matches("Block three.").count(), 1);
+    }
+
+    #[test]
+    fn merge_prompt_content_key_matching_is_exact_first_line() {
+        let existing = "**Tool-first rule:** If the user request can be fulfilled\nwith extra details.";
+        let default = "**Tool-first rule:** If the user request can be fulfilled\nwith default details.\n\n**New rule:** Something else.";
+        let result = Config::merge_prompt_content(existing, default);
+        assert!(
+            result.contains("extra details"),
+            "Existing block with same first-line key should not be overwritten"
+        );
+        assert!(
+            !result.contains("default details"),
+            "Default block with matching first-line key should not be added"
+        );
+        assert!(
+            result.contains("**New rule:** Something else."),
+            "Block with new key should be appended"
+        );
+    }
+
+    #[test]
+    fn merge_prompt_content_different_first_line_adds_both() {
+        let existing = "**Rule A:** Custom version\nuser details.";
+        let default = "**Rule A:** Default version\ndefault details.";
+        let result = Config::merge_prompt_content(existing, default);
+        assert!(
+            result.contains("Custom version") && result.contains("Default version"),
+            "Different first lines = different keys, both kept"
+        );
+    }
+
+    #[test]
+    fn merge_prompt_content_whitespace_tolerance() {
+        let existing = "  Block A.  \n\n  Block B.  ";
+        let default = "Block A.\n\nBlock C.";
+        let result = Config::merge_prompt_content(existing, default);
+        assert!(result.contains("Block A."));
+        assert!(result.contains("Block B."));
+        assert!(result.contains("Block C."));
+    }
+
+    #[test]
+    fn planning_history_cap_default() {
+        assert_eq!(Config::planning_history_cap(), 6);
     }
 }

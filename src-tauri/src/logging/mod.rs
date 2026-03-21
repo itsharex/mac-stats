@@ -153,3 +153,97 @@ pub fn set_verbosity_with_tracing(level: u8) {
     // Note: Tracing filter is set at init time, so we'd need to reload
     // For now, this is mainly for compatibility during migration
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ellipse_short_string_unchanged() {
+        assert_eq!(ellipse("hello", 10), "hello");
+    }
+
+    #[test]
+    fn ellipse_exact_max_len_unchanged() {
+        assert_eq!(ellipse("abcde", 5), "abcde");
+    }
+
+    #[test]
+    fn ellipse_longer_string_truncated() {
+        let result = ellipse("abcdefghij", 7);
+        assert_eq!(result, "ab...ij");
+    }
+
+    #[test]
+    fn ellipse_preserves_start_and_end() {
+        let input = "The quick brown fox jumps over the lazy dog";
+        let result = ellipse(input, 20);
+        assert!(result.starts_with("The quic"));
+        assert!(result.ends_with("lazy dog"));
+        assert!(result.contains("..."));
+        assert!(result.chars().count() <= 20);
+    }
+
+    #[test]
+    fn ellipse_max_len_zero_clamped() {
+        let result = ellipse("abcdef", 0);
+        assert!(result.contains("..."));
+        assert!(result.chars().count() <= 4);
+    }
+
+    #[test]
+    fn ellipse_max_len_one_clamped() {
+        let result = ellipse("abcdef", 1);
+        assert!(result.contains("..."));
+    }
+
+    #[test]
+    fn ellipse_max_len_three_clamped() {
+        let result = ellipse("abcdef", 3);
+        assert!(result.contains("..."));
+        assert!(result.chars().count() <= 4);
+    }
+
+    #[test]
+    fn ellipse_empty_string() {
+        assert_eq!(ellipse("", 10), "");
+    }
+
+    #[test]
+    fn ellipse_single_char_under_limit() {
+        assert_eq!(ellipse("x", 5), "x");
+    }
+
+    #[test]
+    fn ellipse_unicode_chars() {
+        let input = "こんにちは世界テスト";
+        let result = ellipse(input, 7);
+        assert_eq!(result, "こん...スト");
+        assert_eq!(result.chars().count(), 7);
+    }
+
+    #[test]
+    fn ellipse_result_length_within_max() {
+        for max_len in 0..=30 {
+            let result = ellipse("abcdefghijklmnopqrstuvwxyz", max_len);
+            let effective_max = max_len.max(4);
+            assert!(
+                result.chars().count() <= effective_max,
+                "max_len={}, result='{}' has {} chars (expected <= {})",
+                max_len,
+                result,
+                result.chars().count(),
+                effective_max
+            );
+        }
+    }
+
+    #[test]
+    fn ellipse_odd_even_max_len_splits() {
+        let result_even = ellipse("abcdefghij", 8);
+        assert_eq!(result_even, "ab...hij");
+
+        let result_odd = ellipse("abcdefghij", 9);
+        assert_eq!(result_odd, "abc...hij");
+    }
+}

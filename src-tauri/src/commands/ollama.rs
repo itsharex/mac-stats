@@ -561,7 +561,27 @@ pub fn answer_with_ollama_and_fetch(
                     content: planning_system_content,
                     images: None,
                 }];
-            for msg in &conversation_history {
+            let planning_cap = crate::config::Config::planning_history_cap();
+            let planning_history: &[crate::ollama::ChatMessage] =
+                if planning_cap > 0 && conversation_history.len() > planning_cap {
+                    info!(
+                        "Agent router [{}]: capping planning history from {} to {} messages",
+                        request_id,
+                        conversation_history.len(),
+                        planning_cap
+                    );
+                    &conversation_history[conversation_history.len() - planning_cap..]
+                } else if planning_cap == 0 && !conversation_history.is_empty() {
+                    info!(
+                        "Agent router [{}]: planning history disabled (cap=0), skipping {} messages",
+                        request_id,
+                        conversation_history.len()
+                    );
+                    &[]
+                } else {
+                    &conversation_history
+                };
+            for msg in planning_history {
                 planning_messages.push(msg.clone());
             }
             let model_hint = model_override.as_ref().map(|m| format!("\n\nFor this request the user selected Ollama model: {}. The app will use that model for the reply; recommend answering the question (or using an agent) with that in mind.", m)).unwrap_or_default();
