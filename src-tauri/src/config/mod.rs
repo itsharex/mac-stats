@@ -430,6 +430,52 @@ impl Config {
         6
     }
 
+    /// Whether to attempt truncating oversized tool results and retrying when
+    /// the Ollama API returns a context-overflow error, instead of failing immediately.
+    /// Default: true (enabled). Set to false to surface overflow errors without retry.
+    /// Config: config.json `contextOverflowTruncateEnabled` (bool); override: env `MAC_STATS_CTX_OVERFLOW_TRUNCATE`.
+    pub fn context_overflow_truncate_enabled() -> bool {
+        if let Ok(s) = std::env::var("MAC_STATS_CTX_OVERFLOW_TRUNCATE") {
+            return !matches!(s.to_lowercase().as_str(), "0" | "false" | "no" | "off");
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(b) = json
+                    .get("contextOverflowTruncateEnabled")
+                    .and_then(|v| v.as_bool())
+                {
+                    return b;
+                }
+            }
+        }
+        true
+    }
+
+    /// Maximum character length a single tool-result message is allowed after
+    /// truncation during context-overflow recovery. Larger results are cut to
+    /// this size plus a "[truncated]" marker. Default: 4096.
+    /// Config: config.json `contextOverflowMaxResultChars` (number); override: env `MAC_STATS_CTX_OVERFLOW_MAX_RESULT_CHARS`.
+    pub fn context_overflow_max_result_chars() -> usize {
+        if let Ok(s) = std::env::var("MAC_STATS_CTX_OVERFLOW_MAX_RESULT_CHARS") {
+            if let Ok(v) = s.parse::<usize>() {
+                return v.max(256);
+            }
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(v) = json
+                    .get("contextOverflowMaxResultChars")
+                    .and_then(|v| v.as_u64())
+                {
+                    return (v as usize).max(256);
+                }
+            }
+        }
+        4096
+    }
+
     /// Get the user-info file path
     ///
     /// Returns a path in the user's home directory: `$HOME/.mac-stats/user-info.json`

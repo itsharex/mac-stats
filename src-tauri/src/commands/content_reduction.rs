@@ -19,17 +19,17 @@ const TRUNCATE_ONLY_THRESHOLD_DENOM: u32 = 4;
 /// Truncate at last newline or space before max_chars so we don't cut mid-word. O(max_chars).
 pub(crate) fn truncate_at_boundary(body: &str, max_chars: usize) -> String {
     let mut last_break = max_chars;
-    let mut i = 0;
-    for c in body.chars() {
+    let mut broke_early = false;
+    for (i, c) in body.chars().enumerate() {
         if i >= max_chars {
+            broke_early = true;
             break;
         }
         if c == '\n' || c == ' ' {
             last_break = i + 1;
         }
-        i += 1;
     }
-    if i <= max_chars {
+    if !broke_early {
         return body.to_string();
     }
     body.chars().take(last_break).collect()
@@ -118,6 +118,50 @@ pub(crate) async fn reduce_fetched_content_to_fit(
     }
 }
 
+/// Check whether an Ollama error string indicates a context-window overflow.
+pub(crate) fn is_context_overflow_error(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    lower.contains("context overflow")
+        || lower.contains("prompt too long")
+        || lower.contains("context length exceeded")
+        || lower.contains("maximum context length")
+        || lower.contains("exceeds the model's context window")
+        || (lower.contains("too long") && lower.contains("context"))
+}
+
+/// Truncate oversized tool-result messages in the conversation to `max_chars_per_result`.
+///
+/// Only truncates assistant/user/system messages whose content exceeds `max_chars_per_result`
+/// and that look like tool results (heuristic: not the very first system prompt, and not
+/// messages that are the user's original question).
+///
+/// Returns the number of messages that were truncated.
+pub(crate) fn truncate_oversized_tool_results(
+    messages: &mut [crate::ollama::ChatMessage],
+    max_chars_per_result: usize,
+) -> usize {
+    let mut truncated_count = 0usize;
+    for (i, msg) in messages.iter_mut().enumerate() {
+        // Skip the first message (system prompt) — it contains the agent instructions.
+        if i == 0 && msg.role == "system" {
+            continue;
+        }
+        let char_count = msg.content.chars().count();
+        if char_count <= max_chars_per_result {
+            continue;
+        }
+        let truncated_body = truncate_at_boundary(&msg.content, max_chars_per_result);
+        msg.content = format!(
+            "{}\n\n[truncated from {} to {} chars due to context limit]",
+            truncated_body.trim_end(),
+            char_count,
+            max_chars_per_result
+        );
+        truncated_count += 1;
+    }
+    truncated_count
+}
+
 /// Run a single Ollama request in a new session (no conversation history). Used for SKILL agent.
 /// System message = skill content, user message = task. Returns the assistant reply or error string.
 pub(crate) async fn run_skill_ollama_session(
@@ -187,4 +231,142 @@ pub(crate) fn run_js_via_node(code: &str) -> Result<String, String> {
     }
     let stdout = String::from_utf8_lossy(&out.stdout);
     Ok(stdout.trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_at_boundary_returns_full_string_when_short() {
+        let body = "hello";
+        assert_eq!(truncate_at_boundary(body, 100), "hello");
+    }
+
+    #[test]
+    fn truncate_at_boundary_exact_length_returns_full_string() {
+        let body = "hello";
+        assert_eq!(truncate_at_boundary(body, 5), "hello");
+    }
+
+    #[test]
+    fn truncate_at_boundary_truncates_at_last_word_boundary() {
+        let body = "hello world this is a test";
+        let result = truncate_at_boundary(body, 11);
+        // Last space within first 11 chars is at index 5 → takes "hello " (6 chars)
+        assert_eq!(result, "hello ");
+    }
+
+    #[test]
+    fn truncate_at_boundary_breaks_at_last_space_before_limit() {
+        let body = "abcde fghij klmno";
+        let result = truncate_at_boundary(body, 10);
+        // Last space within first 10 chars is at index 5 → takes "abcde " (6 chars)
+        assert_eq!(result, "abcde ");
+    }
+
+    #[test]
+    fn truncate_at_boundary_uses_later_boundary_when_available() {
+        let body = "ab cd ef gh ij kl mn";
+        let result = truncate_at_boundary(body, 10);
+        // Last space within first 10 chars is at index 8 (before 'g') → takes "ab cd ef " (9 chars)
+        assert_eq!(result, "ab cd ef ");
+    }
+
+    #[test]
+    fn truncate_at_boundary_no_break_point_uses_max() {
+        let body = "abcdefghijklmno";
+        let result = truncate_at_boundary(body, 5);
+        assert_eq!(result, "abcde");
+    }
+
+    #[test]
+    fn detects_context_overflow_errors() {
+        assert!(is_context_overflow_error("Ollama error: context overflow"));
+        assert!(is_context_overflow_error(
+            "Ollama error: prompt too long for context"
+        ));
+        assert!(is_context_overflow_error("context length exceeded"));
+        assert!(is_context_overflow_error(
+            "maximum context length is 4096 tokens"
+        ));
+        assert!(is_context_overflow_error(
+            "exceeds the model's context window"
+        ));
+        assert!(is_context_overflow_error("request too long for context"));
+    }
+
+    #[test]
+    fn does_not_match_unrelated_errors() {
+        assert!(!is_context_overflow_error("Ollama HTTP 503: service unavailable"));
+        assert!(!is_context_overflow_error("connection refused"));
+        assert!(!is_context_overflow_error("rate limit exceeded"));
+        assert!(!is_context_overflow_error("timeout"));
+    }
+
+    fn make_msg(role: &str, content: &str) -> crate::ollama::ChatMessage {
+        crate::ollama::ChatMessage {
+            role: role.to_string(),
+            content: content.to_string(),
+            images: None,
+        }
+    }
+
+    #[test]
+    fn truncate_tool_results_skips_system_prompt() {
+        let big = "x".repeat(10_000);
+        let mut msgs = vec![
+            make_msg("system", &big),
+            make_msg("user", "hello"),
+        ];
+        let n = truncate_oversized_tool_results(&mut msgs, 500);
+        assert_eq!(n, 0, "system prompt at index 0 should not be truncated");
+        assert_eq!(msgs[0].content.len(), 10_000);
+    }
+
+    #[test]
+    fn truncate_tool_results_truncates_large_messages() {
+        let big_result = "word ".repeat(2000);
+        let mut msgs = vec![
+            make_msg("system", "You are an AI."),
+            make_msg("user", "fetch https://example.com"),
+            make_msg("assistant", "FETCH_URL: https://example.com"),
+            make_msg("user", &big_result),
+        ];
+        let n = truncate_oversized_tool_results(&mut msgs, 500);
+        assert_eq!(n, 1);
+        assert!(
+            msgs[3].content.chars().count() < 600,
+            "expected truncated msg under 600 chars, got {}",
+            msgs[3].content.chars().count()
+        );
+        assert!(msgs[3].content.contains("[truncated from"));
+    }
+
+    #[test]
+    fn truncate_tool_results_leaves_small_messages() {
+        let mut msgs = vec![
+            make_msg("system", "You are an AI."),
+            make_msg("user", "hello"),
+            make_msg("assistant", "hi there"),
+        ];
+        let n = truncate_oversized_tool_results(&mut msgs, 500);
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn truncate_tool_results_handles_multiple() {
+        let big1 = "a".repeat(5000);
+        let big2 = "b".repeat(8000);
+        let mut msgs = vec![
+            make_msg("system", "prompt"),
+            make_msg("user", &big1),
+            make_msg("assistant", "ok"),
+            make_msg("user", &big2),
+        ];
+        let n = truncate_oversized_tool_results(&mut msgs, 1000);
+        assert_eq!(n, 2);
+        assert!(msgs[1].content.contains("[truncated from 5000 to 1000"));
+        assert!(msgs[3].content.contains("[truncated from 8000 to 1000"));
+    }
 }

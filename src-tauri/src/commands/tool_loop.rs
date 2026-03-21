@@ -380,12 +380,60 @@ pub(crate) async fn run_tool_loop(
             params.budget_warning_ratio,
         );
 
-        let follow_up = send_ollama_chat_messages(
+        let follow_up = match send_ollama_chat_messages(
             messages.clone(),
             params.model_override.clone(),
             params.options_override.clone(),
         )
-        .await?;
+        .await
+        {
+            Ok(resp) => resp,
+            Err(e)
+                if crate::commands::content_reduction::is_context_overflow_error(&e)
+                    && crate::config::Config::context_overflow_truncate_enabled() =>
+            {
+                let max_chars =
+                    crate::config::Config::context_overflow_max_result_chars();
+                let n = crate::commands::content_reduction::truncate_oversized_tool_results(
+                    messages, max_chars,
+                );
+                if n == 0 {
+                    info!(
+                        "Agent router: context overflow but no oversized tool results to truncate — returning error"
+                    );
+                    return Err(e);
+                }
+                info!(
+                    "Agent router: context overflow recovery — truncated {} tool result(s) to {} chars, retrying",
+                    n, max_chars
+                );
+                match send_ollama_chat_messages(
+                    messages.clone(),
+                    params.model_override.clone(),
+                    params.options_override.clone(),
+                )
+                .await
+                {
+                    Ok(resp) => {
+                        info!(
+                            "Agent router: context overflow recovery succeeded after truncation"
+                        );
+                        resp
+                    }
+                    Err(retry_err) => {
+                        info!(
+                            "Agent router: context overflow recovery retry still failed: {}",
+                            retry_err
+                        );
+                        return Err(format!(
+                            "Context overflow: truncated {} tool result(s) and retried, but the request is still too large. Try starting a new topic or using a model with a larger context window.",
+                            n
+                        ));
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        };
         response_content = follow_up.message.content.clone();
 
         // Fallback: if Ollama returned empty after a successful tool result, use the raw tool output.

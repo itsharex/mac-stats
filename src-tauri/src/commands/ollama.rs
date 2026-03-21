@@ -789,12 +789,41 @@ pub fn answer_with_ollama_and_fetch(
                 content: question_for_plan_and_exec.clone(),
                 images: attachment_images_base64.clone(),
             });
-            let response = send_ollama_chat_messages(
+            let response = match send_ollama_chat_messages(
                 msgs.clone(),
                 model_override.clone(),
                 options_override.clone(),
             )
-            .await?;
+            .await
+            {
+                Ok(r) => r,
+                Err(e)
+                    if crate::commands::content_reduction::is_context_overflow_error(&e)
+                        && crate::config::Config::context_overflow_truncate_enabled() =>
+                {
+                    let max_chars =
+                        crate::config::Config::context_overflow_max_result_chars();
+                    let n =
+                        crate::commands::content_reduction::truncate_oversized_tool_results(
+                            &mut msgs, max_chars,
+                        );
+                    if n > 0 {
+                        info!(
+                            "Agent router: context overflow on first execution call — truncated {} tool result(s) to {} chars, retrying",
+                            n, max_chars
+                        );
+                        send_ollama_chat_messages(
+                            msgs.clone(),
+                            model_override.clone(),
+                            options_override.clone(),
+                        )
+                        .await?
+                    } else {
+                        return Err(e);
+                    }
+                }
+                Err(e) => return Err(e),
+            };
             let content = response.message.content.clone();
             let n = content.chars().count();
             info!(
