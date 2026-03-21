@@ -42,6 +42,10 @@ pub(crate) fn compute_pre_routed_recommendation(
         if mgmt_rec.is_some() {
             return mgmt_rec;
         }
+        let discord_rec = try_pre_route_discord_api(question);
+        if discord_rec.is_some() {
+            return discord_rec;
+        }
         try_pre_route_redmine(question, request_for_verification, is_verification_retry)
     })
 }
@@ -446,6 +450,89 @@ fn try_pre_route_ollama_api(q_lower: &str) -> Option<String> {
     {
         info!("Agent router: pre-routed to OLLAMA_API: running (keyword)");
         return Some("OLLAMA_API: running".to_string());
+    }
+
+    None
+}
+
+/// Discord API pre-routing: explicit prefix and common Discord query patterns.
+///
+/// Only triggers when a Discord bot token is configured. Routes to:
+/// - `DISCORD_API: <path>` for explicit prefixes
+/// - `DISCORD_API: GET /users/@me/guilds` for "list servers" / "show servers"
+/// - `AGENT: discord-expert <task>` for queries that need multi-step Discord flows
+///   (e.g. "list channels", "list members" — require guild context the expert discovers)
+fn try_pre_route_discord_api(question: &str) -> Option<String> {
+    crate::discord::get_discord_token()?;
+    let result = match_discord_api_pattern(question)?;
+    info!("Agent router: pre-routed to {} (Discord)", crate::logging::ellipse(&result, 80));
+    Some(result)
+}
+
+/// Pure pattern matching for Discord API pre-routing (no token check).
+/// Returns the recommendation string or None.
+fn match_discord_api_pattern(question: &str) -> Option<String> {
+    let q = question.trim();
+    let q_lower = q.to_lowercase();
+
+    // Skip multi-step / compound requests that need LLM planning.
+    if q_lower.contains("and then ")
+        || q_lower.contains("after that ")
+        || q_lower.contains("screenshot")
+    {
+        return None;
+    }
+
+    // Explicit DISCORD_API: prefix always wins.
+    if let Some(arg) = extract_last_prefixed_argument(q, "DISCORD_API:") {
+        let arg = arg.trim().to_string();
+        if !arg.is_empty() {
+            return Some(format!("DISCORD_API: {arg}"));
+        }
+    }
+
+    // "list servers" / "show servers" / "my servers" → direct API call (no guild context needed)
+    if q_lower == "list servers"
+        || q_lower == "show servers"
+        || q_lower == "my servers"
+        || q_lower == "list my servers"
+        || q_lower == "show my servers"
+        || q_lower == "list discord servers"
+        || q_lower == "show discord servers"
+        || q_lower == "what servers am i in"
+        || q_lower == "which servers am i in"
+        || q_lower == "discord servers"
+    {
+        return Some("DISCORD_API: GET /users/@me/guilds".to_string());
+    }
+
+    // Queries that need guild context → delegate to discord-expert agent.
+    // "list channels" / "show channels"
+    let is_channel_query = q_lower == "list channels"
+        || q_lower == "show channels"
+        || q_lower == "list discord channels"
+        || q_lower == "show discord channels"
+        || q_lower == "what channels are there"
+        || q_lower.starts_with("list channels in ")
+        || q_lower.starts_with("show channels in ");
+
+    if is_channel_query {
+        return Some(format!("AGENT: discord-expert {q}"));
+    }
+
+    // "list members" / "show members" / "who's in the server"
+    let is_member_query = q_lower == "list members"
+        || q_lower == "show members"
+        || q_lower == "list server members"
+        || q_lower == "show server members"
+        || q_lower == "list discord members"
+        || q_lower.starts_with("who is in ")
+        || q_lower.starts_with("who's in ")
+        || q_lower.starts_with("list members in ")
+        || q_lower.starts_with("show members in ");
+
+    if is_member_query {
+        return Some(format!("AGENT: discord-expert {q}"));
     }
 
     None
@@ -1046,5 +1133,183 @@ mod tests {
     fn management_explicit_ollama_api_prefix() {
         let r = try_pre_route_management_commands("OLLAMA_API: list_models");
         assert_eq!(r, Some("OLLAMA_API: list_models".to_string()));
+    }
+
+    // --- DISCORD_API pre-route tests (use match_discord_api_pattern to bypass token check) ---
+
+    #[test]
+    fn discord_explicit_prefix() {
+        assert_eq!(
+            match_discord_api_pattern("DISCORD_API: GET /users/@me/guilds"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_explicit_prefix_post() {
+        assert_eq!(
+            match_discord_api_pattern("DISCORD_API: POST /channels/123/messages {\"content\":\"hi\"}"),
+            Some("DISCORD_API: POST /channels/123/messages {\"content\":\"hi\"}".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_list_servers() {
+        assert_eq!(
+            match_discord_api_pattern("list servers"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_show_servers() {
+        assert_eq!(
+            match_discord_api_pattern("show servers"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_my_servers() {
+        assert_eq!(
+            match_discord_api_pattern("my servers"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_list_my_servers() {
+        assert_eq!(
+            match_discord_api_pattern("list my servers"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_what_servers() {
+        assert_eq!(
+            match_discord_api_pattern("what servers am i in"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_which_servers() {
+        assert_eq!(
+            match_discord_api_pattern("which servers am i in"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_discord_servers() {
+        assert_eq!(
+            match_discord_api_pattern("discord servers"),
+            Some("DISCORD_API: GET /users/@me/guilds".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_list_channels_delegates() {
+        assert_eq!(
+            match_discord_api_pattern("list channels"),
+            Some("AGENT: discord-expert list channels".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_show_channels_delegates() {
+        assert_eq!(
+            match_discord_api_pattern("show channels"),
+            Some("AGENT: discord-expert show channels".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_list_channels_in_server() {
+        assert_eq!(
+            match_discord_api_pattern("list channels in my server"),
+            Some("AGENT: discord-expert list channels in my server".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_what_channels() {
+        assert_eq!(
+            match_discord_api_pattern("what channels are there"),
+            Some("AGENT: discord-expert what channels are there".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_list_members_delegates() {
+        assert_eq!(
+            match_discord_api_pattern("list members"),
+            Some("AGENT: discord-expert list members".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_show_server_members() {
+        assert_eq!(
+            match_discord_api_pattern("show server members"),
+            Some("AGENT: discord-expert show server members".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_whos_in_server() {
+        assert_eq!(
+            match_discord_api_pattern("who's in the server"),
+            Some("AGENT: discord-expert who's in the server".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_who_is_in() {
+        assert_eq!(
+            match_discord_api_pattern("who is in the gaming server"),
+            Some("AGENT: discord-expert who is in the gaming server".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_list_members_in() {
+        assert_eq!(
+            match_discord_api_pattern("list members in my server"),
+            Some("AGENT: discord-expert list members in my server".to_string())
+        );
+    }
+
+    #[test]
+    fn discord_multi_step_skipped() {
+        assert_eq!(
+            match_discord_api_pattern("list servers and then send a message"),
+            None
+        );
+    }
+
+    #[test]
+    fn discord_screenshot_skipped() {
+        assert_eq!(
+            match_discord_api_pattern("screenshot the discord servers page"),
+            None
+        );
+    }
+
+    #[test]
+    fn discord_no_match() {
+        assert_eq!(
+            match_discord_api_pattern("tell me about discord"),
+            None
+        );
+    }
+
+    #[test]
+    fn discord_empty_prefix() {
+        assert_eq!(
+            match_discord_api_pattern("DISCORD_API:"),
+            None
+        );
     }
 }

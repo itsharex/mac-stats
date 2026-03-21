@@ -397,3 +397,44 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] CHANGELOG entry verified: "11 new tests; 221 total pass" — confirmed. Compression ratio logging at info level — confirmed. File list (`html_cleaning.rs`, `network_tool_dispatch.rs`, `ollama_frontend_chat.rs`) — matches diff.
 - [x] Minor observations (non-blocking): (1) `walk_node` uses unbounded recursion — theoretical stack overflow on pathologically deep DOM, unlikely for real web pages. (2) No `<img>` alt text extraction — images silently dropped, acceptable for LLM text context. (3) NBSP (U+00A0) not collapsed by `split_whitespace` — cosmetic edge case. (4) Markdown-special characters in link text/href not escaped — minor formatting noise, not a bug for LLM consumption.
 - [x] `scraper = "0.19"` dependency already present in `Cargo.toml` — no new dependencies added.
+
+### OpenClaw §97 re-verification (2026-03-21)
+
+- [x] OpenClaw AGENTS.md (HEAD `5c05347d`, last modified 2026-03-21) read and all checks re-run.
+- [x] **Directory structure:** `src/provider-web.ts` still does not exist (actual: `src/channel-web.ts`). `src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`, `src/web` still do not exist as top-level dirs — channel runtimes under `src/channels/`, `src/routing/`, and `extensions/`. `src/infra` and `src/media` confirmed present and matching AGENTS.md.
+- [x] **Build commands:** `pnpm build`, `pnpm check`, `pnpm test`, `pnpm test:coverage` all exist. `pnpm tsgo` still has no `scripts` entry in `package.json` — relies on `@typescript/native-preview` providing `tsgo` binary via `.bin`; works after `pnpm install` but is not a declared script.
+- [x] **Format commands:** `pnpm format` still runs `oxfmt --write` (not `--check` as AGENTS.md line 71 claims). `pnpm format:check` runs `oxfmt --check`. Unchanged from §96.
+- [x] **Test thresholds:** Vitest branch coverage threshold still 55%, not 70% as AGENTS.md line 109 claims. Lines/functions/statements are correctly 70%. Unchanged from §96.
+- [x] **Extensions:** 77 dirs under `extensions/` (down from 82 at §96 — likely removals/renames between snapshots; `anthropic-vertex` and `tavily` are recent additions). `anthropic-vertex`, `chutes`, `fal` still lack dedicated English provider pages. `phone-control` and `thread-ownership` still only in zh-CN plugin list.
+- [x] **SSRF tests:** OpenClaw now has 56 `it()` cases in 7 dedicated `*ssrf*.test.ts` files (up from 54 at §96). ~72+ total SSRF-related tests across dedicated files and cross-file mentions. Additional SSRF-adjacent tests in `navigation-guard.test.ts` (16 cases) and `media-understanding-misc.test.ts` (5 cases) bring the broadest count to ~94.
+- [x] **Recent activity (last 2 weeks):** Compaction guard content-aware fix, memory flush dedup via content hash, Matrix added to VOICE_BUBBLE_CHANNELS, pluggable system prompt section for memory plugins, NVM/Linux CA handling, Telegram/iMessage/Slack runtimes routed through plugin SDK, Discord `/codex_resume` picker fix, embedding default export fixes, compaction summary budget safeguard, web UI context notice fix, cold-start status probe skip, Telegram doctor/fresh-setup improvements, Claude bundle commands registered natively, context compaction user notifications, web search key copy fix.
+- [x] No code bugs found; all discrepancies remain documentation-only (same 4 persistent findings from §95).
+
+### Closing reviewer smoke test 2026-03-21 (§97 full review + [Unreleased] verification)
+
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy` — zero warnings.
+- [x] `cargo test` — 270 tests pass (up from 221 at last recorded count).
+- [x] `cargo build --release` succeeds.
+- [x] `./target/release/mac_stats -vv` running (PID 5712); 4 monitors loaded (amvara 321ms, app-monitor 183ms, cometa 349ms, mix-online 243ms), 8 agents loaded (orchestrator, general-purpose-mommy, senior-coder, humble-generalist, discord-expert, scheduler, redmine, abliterated), Ollama connected (qwen3:latest, 40960 ctx), Discord connected (Werner_Amvara), scheduler running (2 entries). 21 WARN/ERROR entries in log (6 expected SSRF blocks for localhost, 2 Chrome idle timeouts, 1 transport shutdown noise, rest HTTP/2 GoAway trace — all benign). Zero panics.
+- [x] [Unreleased] CHANGELOG code verification:
+  - Context-overflow auto-recovery: PASS (`is_context_overflow_error()` and `truncate_oversized_tool_results()` in `content_reduction.rs`, called from `ollama.rs` and `tool_loop.rs`; 12 tests confirmed). Minor: truncation marker in code is `[truncated from N to M chars due to context limit]`, CHANGELOG says `[truncated]`.
+  - Context-overflow config: PASS (`contextOverflowTruncateEnabled` default true, `contextOverflowMaxResultChars` default 4096 in `config/mod.rs`).
+  - Compaction context cap: PASS (12000 bytes, `cap_context()` with 7 tests, `parse_compaction_output` with 6 tests in `compaction.rs`).
+  - Planning history cap: PASS (`planningHistoryCap` default 6, max 40, applied in `ollama.rs`).
+  - HTML noise stripping: PASS (`clean_html()` in `html_cleaning.rs`, called from `network_tool_dispatch.rs` and `ollama_frontend_chat.rs`).
+  - Scheduler per-task timeout: PASS (`schedulerTaskTimeoutSecs` default 600, clamped 30–3600, `tokio::time::timeout` in `scheduler/mod.rs`).
+  - Test count: 270 confirmed (268 `#[test]` + 2 `#[tokio::test]`; CHANGELOG's running counts at various points are stale but the latest matches).
+
+### Closing reviewer smoke test 2026-03-21 (DISCORD_API pre-routing)
+
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy` — zero warnings.
+- [x] `cargo test` — 292 tests pass (22 new).
+- [x] `cargo build --release` succeeds.
+- [x] `./target/release/mac_stats -vv` starts (PID 33313); 4 monitors loaded (mix-online 339ms, cometa 363ms, app-monitor 183ms, amvara 308ms), 8 agents loaded (orchestrator, general-purpose-mommy, senior-coder, humble-generalist, discord-expert, scheduler, redmine, abliterated), 15 models classified, Ollama connected (qwen3:latest, 40960 ctx), Discord connected (Werner_Amvara), scheduler running (2 entries). Zero errors/warnings/panics in log.
+- [x] Code review: `match_discord_api_pattern()` and `try_pre_route_discord_api()` in `commands/pre_routing.rs`. Token check gates the entire function (clippy `?` operator). Pattern matching extracted into `match_discord_api_pattern()` for testability. Three routing tiers: (1) explicit `DISCORD_API:` prefix → pass through; (2) "list servers" / "show servers" / "my servers" / "what/which servers am i in" / "discord servers" → `DISCORD_API: GET /users/@me/guilds` (direct, no guild context needed); (3) channel queries ("list/show channels", "list channels in …", "what channels are there") and member queries ("list/show members", "who is/who's in …", "list members in …") → `AGENT: discord-expert <original question>` (needs multi-step guild discovery). Multi-step exclusions ("and then", "after that", "screenshot"). Wired into pre-route chain after management commands, before Redmine. No behavioral changes to existing pre-routes.
+- [x] `discord-expert` agent confirmed present (agent-004, `defaults/agents/agent-004/agent.json`, slug `discord-expert`, model_role `cheap`, max_tool_iterations 10).
+- [x] Pre-route chain ordering verified: screenshot → RUN_CMD → FETCH_URL → web search → management → **DISCORD_API** → Redmine. No pattern overlap between management commands (schedules, tasks, models) and Discord commands (servers, channels, members).
+- [x] CHANGELOG entry verified: "22 new tests; 292 total pass, zero clippy warnings" — confirmed. Feature description matches code behavior. File reference `(commands/pre_routing.rs)` — correct.
+- [x] Minor observation (non-blocking): explicit `DISCORD_API:` prefix is checked after multi-step exclusion, so `DISCORD_API: GET /something and then screenshot` would return `None`. Consistent with web search pre-routing pattern (same design choice). Extremely unlikely in practice.
