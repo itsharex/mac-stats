@@ -32,7 +32,9 @@ use std::time::UNIX_EPOCH;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
-use crate::commands::session_history::cap_tail_chronological;
+use crate::commands::session_history::{
+    cap_tail_chronological, CONVERSATION_HISTORY_CAP, HAVING_FUN_IDLE_HISTORY_CAP,
+};
 
 /// Time-of-day period for having_fun: influences tone (e.g. quieter at night).
 #[derive(Clone, Copy)]
@@ -1160,8 +1162,7 @@ async fn having_fun_respond(
         images: None,
     });
 
-    const HISTORY_CAP: usize = 20;
-    for (role, content) in cap_tail_chronological(prior, HISTORY_CAP)
+    for (role, content) in cap_tail_chronological(prior, CONVERSATION_HISTORY_CAP)
         .into_iter()
         .filter(|(_, content)| !is_agent_failure_notice(content))
     {
@@ -1307,8 +1308,7 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
         images: None,
     });
 
-    const HISTORY_CAP: usize = 10;
-    for (role, content) in cap_tail_chronological(prior, HISTORY_CAP)
+    for (role, content) in cap_tail_chronological(prior, HAVING_FUN_IDLE_HISTORY_CAP)
         .into_iter()
         .filter(|(_, content)| !is_agent_failure_notice(content))
     {

@@ -407,6 +407,53 @@ mod tests {
     }
 
     #[test]
+    fn extract_first_url_none_without_scheme() {
+        assert_eq!(extract_first_url("hello world"), None);
+        assert_eq!(extract_first_url(""), None);
+    }
+
+    #[test]
+    fn extract_first_url_trims_arg_and_strips_trailing_punctuation() {
+        assert_eq!(
+            extract_first_url("  https://example.com/usecases. The rest"),
+            Some("https://example.com/usecases".to_string())
+        );
+        assert_eq!(
+            extract_first_url("see https://a.org/path, ok"),
+            Some("https://a.org/path".to_string())
+        );
+        assert_eq!(
+            extract_first_url("https://b.test/x;"),
+            Some("https://b.test/x".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_first_url_first_token_only() {
+        assert_eq!(
+            extract_first_url("FETCH_URL: https://one.com/ https://two.com/"),
+            Some("https://one.com/".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_first_url_prefers_https_substring_over_http() {
+        // `find("https://")` is tried before `find("http://")` so a later https URL wins over an earlier http URL.
+        assert_eq!(
+            extract_first_url("http://old.example/ then https://new.example/path"),
+            Some("https://new.example/path".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_first_url_http_when_no_https() {
+        assert_eq!(
+            extract_first_url("use http://localhost:8080/api"),
+            Some("http://localhost:8080/api".to_string())
+        );
+    }
+
+    #[test]
     fn ssrf_redirect_check_blocks_private() {
         let url = Url::parse("http://192.168.1.1/").unwrap();
         let err = check_redirect_target_ssrf(&url, &[]).unwrap_err();

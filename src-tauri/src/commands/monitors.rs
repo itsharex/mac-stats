@@ -17,6 +17,22 @@ fn clamp_monitor_check_interval_secs(stored: u64) -> u64 {
     stored.max(MIN_MONITOR_CHECK_INTERVAL_SECS)
 }
 
+/// Whether `run_due_monitor_checks` should invoke `check_monitor` for this monitor.
+/// `stored_interval_secs` is `None` when the monitor id has no config row (treat as 60s).
+fn is_monitor_due_for_background(
+    now: chrono::DateTime<chrono::Utc>,
+    last_check: Option<chrono::DateTime<chrono::Utc>>,
+    stored_interval_secs: Option<u64>,
+) -> bool {
+    let interval_secs = stored_interval_secs
+        .map(clamp_monitor_check_interval_secs)
+        .unwrap_or(60) as i64;
+    match last_check {
+        None => true,
+        Some(t) => (now - t).num_seconds() >= interval_secs,
+    }
+}
+
 // Global monitor storage (in production, use proper state management)
 fn get_monitors() -> &'static Mutex<HashMap<String, Box<dyn crate::monitors::MonitorCheck + Send>>>
 {
@@ -271,7 +287,8 @@ fn load_monitors() -> Result<(), String> {
 }
 
 /// Run checks for all monitors that are due (last_check + check_interval_secs <= now).
-/// Called from the background monitor thread so website monitoring runs even when no window is open.
+/// Called from the background monitor thread in `lib.rs` (30s sleep loop) so website monitoring runs
+/// even when no window is open.
 pub fn run_due_monitor_checks() {
     use chrono::Utc;
     use tracing::debug;
@@ -294,15 +311,9 @@ pub fn run_due_monitor_checks() {
     let due_ids: Vec<String> = configs
         .keys()
         .filter(|id| {
-            let interval_secs = configs
-                .get(*id)
-                .map(|c| clamp_monitor_check_interval_secs(c.check_interval_secs) as i64)
-                .unwrap_or(60);
+            let stored = configs.get(*id).map(|c| c.check_interval_secs);
             let last = stats.get(*id).and_then(|s| s.last_check);
-            match last {
-                None => true,
-                Some(t) => (now - t).num_seconds() >= interval_secs,
-            }
+            is_monitor_due_for_background(now, last, stored)
         })
         .cloned()
         .collect();
@@ -652,7 +663,8 @@ pub fn get_monitor_status(
 
 #[cfg(test)]
 mod monitor_interval_tests {
-    use super::clamp_monitor_check_interval_secs;
+    use super::{clamp_monitor_check_interval_secs, is_monitor_due_for_background};
+    use chrono::{TimeZone, Utc};
 
     #[test]
     fn clamp_zero_becomes_one() {
@@ -667,5 +679,41 @@ mod monitor_interval_tests {
     #[test]
     fn clamp_large_unchanged() {
         assert_eq!(clamp_monitor_check_interval_secs(60), 60);
+    }
+
+    #[test]
+    fn due_never_checked() {
+        let now = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
+        assert!(is_monitor_due_for_background(now, None, Some(60)));
+    }
+
+    #[test]
+    fn due_elapsed_equals_interval() {
+        let now = Utc.with_ymd_and_hms(2026, 3, 22, 12, 1, 0).unwrap();
+        let last = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
+        assert!(is_monitor_due_for_background(now, Some(last), Some(60)));
+    }
+
+    #[test]
+    fn not_due_elapsed_below_interval() {
+        let now = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 30).unwrap();
+        let last = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
+        assert!(!is_monitor_due_for_background(now, Some(last), Some(60)));
+    }
+
+    #[test]
+    fn missing_config_interval_defaults_sixty() {
+        let now = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 30).unwrap();
+        let last = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
+        assert!(!is_monitor_due_for_background(now, Some(last), None));
+        let now2 = Utc.with_ymd_and_hms(2026, 3, 22, 12, 1, 0).unwrap();
+        assert!(is_monitor_due_for_background(now2, Some(last), None));
+    }
+
+    #[test]
+    fn stored_interval_zero_clamps_so_not_due_same_second() {
+        let now = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
+        let last = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
+        assert!(!is_monitor_due_for_background(now, Some(last), Some(0)));
     }
 }

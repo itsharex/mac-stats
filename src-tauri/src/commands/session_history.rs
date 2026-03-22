@@ -10,6 +10,9 @@ use crate::ollama::ChatMessage;
 
 pub(crate) const CONVERSATION_HISTORY_CAP: usize = 20;
 
+/// Prior-turn cap for Discord `having_fun` **idle thought** only (smaller than [`CONVERSATION_HISTORY_CAP`]).
+pub(crate) const HAVING_FUN_IDLE_HISTORY_CAP: usize = 10;
+
 /// Build agent-router **execution** messages: system prompt, then prior turns, then the current user message.
 ///
 /// Order matches `docs/022_feature_review_plan.md` §F2 (history after system, before the current question).
@@ -173,7 +176,10 @@ pub(crate) async fn prepare_conversation_history(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_execution_message_stack, cap_tail_chronological};
+    use super::{
+        build_execution_message_stack, cap_tail_chronological, CONVERSATION_HISTORY_CAP,
+        HAVING_FUN_IDLE_HISTORY_CAP,
+    };
     use crate::ollama::ChatMessage;
 
     #[test]
@@ -253,5 +259,13 @@ mod tests {
         let v = vec![1, 2, 3, 4, 5];
         let out = cap_tail_chronological(v, 5);
         assert_eq!(out, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn conversation_history_caps_match_discord_contract() {
+        // docs/022_feature_review_plan.md §F1: router and Discord having_fun reply share CONVERSATION_HISTORY_CAP.
+        assert_eq!(CONVERSATION_HISTORY_CAP, 20);
+        assert_eq!(HAVING_FUN_IDLE_HISTORY_CAP, 10);
+        assert!(HAVING_FUN_IDLE_HISTORY_CAP < CONVERSATION_HISTORY_CAP);
     }
 }
