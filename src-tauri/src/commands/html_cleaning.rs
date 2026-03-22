@@ -162,14 +162,35 @@ fn collapse_whitespace(text: &str) -> String {
             .map(|c| match c {
                 // HTML / copied text often inserts break or bidi format controls that
                 // `split_whitespace()` leaves inside one token (e.g. U+034F, U+061C, LRM/RLM,
-                // U+2061–U+206F invisible math + bidi/shaping controls). ZWSP, ZWNJ, ZWJ, WJ,
-                // BOM-in-text, SHY, NBSP, Mongolian vowel separator, Hangul / halfwidth filler
-                // jamo, interlinear annotation markers, and object replacement (U+FFF9–U+FFFC)
-                // get the same treatment so FETCH_URL bodies tokenize cleanly.
-                '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}' | '\u{00AD}'
-                | '\u{00A0}' | '\u{034F}' | '\u{061C}' | '\u{200E}' | '\u{200F}'
-                | '\u{180E}' | '\u{115F}' | '\u{1160}' | '\u{3164}' | '\u{FFA0}'
-                | '\u{2061}'..='\u{206F}' | '\u{FFF9}'..='\u{FFFC}' => ' ',
+                // U+202A–U+202E bidi embedding/override/pop, U+2061–U+206F invisible math +
+                // bidi/shaping controls). ZWSP, ZWNJ, ZWJ, WJ, BOM-in-text, SHY, NBSP,
+                // Mongolian free variation selectors + vowel separator, Hangul / halfwidth
+                // filler jamo, variation selectors (emoji / IVS), interlinear annotation
+                // markers, object replacement (U+FFF9–U+FFFC), and deprecated Unicode language
+                // tag characters (U+E0000–U+E007F) get the same treatment so FETCH_URL bodies
+                // tokenize cleanly.
+                '\u{200B}'
+                | '\u{200C}'
+                | '\u{200D}'
+                | '\u{2060}'
+                | '\u{FEFF}'
+                | '\u{00AD}'
+                | '\u{00A0}'
+                | '\u{034F}'
+                | '\u{061C}'
+                | '\u{200E}'
+                | '\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{180B}'..='\u{180E}'
+                | '\u{115F}'
+                | '\u{1160}'
+                | '\u{3164}'
+                | '\u{FFA0}'
+                | '\u{FE00}'..='\u{FE0F}'
+                | '\u{E0100}'..='\u{E01EF}'
+                | '\u{E0000}'..='\u{E007F}'
+                | '\u{2061}'..='\u{206F}'
+                | '\u{FFF9}'..='\u{FFFC}' => ' ',
                 _ => c,
             })
             .collect();
@@ -310,16 +331,29 @@ mod tests {
     }
 
     #[test]
+    fn bidi_embedding_and_override_separate_words() {
+        // U+202A–U+202E: embedding, override, and pop directional formatting — Cf, not Rust
+        // whitespace, common in copied RTL/LTR web text.
+        for sep in ['\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
     fn bidi_and_grapheme_joiner_separate_words() {
         // CGJ, ALM, LRM/RLM, directional isolates: `split_whitespace()` keeps them inside a token.
         for sep in [
-            '\u{034F}',
-            '\u{061C}',
-            '\u{200E}',
-            '\u{200F}',
-            '\u{2066}',
-            '\u{2067}',
-            '\u{2068}',
+            '\u{034F}', '\u{061C}', '\u{200E}', '\u{200F}', '\u{2066}', '\u{2067}', '\u{2068}',
             '\u{2069}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -380,11 +414,54 @@ mod tests {
     }
 
     #[test]
+    fn variation_selectors_separate_words() {
+        // U+FE00–U+FE0F (emoji / text presentation, IVS) and U+E0100–U+E01EF (variation
+        // selectors supplement) are not Rust whitespace; copied HTML or plain text can place
+        // them between Latin tokens without a real space.
+        for sep in ['\u{FE00}', '\u{FE0F}', '\u{E0100}', '\u{E01EF}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
     fn invisible_fillers_separate_words() {
-        // U+180E Mongolian vowel separator; U+115F/U+1160 Hangul choseong/jungseong fillers;
-        // U+3164 Hangul filler; U+FFA0 halfwidth Hangul filler: not Unicode whitespace in Rust,
-        // so they glue tokens in `split_whitespace()` without normalization.
-        for sep in ['\u{180E}', '\u{115F}', '\u{1160}', '\u{3164}', '\u{FFA0}'] {
+        // U+180B–U+180D Mongolian free variation selectors; U+180E Mongolian vowel separator;
+        // U+115F/U+1160 Hangul choseong/jungseong fillers; U+3164 Hangul filler; U+FFA0
+        // halfwidth Hangul filler: not Unicode whitespace in Rust, so they glue tokens in
+        // `split_whitespace()` without normalization.
+        for sep in [
+            '\u{180B}', '\u{180C}', '\u{180D}', '\u{180E}', '\u{115F}', '\u{1160}', '\u{3164}',
+            '\u{FFA0}',
+        ] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unicode_language_tag_characters_separate_words() {
+        // U+E0000–U+E007F (Tags block): deprecated language-tag / tag-id characters are Cf and
+        // not Rust whitespace, so they would glue Latin tokens in `split_whitespace()`.
+        for sep in ['\u{E0000}', '\u{E0001}', '\u{E0020}', '\u{E007F}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
