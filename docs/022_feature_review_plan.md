@@ -132,7 +132,7 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 **Review checklist:**
 - [x] Verify `ellipse()` handles edge cases: empty string, string shorter than `max_len`, string exactly `max_len`, very small `max_len` (< 3). — `logging/mod.rs` tests (`ellipse_empty_string`, `ellipse_short_string_unchanged`, `ellipse_exact_max_len_unchanged`, `ellipse_max_len_*_clamped`, `ellipse_result_length_within_max`).
 - [x] Confirm the `VERBOSITY` atomic is the same one set by CLI `-v`/`-vv`/`-vvv` flags and the new `set_chat_verbosity`. — `commands/logging.rs` tests (FEAT-D11) + CLI sets `logging::VERBOSITY` at startup.
-- [ ] Verify `browser.rs` truncation change: old code appended `[truncated]`; new code uses `ellipse()` which shows `...`. This changes the semantics for FETCH_URL content passed to Ollama — confirm the model still understands the page was cut. — Oversized FETCH_URL bodies also append ` [content truncated]` (`browser.rs`, CHANGELOG).
+- [x] Verify `browser.rs` truncation change: old code appended `[truncated]`; new code uses `ellipse()` which shows `...`. This changes the semantics for FETCH_URL content passed to Ollama — confirm the model still understands the page was cut. — Oversized FETCH_URL bodies append ` [content truncated]` after the ellipsed body (`truncate_fetch_body_if_needed` in `browser.rs`); `truncate_fetch_body_ellipse_then_explicit_suffix_for_llm` + `truncate_fetch_body_uses_configured_max` lock the contract (FEAT-D32).
 
 ### F8: Chat reserved words
 

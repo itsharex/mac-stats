@@ -407,6 +407,22 @@ mod tests {
     }
 
     #[test]
+    fn truncate_fetch_body_ellipse_then_explicit_suffix_for_llm() {
+        // 022 feature review F7: middle omission (`...` via `ellipse`) plus explicit
+        // ` [content truncated]` so the model is not left guessing whether the page ended.
+        let over = MAX_BODY_CHARS + 50_000;
+        let body: String = "x".repeat(over);
+        let out = truncate_fetch_body_if_needed(body);
+        assert!(out.ends_with(FETCH_BODY_TRUNC_SUFFIX));
+        let without_suffix = out.strip_suffix(FETCH_BODY_TRUNC_SUFFIX).expect("suffix");
+        assert!(
+            without_suffix.contains("..."),
+            "ellipsed payload should show middle omission"
+        );
+        assert!(out.chars().count() <= MAX_BODY_CHARS);
+    }
+
+    #[test]
     fn extract_first_url_none_without_scheme() {
         assert_eq!(extract_first_url("hello world"), None);
         assert_eq!(extract_first_url(""), None);

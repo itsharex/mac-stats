@@ -157,7 +157,17 @@ fn collapse_whitespace(text: &str) -> String {
     let mut consecutive_newlines = 0u32;
 
     for line in text.split('\n') {
-        let trimmed = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        let normalized: String = line
+            .chars()
+            .map(|c| match c {
+                // ZWSP / BOM-as-ZWNBSP / soft hyphen: not treated as whitespace by
+                // `split_whitespace()` but used as invisible break opportunities in HTML
+                // (`&shy;`, zero-width breaks); map so words do not glue for the LLM.
+                '\u{200B}' | '\u{FEFF}' | '\u{00AD}' => ' ',
+                _ => c,
+            })
+            .collect();
+        let trimmed = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
         if trimmed.is_empty() {
             consecutive_newlines += 1;
             if consecutive_newlines <= 2 {
@@ -249,6 +259,34 @@ mod tests {
             "<html><head><script>all js</script></head><body><script>more</script></body></html>";
         let cleaned = clean_html(html);
         assert!(cleaned.trim().is_empty());
+    }
+
+    #[test]
+    fn zero_width_space_separates_words() {
+        // U+200B is not Unicode whitespace in Rust; pages use it as an invisible
+        // break opportunity between words — treat it like a space for LLM text.
+        let html = "<html><body><p>hello\u{200B}world</p></body></html>";
+        let cleaned = clean_html(html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected ZWSP normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(!cleaned.contains('\u{200B}'));
+    }
+
+    #[test]
+    fn soft_hyphen_separates_words() {
+        // U+00AD (SHY) is common from HTML `&shy;`; Rust does not treat it as whitespace,
+        // so without normalization "hello\u{00AD}world" stays one token.
+        let html = "<html><body><p>hello\u{00AD}world</p></body></html>";
+        let cleaned = clean_html(html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected soft hyphen normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(!cleaned.contains('\u{00AD}'));
     }
 
     #[test]
