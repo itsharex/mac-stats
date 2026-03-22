@@ -275,24 +275,24 @@ fn run_internal(open_cpu_window: bool) {
             if let Err(e) = monitors::load_monitors_internal() {
                 tracing::warn!("Failed to load monitors: {}", e);
             }
-            
+
             // Hide ALL windows immediately (menu bar app - no windows should be visible at startup)
             for window in app.windows().values() {
                 let _ = window.hide();
             }
-            
+
             // Also hide the main window specifically if it exists
             if let Some(main_window) = app.get_window("main") {
                 let _ = main_window.hide();
             }
-            
+
             let _ = APP_HANDLE.set(app.handle());
 
             // Don't create CPU window at startup - create it on demand when clicked
             // This saves CPU by not having the window exist until needed
             debug3!("CPU window will be created on demand when menu bar is clicked");
             debug3!("All windows hidden at startup - app running in menu bar only");
-            
+
             // If -cpu flag is set, create the window after a short delay (for testing only)
             if open_cpu_window {
                 std::thread::spawn(move || {
@@ -311,7 +311,7 @@ fn run_internal(open_cpu_window: bool) {
             }
 
             setup_status_item();
-            
+
             // Set placeholder text immediately (don't call get_metrics() here - it blocks)
             let placeholder_text = "CPU\tGPU\tRAM\tSSD\n0%\t0%\t0%\t0%";
             let initial_attributed = make_attributed_title(placeholder_text);
@@ -324,7 +324,7 @@ fn run_internal(open_cpu_window: bool) {
                     }
                 }
             });
-            
+
             // Welcome message when menu bar is ready (always printed, regardless of verbosity)
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("✨ Welcome to mac-stats v{}! ✨", config::Config::version());
@@ -342,7 +342,7 @@ fn run_internal(open_cpu_window: bool) {
             println!();
             println!("Happy monitoring! 🚀");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            
+
             // Start Discord gateway in a background thread. Token is read from DISCORD_BOT_TOKEN
             // env, .config.env, or Keychain (no Keychain write here, so no blocking).
             std::thread::spawn(|| {
@@ -412,7 +412,7 @@ fn run_internal(open_cpu_window: bool) {
             // directly from a background thread that can access the main thread
             // Actually, the simplest: just rely on click handler for now
             // Users can click to see updates, which is better than nothing
-            
+
             // Initialize System and Disks in background thread to avoid blocking
             std::thread::spawn(move || {
                 debug3!("Background thread: initializing System and Disks");
@@ -428,7 +428,7 @@ fn run_internal(open_cpu_window: bool) {
                 } else {
                     debug3!("Background thread: SYSTEM lock unavailable, skipping");
                 }
-                
+
                 // Create Disks outside the lock
                 let mut new_disks = Disks::new();
                 new_disks.refresh(false);
@@ -443,13 +443,13 @@ fn run_internal(open_cpu_window: bool) {
                 }
                 debug3!("Background thread: initialization complete");
             });
-            
+
             // Menu bar updates will be processed by the click handler
             // The background update loop stores updates in MENU_BAR_TEXT,
             // and the click handler processes them when the menu bar is clicked.
             // This ensures updates happen on the main thread without using
             // the broken run_on_main_thread mechanism.
-            
+
             // Start update loop in background thread
             std::thread::spawn(move || {
                 // Wait longer before first update to let background initialization complete
@@ -471,19 +471,19 @@ fn run_internal(open_cpu_window: bool) {
                     // Menu bar updates every 1-2 seconds (like Stats app) for responsive UI
                     // Fast metrics (CPU, RAM) are cached, so this is cheap
                     std::thread::sleep(std::time::Duration::from_secs(1));
-                    
+
                     debug3!("Update loop: getting metrics...");
                     let metrics = get_metrics();
-                    
+
                     // CRITICAL: Only update menu bar if metrics are valid
                     // Invalid metrics (all zeros) can occur during initialization or when locks are held
                     // In that case, skip this update and wait for the next cycle
                     if !metrics.is_valid() {
-                        debug3!("Skipping menu bar update: invalid metrics (CPU={}%, GPU={}%, RAM={}%, DISK={}%)", 
+                        debug3!("Skipping menu bar update: invalid metrics (CPU={}%, GPU={}%, RAM={}%, DISK={}%)",
                             metrics.cpu, metrics.gpu, metrics.ram, metrics.disk);
                         continue; // Skip this update cycle
                     }
-                    
+
                     let text = build_status_text(&metrics);
 
                     // Store update in static variable
@@ -521,7 +521,7 @@ fn run_internal(open_cpu_window: bool) {
                             })
                         })
                         .is_some();
-                    
+
                     if should_read_temp {
                         // CPU window is visible - read temperature and frequency
                         // Reuse SMC connection if available, otherwise create new one
@@ -542,7 +542,7 @@ fn run_internal(open_cpu_window: bool) {
                                 }
                             }
                         }
-                        
+
                         // CRITICAL: Create IOReport subscription for frequency reading (once, when window opens)
                         // This is expensive to create, so we keep it alive and reuse it
                         // Implementation follows exelban/stats approach: use IOReport API directly
@@ -554,7 +554,7 @@ fn run_internal(open_cpu_window: bool) {
                                     // Create CFString objects for group and subgroup
                                     let group_cf = CFString::from_static_string("CPU Stats");
                                     let subgroup_cf = CFString::from_static_string("CPU Core Performance States");
-                                    
+
                                     // Get channels in the CPU Performance States group
                                     let channels_dict = IOReportCopyChannelsInGroup(
                                         group_cf.as_concrete_TypeRef(),
@@ -563,7 +563,7 @@ fn run_internal(open_cpu_window: bool) {
                                         0, // want_sub_groups
                                         0, // want_historical
                                     );
-                                    
+
                                     if !channels_dict.is_null() {
                                         // CRITICAL: Retain channels_dict before storing (Create/Copy rule)
                                         CFRetain(channels_dict as CFTypeRef);
@@ -581,25 +581,25 @@ fn run_internal(open_cpu_window: bool) {
                                             // Lock failed, release the retained dict
                                             CFRelease(channels_dict as CFTypeRef);
                                         }
-                                        
+
                                         // Create mutable dictionary for subscription
                                         // We need to merge the channels into a mutable dictionary
                                         // For IOReport, we use CFString keys and CFType values
                                         use core_foundation::base::CFType;
                                         let channels_mut: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
-                                        
+
                                         // Merge channels into our mutable dictionary
                                         IOReportMergeChannels(
                                             channels_mut.as_concrete_TypeRef(),
                                             channels_dict,
                                             std::ptr::null(),
                                         );
-                                        
+
                                         // Create subscription
                                         // IOReportCreateSubscription returns the subscription handle as *mut c_void
                                         // and also fills in subscription_dict with channel information
                                         let mut subscription_dict: CFMutableDictionaryRef = std::ptr::null_mut();
-                                        
+
                                         let subscription_ptr = IOReportCreateSubscription(
                                             std::ptr::null(), // allocator
                                             channels_mut.as_concrete_TypeRef(),
@@ -607,11 +607,11 @@ fn run_internal(open_cpu_window: bool) {
                                             0, // channel_id
                                             std::ptr::null(), // options
                                         );
-                                        
+
                                         // The subscription handle is the return value, not the dictionary
                                         if !subscription_ptr.is_null() {
                                             *sub = Some(subscription_ptr as usize);
-                                            
+
                                             // CRITICAL: Retain subscription_dict before storing
                                             if !subscription_dict.is_null() {
                                                 CFRetain(subscription_dict as CFTypeRef);
@@ -630,7 +630,7 @@ fn run_internal(open_cpu_window: bool) {
                                                     CFRelease(subscription_dict as CFTypeRef);
                                                 }
                                             }
-                                            
+
                                             // Store channels dictionary for sampling (needed for IOReportCreateSamples)
                                             // CRITICAL: Retain the dictionary to avoid use-after-free crashes
                                             CFRetain(channels_mut.as_concrete_TypeRef() as CFTypeRef);
@@ -644,9 +644,9 @@ fn run_internal(open_cpu_window: bool) {
                                                 // Lock failed, release the retained dict
                                                 CFRelease(channels_mut.as_concrete_TypeRef() as CFTypeRef);
                                             }
-                                            
+
                                             debug3!("IOReport subscription created successfully for CPU frequency (handle={:p}, dict={:p})", subscription_ptr, subscription_dict);
-                                            
+
                                             // OPTIMIZATION Phase 3: Update OnceLock to indicate frequency reading works
                                             // OPTIMIZATION Phase 3: Update OnceLock to indicate frequency reading works
                                             if CAN_READ_FREQUENCY.set(true).is_ok() {
@@ -661,7 +661,7 @@ fn run_internal(open_cpu_window: bool) {
                                 }
                             }
                         }
-                        
+
                         // CRITICAL: Create IOReport subscription for power reading (once, when window opens)
                         // This is expensive to create, so we keep it alive and reuse it
                         // Power channels are in groups like "CPU Stats" / "CPU Power" or "GPU Stats" / "GPU Power"
@@ -676,7 +676,7 @@ fn run_internal(open_cpu_window: bool) {
                                     // Based on research: "Energy Model" group is commonly used for power
                                     let mut power_channels_dict: CFDictionaryRef = std::ptr::null_mut();
                                     let mut found_channel_name = String::new();
-                                    
+
                                     // Try "Energy Model" group first (common for power metrics)
                                     let energy_model_group_cf = CFString::from_static_string("Energy Model");
                                     let energy_model_dict = IOReportCopyChannelsInGroup(
@@ -695,7 +695,7 @@ fn run_internal(open_cpu_window: bool) {
                                             CFRelease(energy_model_dict as CFTypeRef);
                                         }
                                     }
-                                    
+
                                     // If Energy Model didn't work, try CPU Power
                                     if power_channels_dict.is_null() {
                                         let cpu_group_cf = CFString::from_static_string("CPU Stats");
@@ -753,13 +753,13 @@ fn run_internal(open_cpu_window: bool) {
                                             }
                                         }
                                     }
-                                    
+
                                     if !power_channels_dict.is_null() {
                                         // Check channel count before proceeding
                                         use core_foundation::dictionary::CFDictionaryGetCount;
                                         let channel_count = CFDictionaryGetCount(power_channels_dict);
                                         debug3!("Power channels dictionary has {} entries", channel_count);
-                                        
+
                                         if channel_count == 0 {
                                             debug3!("Power channels dictionary is empty - cannot create subscription");
                                             CFRelease(power_channels_dict as CFTypeRef);
@@ -770,14 +770,14 @@ fn run_internal(open_cpu_window: bool) {
                                             use core_foundation::base::CFGetTypeID;
                                             use core_foundation::dictionary::CFDictionaryGetTypeID;
                                             use core_foundation::string::CFStringGetTypeID;
-                                            
+
                                             let actual_channels_dict = {
                                                 use core_foundation::dictionary::CFDictionaryGetCount;
-                                                
+
                                                 let keys_count = CFDictionaryGetCount(power_channels_dict);
                                                 let mut keys_buf: Vec<*const c_void> = vec![std::ptr::null(); keys_count as usize];
                                                 let mut values_buf: Vec<*const c_void> = vec![std::ptr::null(); keys_count as usize];
-                                                
+
                                                 extern "C" {
                                                     fn CFDictionaryGetKeysAndValues(
                                                         theDict: CFDictionaryRef,
@@ -785,13 +785,13 @@ fn run_internal(open_cpu_window: bool) {
                                                         values: *mut *const c_void,
                                                     );
                                                 }
-                                                
+
                                                 CFDictionaryGetKeysAndValues(
                                                     power_channels_dict,
                                                     keys_buf.as_mut_ptr(),
                                                     values_buf.as_mut_ptr(),
                                                 );
-                                                
+
                                                 // Log all keys to understand structure
                                                 for i in 0..(keys_count as usize) {
                                                     let key_ref = keys_buf[i] as CFStringRef;
@@ -802,7 +802,7 @@ fn run_internal(open_cpu_window: bool) {
                                                             let key_str = CFString::wrap_under_get_rule(key_ref);
                                                             let key_name = key_str.to_string();
                                                             debug3!("Power channels dict key[{}]: '{}'", i, key_name);
-                                                            
+
                                                             let value_ptr = values_buf[i];
                                                             if !value_ptr.is_null() {
                                                                 let value_type_id = CFGetTypeID(value_ptr as CFTypeRef);
@@ -812,7 +812,7 @@ fn run_internal(open_cpu_window: bool) {
                                                                 }
                                                                 let array_type_id = CFArrayGetTypeID();
                                                                 debug3!("  Value type_id={}, dict_type_id={}, array_type_id={}", value_type_id, dict_type_id, array_type_id);
-                                                                
+
                                                                 if value_type_id == dict_type_id {
                                                                     let nested_dict = value_ptr as CFDictionaryRef;
                                                                     let nested_count = CFDictionaryGetCount(nested_dict);
@@ -834,7 +834,7 @@ fn run_internal(open_cpu_window: bool) {
                                                         }
                                                     }
                                                 }
-                                                
+
                                                 // For Energy Model, IOReportChannels is an array, not a dict
                                                 // We need to store the original dict (with IOReportChannels array) for channel name lookup
                                                 // IOReportMergeChannels will handle the array structure when creating subscription
@@ -842,7 +842,7 @@ fn run_internal(open_cpu_window: bool) {
                                                 CFRetain(power_channels_dict as CFTypeRef);
                                                 power_channels_dict
                                             };
-                                            
+
                                             // Retain and store original channels dict (the wrapper with IOReportChannels)
                                             // This is needed for channel name lookup during power reading
                                             // The actual_channels_dict is what we'll merge, but we store the wrapper for lookup
@@ -857,27 +857,27 @@ fn run_internal(open_cpu_window: bool) {
                                             } else {
                                                 CFRelease(power_channels_dict as CFTypeRef);
                                             }
-                                            
+
                                             // Create mutable dictionary for subscription
                                             // CRITICAL: Try using the channels dict directly first, then merge if needed
                                             use core_foundation::base::CFType;
                                             let power_channels_mut: CFMutableDictionary<CFString, CFType> = CFMutableDictionary::new();
-                                            
+
                                             debug3!("Merging power channels into mutable dictionary...");
                                             IOReportMergeChannels(
                                                 power_channels_mut.as_concrete_TypeRef(),
                                                 actual_channels_dict,
                                                 std::ptr::null(),
                                             );
-                                            
+
                                             // Release the extracted dict after merging (we've copied its contents)
                                             CFRelease(actual_channels_dict as CFTypeRef);
-                                            
+
                                             // Check merged dictionary count
                                             use core_foundation::dictionary::CFDictionaryGetCount;
                                             let merged_count = CFDictionaryGetCount(power_channels_mut.as_concrete_TypeRef());
                                             debug3!("Merged power channels dictionary has {} entries", merged_count);
-                                            
+
                                             // If merge resulted in 0 entries, try using the original dict directly
                                             // This might work if the structure is already in the correct format
                                             let channels_for_subscription = if merged_count == 0 {
@@ -890,7 +890,7 @@ fn run_internal(open_cpu_window: bool) {
                                                 CFRelease(actual_channels_dict as CFTypeRef);
                                                 power_channels_mut.as_concrete_TypeRef()
                                             };
-                                            
+
                                             // Create subscription
                                             let mut power_subscription_dict: CFMutableDictionaryRef = std::ptr::null_mut();
                                             debug3!("Creating IOReport power subscription...");
@@ -901,16 +901,16 @@ fn run_internal(open_cpu_window: bool) {
                                                 0,
                                                 std::ptr::null(),
                                             );
-                                            
+
                                             // If we used the direct dict and subscription failed, release it
                                             if merged_count == 0 && power_subscription_ptr.is_null() {
                                                 CFRelease(channels_for_subscription as CFTypeRef);
                                             }
-                                            
+
                                             if !power_subscription_ptr.is_null() {
                                                 debug3!("IOReport power subscription created successfully!");
                                             *power_sub = Some(power_subscription_ptr as usize);
-                                            
+
                                             if !power_subscription_dict.is_null() {
                                                 CFRetain(power_subscription_dict as CFTypeRef);
                                                 if let Ok(mut sub_dict_storage) = IOREPORT_POWER_SUBSCRIPTION_DICT.try_lock() {
@@ -922,7 +922,7 @@ fn run_internal(open_cpu_window: bool) {
                                                     CFRelease(power_subscription_dict as CFTypeRef);
                                                 }
                                             }
-                                            
+
                                             CFRetain(power_channels_mut.as_concrete_TypeRef() as CFTypeRef);
                                             if let Ok(mut channels_storage) = IOREPORT_POWER_CHANNELS.try_lock() {
                                                 if let Some(old_ptr) = channels_storage.take() {
@@ -932,9 +932,9 @@ fn run_internal(open_cpu_window: bool) {
                                             } else {
                                                 CFRelease(power_channels_mut.as_concrete_TypeRef() as CFTypeRef);
                                             }
-                                            
+
                                             debug3!("IOReport power subscription created successfully (handle={:p}, channels={})", power_subscription_ptr, found_channel_name);
-                                            
+
                                             if CAN_READ_CPU_POWER.set(true).is_ok() {
                                                 debug3!("CAN_READ_CPU_POWER set to true");
                                             }
@@ -959,7 +959,7 @@ fn run_internal(open_cpu_window: bool) {
                                 }
                             }
                         }
-                        
+
                         // CRITICAL: Only read temperature every 20 seconds to reduce CPU usage
                         // all_data() iteration is VERY expensive - limit it as much as possible
                         // STEP 3: Temperature reading every 20s to save CPU
@@ -975,7 +975,7 @@ fn run_internal(open_cpu_window: bool) {
                         } else {
                             false
                         };
-                        
+
                         // Only actually read temperature if enough time has passed
                         if should_read_temp_now {
                             // Read temperature using existing connection
@@ -986,7 +986,7 @@ fn run_internal(open_cpu_window: bool) {
                                     Ok(temps) => {
                                         let die_temp: f64 = temps.die.into();
                                         let prox_temp: f64 = temps.proximity.into();
-                                        
+
                                         // Priority: die > proximity
                                         temp = if die_temp > 0.0 {
                                             die_temp
@@ -1000,13 +1000,13 @@ fn run_internal(open_cpu_window: bool) {
                                         // Standard method failed, continue to raw key reading
                                     }
                                 }
-                                
+
                                 // If standard method returned 0.0, try reading M3 Max raw keys directly
                                 // These are the keys that exelban/stats uses for M3 Max
                                 if temp == 0.0 {
                                     // Check if we've already discovered a working M3 key
                                     let cached_key = M3_TEMP_KEY.lock().ok().and_then(|k| k.clone());
-                                    
+
                                     if let Some(key_name) = cached_key {
                                         // CRITICAL: Use direct key reading instead of all_data() iteration
                                         // This is MUCH more efficient - avoids iterating through all SMC keys
@@ -1049,7 +1049,7 @@ fn run_internal(open_cpu_window: bool) {
                                         }
                                     }
                                 }
-                                
+
                                 if temp > 0.0 {
                                     // Update cache with new temperature and timestamp
                                     if let Ok(mut cache) = TEMP_CACHE.try_lock() {
@@ -1068,7 +1068,7 @@ fn run_internal(open_cpu_window: bool) {
                             debug3!("Skipping temperature read (too soon since last read, all_data() is expensive)");
                             // Don't call all_data() at all - just skip
                         }
-                        
+
                         // STEP 3: Read CPU frequency from IOReport (real-time, dynamic)
                         // This is the same approach exelban/stats uses - efficient native API
                         // CPU EFFICIENCY: Only read frequency every 30 seconds (IOReport sampling still has overhead)
@@ -1085,24 +1085,24 @@ fn run_internal(open_cpu_window: bool) {
                         } else {
                             false
                         };
-                        
+
                         if should_read_freq {
                             debug3!("should_read_freq=true, attempting IOReport frequency read");
-                            
+
                             // Check if frequency logging is enabled
                             let freq_logging = state::FREQUENCY_LOGGING_ENABLED.lock()
                                 .map(|f| *f)
                                 .unwrap_or(false);
-                            
+
                             let mut freq: f32 = 0.0;
                             let mut p_core_freq: f32 = 0.0;
                             let mut e_core_freq: f32 = 0.0;
-                            
+
                             // Try IOReport first (real-time frequency via native API)
                             let freq_result = if let Ok(sub) = IOREPORT_SUBSCRIPTION.try_lock() {
                                 if let Some(subscription_usize) = sub.as_ref() {
                                     let subscription_ptr = *subscription_usize as *mut c_void;
-                                    
+
                                     if subscription_ptr.is_null() {
                                         debug3!("Subscription pointer is null, cannot create sample");
                                         None
@@ -1113,32 +1113,32 @@ fn run_internal(open_cpu_window: bool) {
                                         } else {
                                             None
                                         };
-                                        
+
                                         let channels_ref = channels_ptr.unwrap_or(std::ptr::null_mut());
                                         if channels_ref.is_null() {
                                             debug3!("Using NULL channels for IOReportCreateSamples (may fail)");
                                         } else {
                                             debug3!("Using stored channels dictionary for IOReportCreateSamples");
                                         }
-                                        
+
                                         // Get original channels dictionary
                                         let original_channels_dict = if let Ok(orig_channels_storage) = IOREPORT_ORIGINAL_CHANNELS.try_lock() {
                                             orig_channels_storage.as_ref().map(|&dict_usize| dict_usize as CFDictionaryRef)
                                         } else {
                                             None
                                         };
-                                        
+
                                         // Get last sample for delta calculation
                                         let last_sample = if let Ok(last_sample_storage) = LAST_IOREPORT_SAMPLE.try_lock() {
                                             last_sample_storage.as_ref().map(|&(sample_usize, _)| sample_usize as CFDictionaryRef)
                                         } else {
                                             None
                                         };
-                                        
+
                                         // Use the extracted frequency reading function
                                         unsafe {
                                             use ffi::ioreport::read_frequencies_from_ioreport;
-                                            
+
                                             let (result, current_sample_opt) = read_frequencies_from_ioreport(
                                                 subscription_ptr as *const c_void,
                                                 channels_ref,
@@ -1146,7 +1146,7 @@ fn run_internal(open_cpu_window: bool) {
                                                 last_sample,
                                                 freq_logging,
                                             );
-                                            
+
                                             // Store current sample for next delta calculation
                                             if let Some(current_sample) = current_sample_opt {
                                                 // Retain the sample before storing (Core Foundation ownership rule)
@@ -1168,7 +1168,7 @@ fn run_internal(open_cpu_window: bool) {
                                                 // Release the original sample (we've retained a copy)
                                                 CFRelease(current_sample as CFTypeRef);
                                             }
-                                            
+
                                             Some(result)
                                         }
                                     }
@@ -1180,21 +1180,21 @@ fn run_internal(open_cpu_window: bool) {
                                 debug3!("IOReport subscription lock failed");
                                 None
                             };
-                            
+
                             // Update frequency values from result
                             if let Some(freq_result) = freq_result {
                                 freq = freq_result.overall;
                                 p_core_freq = freq_result.p_core;
                                 e_core_freq = freq_result.e_core;
                             }
-                            
+
                             // CRITICAL: Only use nominal frequency as fallback if IOReport completely failed
                             // If IOReport returned 0.0, it means parsing failed - don't overwrite cache with nominal
                             // Only update cache if we got a real frequency from IOReport
                             let freq_logging = state::FREQUENCY_LOGGING_ENABLED.lock()
                                 .map(|f| *f)
                                 .unwrap_or(false);
-                            
+
                             if freq > 0.0 {
                                 if let Ok(mut cache) = FREQ_CACHE.try_lock() {
                                     *cache = Some((freq, std::time::Instant::now()));
@@ -1204,7 +1204,7 @@ fn run_internal(open_cpu_window: bool) {
                                         debug3!("Frequency cache updated from IOReport: {:.2} GHz", freq);
                                     }
                                 }
-                                
+
                                 // Update P-core frequency cache
                                 if p_core_freq > 0.0 {
                                     if let Ok(mut cache) = P_CORE_FREQ_CACHE.try_lock() {
@@ -1218,7 +1218,7 @@ fn run_internal(open_cpu_window: bool) {
                                 } else if freq_logging {
                                     debug3!("P-core frequency is 0.0 - NOT updating cache");
                                 }
-                                
+
                                 // Update E-core frequency cache
                                 if e_core_freq > 0.0 {
                                     if let Ok(mut cache) = E_CORE_FREQ_CACHE.try_lock() {
@@ -1232,7 +1232,7 @@ fn run_internal(open_cpu_window: bool) {
                                 } else if freq_logging {
                                     debug3!("E-core frequency is 0.0 - NOT updating cache");
                                 }
-                                
+
                                 // OPTIMIZATION Phase 3: Update OnceLock to indicate frequency reading works
                                 if CAN_READ_FREQUENCY.set(true).is_ok() {
                                     debug3!("CAN_READ_FREQUENCY set to true (IOReport frequency read successfully)");
@@ -1240,7 +1240,7 @@ fn run_internal(open_cpu_window: bool) {
                             } else {
                                 // This prevents overwriting a good cached value with nominal frequency
                                 debug3!("IOReport frequency parsing failed (freq=0.0) - keeping existing cache value if available");
-                                
+
                                 // Only initialize cache with nominal frequency if it's completely empty
                                 if let Ok(mut cache) = FREQ_CACHE.try_lock() {
                                     if cache.is_none() {
@@ -1255,7 +1255,7 @@ fn run_internal(open_cpu_window: bool) {
                         } else {
                             debug3!("should_read_freq=false, skipping frequency update");
                         }
-                        
+
                         // CRITICAL: Only read battery and power when CPU window is visible
                         // This ensures menu bar (which only shows CPU/RAM/Disk) remains super lightweight
                         // Battery reading via IOKit is lightweight, but we still only read when window is visible
@@ -1267,7 +1267,7 @@ fn run_internal(open_cpu_window: bool) {
                         if power_logging && has_battery {
                             debug3!("Battery updated: {:.1}%, charging={}", battery_level, is_charging);
                         }
-                        
+
                         // Read power consumption from IOReport
                         // Power reading is expensive (IOReport), so we read it every 5 seconds
                         // CRITICAL: Update LAST_POWER_READ_TIME AFTER we successfully read and store the sample
@@ -1279,7 +1279,7 @@ fn run_internal(open_cpu_window: bool) {
                         } else {
                             false
                         };
-                        
+
                         if should_read_power {
                             debug3!("Reading power from IOReport (should_read_power=true)...");
                             // Read power from IOReport
@@ -1288,7 +1288,7 @@ fn run_internal(open_cpu_window: bool) {
                                 if let Some(subscription_usize) = power_sub.as_ref() {
                                     let subscription_ptr = *subscription_usize as *mut c_void;
                                     debug3!("Power subscription found: {:p}", subscription_ptr);
-                                    
+
                                     if !subscription_ptr.is_null() {
                                         debug3!("Subscription pointer is valid, proceeding with power read...");
                                         let channels_ptr = if let Ok(channels_storage) = IOREPORT_POWER_CHANNELS.try_lock() {
@@ -1296,31 +1296,31 @@ fn run_internal(open_cpu_window: bool) {
                                         } else {
                                             None
                                         };
-                                        
+
                                         let channels_ref = channels_ptr.unwrap_or(std::ptr::null_mut());
-                                        
+
                                         let original_channels_dict = if let Ok(orig_storage) = IOREPORT_POWER_ORIGINAL_CHANNELS.try_lock() {
                                             orig_storage.as_ref().map(|&dict_usize| dict_usize as CFDictionaryRef)
                                         } else {
                                             None
                                         };
-                                        
-                                        debug3!("Power reading: original_channels_dict.is_some()={}, channels_ref.is_null()={}", 
+
+                                        debug3!("Power reading: original_channels_dict.is_some()={}, channels_ref.is_null()={}",
                                             original_channels_dict.is_some(), channels_ref.is_null());
-                                        
+
                                         let last_sample = if let Ok(last_sample_storage) = LAST_IOREPORT_POWER_SAMPLE.try_lock() {
                                             last_sample_storage.as_ref().map(|&(sample_usize, _)| sample_usize as CFDictionaryRef)
                                         } else {
                                             None
                                         };
-                                        
+
                                         let last_read_time = LAST_POWER_READ_TIME.lock()
                                             .ok()
                                             .and_then(|t| *t);
-                                        
+
                                         unsafe {
                                             use ffi::ioreport::read_power_from_ioreport;
-                                            
+
                                             debug3!("Calling read_power_from_ioreport...");
                                             let (result, current_sample_opt) = read_power_from_ioreport(
                                                 subscription_ptr as *const c_void,
@@ -1331,7 +1331,7 @@ fn run_internal(open_cpu_window: bool) {
                                                 power_logging,
                                             );
                                             debug3!("read_power_from_ioreport returned: CPU={:.2}W, GPU={:.2}W", result.cpu_power, result.gpu_power);
-                                            
+
                                             // Store current sample for next delta calculation
                                             // CRITICAL: Always store the sample, even if time_delta was 0
                                             // This ensures we have a sample for the next read
@@ -1349,14 +1349,14 @@ fn run_internal(open_cpu_window: bool) {
                                                     CFRelease(retained_sample as CFTypeRef);
                                                 }
                                                 CFRelease(current_sample as CFTypeRef);
-                                                
+
                                                 // Update LAST_POWER_READ_TIME AFTER storing the sample
                                                 // This ensures next read will have a valid last_sample and last_read_time
                                                 if let Ok(mut last_read_time) = LAST_POWER_READ_TIME.lock() {
                                                     *last_read_time = Some(std::time::Instant::now());
                                                 }
                                             }
-                                            
+
                                             Some(result)
                                         }
                                     } else {
@@ -1370,7 +1370,7 @@ fn run_internal(open_cpu_window: bool) {
                                 debug3!("Power subscription lock failed");
                                 None
                             };
-                            
+
                             if let Some(power_data) = power_result {
                                 // Update cache - CRITICAL: Only update if we have at least one valid value > 0.0
                                 // This prevents setting cache to (0.0, 0.0) on first read when time_delta=0
@@ -1413,13 +1413,13 @@ fn run_internal(open_cpu_window: bool) {
                                 debug3!("Power reading returned None - subscription may not be available");
                             }
                         }
-                        
+
                         // Get cached power values for logging
                         let (cpu_power, gpu_power) = POWER_CACHE.try_lock()
                             .ok()
                             .and_then(|c| c.as_ref().map(|(cpu, gpu, _)| (*cpu, *gpu)))
                             .unwrap_or((0.0, 0.0));
-                        
+
                         if power_logging && (cpu_power > 0.0 || gpu_power > 0.0) {
                             debug3!("Power: CPU={:.2}W, GPU={:.2}W", cpu_power, gpu_power);
                         }
@@ -1432,7 +1432,7 @@ fn run_internal(open_cpu_window: bool) {
                             smc_connection = None;
                             debug3!("CPU window closed, SMC connection released");
                         }
-                        
+
                         // CRITICAL: Clear IOReport subscriptions when window closes to save CPU
                         // Note: IOReport doesn't have an explicit destroy function in the API
                         // The subscription will be cleaned up when the process exits
@@ -1441,7 +1441,7 @@ fn run_internal(open_cpu_window: bool) {
                             if sub.is_some() {
                                 *sub = None;
                                 debug3!("CPU window closed, IOReport frequency subscription cleared");
-                                
+
                                 // Clear channels dictionary
                                 if let Ok(mut channels_storage) = IOREPORT_CHANNELS.try_lock() {
                                     if let Some(ptr) = *channels_storage {
@@ -1451,20 +1451,20 @@ fn run_internal(open_cpu_window: bool) {
                                     }
                                     *channels_storage = None;
                                 }
-                                
+
                                 // Clear last sample
                                 if let Ok(mut last_sample) = LAST_IOREPORT_SAMPLE.try_lock() {
                                     *last_sample = None;
                                 }
                             }
                         }
-                        
+
                         // Clear power subscription
                         if let Ok(mut power_sub) = IOREPORT_POWER_SUBSCRIPTION.try_lock() {
                             if power_sub.is_some() {
                                 *power_sub = None;
                                 debug3!("CPU window closed, IOReport power subscription cleared");
-                                
+
                                 // Clear power channels dictionary
                                 if let Ok(mut channels_storage) = IOREPORT_POWER_CHANNELS.try_lock() {
                                     if let Some(ptr) = *channels_storage {
@@ -1474,7 +1474,7 @@ fn run_internal(open_cpu_window: bool) {
                                     }
                                     *channels_storage = None;
                                 }
-                                
+
                                 // Clear last power sample
                                 if let Ok(mut last_sample) = LAST_IOREPORT_POWER_SAMPLE.try_lock() {
                                     if let Some((sample_usize, _)) = last_sample.take() {

@@ -439,7 +439,7 @@ pub fn click_handler_class() -> &'static AnyClass {
         let name = c"MacStatsStatusHandler";
         debug2!("Creating Objective-C class: {:?}", name);
         let mut builder = ClassBuilder::new(name, NSObject::class()).expect("class already exists");
-        
+
         // Add method to process menu bar updates (called automatically every 2 seconds)
         extern "C-unwind" fn process_menu_bar_update_timer(
             this: &AnyObject,
@@ -448,14 +448,14 @@ pub fn click_handler_class() -> &'static AnyClass {
         ) {
             // This is called from Objective-C runtime, we're on the main thread
             process_menu_bar_update();
-            
+
             // Schedule next update in 2 seconds
             let sel = sel!(processMenuBarUpdate:);
             unsafe {
                 let _: () = msg_send![this, performSelector: sel, withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.0];
             }
         }
-        
+
         extern "C-unwind" fn on_status_item_click(
             this: &AnyObject,
             _cmd: Sel,
@@ -465,13 +465,13 @@ pub fn click_handler_class() -> &'static AnyClass {
             // CRITICAL: Log immediately to verify this function is called
             write_structured_log("ui/status_bar.rs", "Click handler FUNCTION CALLED", &serde_json::json!({"this": format!("{:p}", this), "sender": format!("{:p}", sender)}), "J");
             debug1!("Click handler called! cmd={:?}, sender={:p}, this={:p}", _cmd, sender, this);
-            
+
             // Note: The menu will show briefly, but that's okay - the action fires
             // We could hide it immediately, but for now let's just let it work
-            
+
             // Process any pending menu bar updates while we're on the main thread
             process_menu_bar_update();
-            
+
             // Get event info immediately while we're on the main thread
             let mtm = match MainThreadMarker::new() {
                 Some(mtm) => mtm,
@@ -480,7 +480,7 @@ pub fn click_handler_class() -> &'static AnyClass {
                     return;
                 }
             };
-            
+
             let app = NSApplication::sharedApplication(mtm);
             let is_right_click = app
                 .currentEvent()
@@ -491,7 +491,7 @@ pub fn click_handler_class() -> &'static AnyClass {
                 })
                 .unwrap_or(false);
             debug2!("Is right click: {}", is_right_click);
-            
+
             if is_right_click {
                 debug1!("Showing about panel");
                 show_about_panel();
@@ -514,7 +514,7 @@ pub fn click_handler_class() -> &'static AnyClass {
                 action_sel,
                 on_status_item_click as extern "C-unwind" fn(_, _, _),
             );
-            
+
             let update_sel = sel!(processMenuBarUpdate:);
             debug2!("Adding method: {:?}", update_sel.name());
             builder.add_method(
@@ -524,7 +524,7 @@ pub fn click_handler_class() -> &'static AnyClass {
         }
         let registered_class = builder.register();
         debug2!("Objective-C class registered: {:?}", registered_class);
-        
+
         // CRITICAL: Verify the class responds to the selector
         let action_sel = sel!(onStatusItemClick:);
         let selector_name = action_sel.name().to_string_lossy();
@@ -534,12 +534,12 @@ pub fn click_handler_class() -> &'static AnyClass {
         };
         debug1!("Class responds to selector '{}': {}", selector_name, responds);
         write_structured_log("ui/status_bar.rs", "Class selector verification", &serde_json::json!({"selector": selector_name, "responds": responds}), "J");
-        
+
         if !responds {
             debug1!("ERROR: Class does NOT respond to selector! Method registration may have failed!");
             write_structured_log("ui/status_bar.rs", "ERROR: Class does not respond to selector", &serde_json::json!({}), "J");
         }
-        
+
         registered_class
     })
 }

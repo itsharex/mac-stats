@@ -109,7 +109,7 @@ pub fn get_chip_info() -> String {
             .arg("-json")
             .stderr(std::process::Stdio::null())
             .output();
-        
+
         if let Ok(output) = output {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -122,7 +122,7 @@ pub fn get_chip_info() -> String {
                         let num_procs = hardware.get("number_processors")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
-                        
+
                         if !chip_type.is_empty() {
                             // Format: "Apple M3 · 16 cores" (using middle dot · not bullet •)
                             let mut info = chip_type.to_string();
@@ -130,7 +130,7 @@ pub fn get_chip_info() -> String {
                                 // number_processors format: "proc 16:12:4" (total:performance:efficiency)
                                 let num_procs_clean = num_procs.strip_prefix("proc ").unwrap_or(num_procs);
                                 let parts: Vec<&str> = num_procs_clean.split(':').collect();
-                                
+
                                 // Try to get total cores
                                 let total_cores = if parts.len() >= 3 {
                                     // Format: "16:12:4" - first number is total cores
@@ -151,7 +151,7 @@ pub fn get_chip_info() -> String {
                                 } else {
                                     None
                                 };
-                                
+
                                 if let Some(total) = total_cores {
                                     if total > 0 {
                                         info.push_str(&format!(" · {} cores", total));
@@ -174,14 +174,14 @@ pub fn get_chip_info() -> String {
                 }
             }
         }
-        
+
         // Fallback: try sysctl for Intel Macs
         let output = Command::new("/usr/sbin/sysctl")
             .arg("-n")
             .arg("machdep.cpu.brand_string")
             .stderr(std::process::Stdio::null())
             .output();
-        
+
         if let Ok(output) = output {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
@@ -191,7 +191,7 @@ pub fn get_chip_info() -> String {
                 }
             }
         }
-        
+
         "—".to_string()
     }).clone()
 }
@@ -1876,7 +1876,7 @@ pub fn get_cpu_details() -> CpuDetails {
         .unwrap_or(false);
 
     if power_logging {
-        debug3!("get_cpu_details returning: temperature={:.1}°C, frequency={:.2} GHz, cpu_power={:.2}W, gpu_power={:.2}W, battery={:.1}%, charging={}, has_battery={}", 
+        debug3!("get_cpu_details returning: temperature={:.1}°C, frequency={:.2} GHz, cpu_power={:.2}W, gpu_power={:.2}W, battery={:.1}%, charging={}, has_battery={}",
             temperature, frequency, cpu_power, gpu_power, battery_level, is_charging, has_battery);
     } else {
         debug3!("get_cpu_details returning: temperature={:.1}°C, frequency={:.2} GHz, can_read_temperature={}, can_read_frequency={}", temperature, frequency, can_read_temperature, can_read_frequency);
