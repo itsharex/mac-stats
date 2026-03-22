@@ -185,7 +185,8 @@ fn collapse_whitespace(text: &str) -> String {
                 // bidi/shaping controls). ZWSP, ZWNJ, ZWJ, WJ, BOM-in-text, SHY, NBSP,
                 // Mongolian free variation selectors + vowel separator, Hangul / halfwidth
                 // filler jamo, variation selectors (emoji / IVS), interlinear annotation
-                // markers, object replacement (U+FFF9–U+FFFC), and deprecated Unicode language
+                // markers, object replacement (U+FFF9–U+FFFC), replacement character (U+FFFD, So),
+                // and deprecated Unicode language
                 // tag characters (U+E0000–U+E007F) get the same treatment so FETCH_URL bodies
                 // tokenize cleanly. Khmer inherent vowels (U+17B4, U+17B5) are Cf and not Rust
                 // whitespace, so Khmer-layout HTML can otherwise glue adjacent Latin tokens.
@@ -271,8 +272,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // Sc/Sm/So) are not Rust whitespace either. U+FFE3 FULLWIDTH MACRON (Sk) stays
                 // unmapped—overline-like, word-internal risk. Halfwidth forms light vertical (U+FFE8,
                 // So), halfwidth arrows (U+FFE9–U+FFEC, Sm), and halfwidth black square / white circle
-                // (U+FFED–U+FFEE, So) are not Rust whitespace either; JIS / compat HTML can glue Latin
-                // tokens without ASCII space.
+                // (U+FFED–U+FFEE, So), and halfwidth black small square (U+FFEF, So) are not Rust
+                // whitespace either; JIS / compat HTML can glue Latin tokens without ASCII space.
+                // U+FFFD REPLACEMENT CHARACTER (So, same block) is not Rust whitespace either;
+                // transcoding or mojibake HTML can insert it between Latin tokens without ASCII space.
                 // CJK Symbols and Punctuation: ditto mark (U+3003, Po), JIS symbol (U+3004, So),
                 // ideographic closing mark (U+3006, Lo), CJK brackets and postal/geta marks
                 // (U+3008–U+301B, Ps/Pe/So), wave dash (U+301C, Pd), reversed/double-prime quotes
@@ -418,7 +421,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // Kirat Rai sign yupi, danda, double danda (U+16D6D–U+16D6F, Po) are not Rust whitespace;
                 // U+16D6B SIGN VIRAMA and U+16D6C SIGN SAAT (Lm) stay unmapped—modifier-like, word-internal risk.
                 // Ethiopic wordspace (U+1361, Po) and Braille pattern blank (U+2800, So) are not Rust
-                // whitespace. Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn), CHINOOK FULL
+                // whitespace. Optical Character Recognition hook through double backslash (U+2440–U+245F, So)
+                // are not Rust whitespace; OCR zoning / anchor symbols in scanned PDF or legacy HTML exports
+                // can sit between Latin tokens without ASCII space. Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn), CHINOOK FULL
                 // STOP (U+1BC9F, Po), and shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust
                 // whitespace (Mn/Cf mapped with other controls; U+1BC9F mapped as visible Po).
                 // Kaithi number signs (U+110BD, U+110CD, Cf) are not Rust whitespace; Indic numeral
@@ -595,7 +600,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{FFE4}'
                 | '\u{FFE5}'
                 | '\u{FFE6}'
-                | '\u{FFE8}'..='\u{FFEE}'
+                | '\u{FFE8}'..='\u{FFEF}'
                 | '\u{FE10}'..='\u{FE19}'
                 | '\u{FE50}'..='\u{FE52}'
                 | '\u{FE54}'..='\u{FE66}'
@@ -733,6 +738,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2219}'
                 | '\u{22C5}'
                 | '\u{1361}'
+                | '\u{2440}'..='\u{245F}'
                 | '\u{2800}'
                 | '\u{2CFE}'..='\u{2CFF}'
                 | '\u{2D70}'
@@ -785,7 +791,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{E0100}'..='\u{E01EF}'
                 | '\u{E0000}'..='\u{E007F}'
                 | '\u{2061}'..='\u{206F}'
-                | '\u{FFF9}'..='\u{FFFC}' => ' ',
+                | '\u{FFF9}'..='\u{FFFD}' => ' ',
                 _ => c,
             })
             .collect();
@@ -1041,10 +1047,11 @@ mod tests {
     }
 
     #[test]
-    fn interlinear_annotation_and_object_replacement_separate_words() {
-        // U+FFF9–U+FFFB (interlinear annotation anchor/separator/terminator) and U+FFFC
-        // (object replacement) are Cf and not Rust whitespace; they can appear in copied HTML.
-        for sep in ['\u{FFF9}', '\u{FFFA}', '\u{FFFB}', '\u{FFFC}'] {
+    fn interlinear_annotation_object_replacement_and_replacement_char_separate_words() {
+        // U+FFF9–U+FFFB (interlinear annotation anchor/separator/terminator), U+FFFC (object
+        // replacement), and U+FFFD (replacement character, So) are not Rust whitespace; they can
+        // appear in copied or transcoded HTML.
+        for sep in ['\u{FFF9}', '\u{FFFA}', '\u{FFFB}', '\u{FFFC}', '\u{FFFD}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
@@ -1959,11 +1966,14 @@ mod tests {
     }
 
     #[test]
-    fn halfwidth_forms_light_vertical_arrows_square_circle_separate_words() {
+    fn halfwidth_forms_light_vertical_arrows_square_circle_small_square_separate_words() {
         // U+FFE8 HALFWIDTH FORMS LIGHT VERTICAL (So), U+FFE9–U+FFEC halfwidth arrows (Sm), U+FFED /
-        // U+FFEE halfwidth black square / white circle (So)—not Rust whitespace; U+FFE3 FULLWIDTH
-        // MACRON (Sk) stays unmapped (between U+FFE2 and U+FFE4 in the block, not in this arm).
-        for sep in ['\u{FFE8}', '\u{FFE9}', '\u{FFEA}', '\u{FFEB}', '\u{FFEC}', '\u{FFED}', '\u{FFEE}'] {
+        // U+FFEE halfwidth black square / white circle (So), U+FFEF halfwidth black small square (So)—
+        // not Rust whitespace; U+FFE3 FULLWIDTH MACRON (Sk) stays unmapped (between U+FFE2 and U+FFE4
+        // in the block, not in this arm). Completes Halfwidth and Fullwidth Forms through U+FFEF.
+        for sep in [
+            '\u{FFE8}', '\u{FFE9}', '\u{FFEA}', '\u{FFEB}', '\u{FFEC}', '\u{FFED}', '\u{FFEE}', '\u{FFEF}',
+        ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
@@ -2613,6 +2623,29 @@ mod tests {
             cleaned
         );
         assert!(!cleaned.contains('\u{1361}'));
+    }
+
+    #[test]
+    fn ocr_symbols_separate_words() {
+        // U+2440–U+245F: Optical Character Recognition block (hook, chair, fork, belt buckle, bow tie,
+        // branch, amount of check, dash, etc., through OCR DOUBLE BACKSLASH; all So) are not Rust
+        // whitespace; OCR’d page HTML can glue Latin tokens without ASCII space.
+        for cp in 0x2440u32..=0x245F {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
     }
 
     #[test]
