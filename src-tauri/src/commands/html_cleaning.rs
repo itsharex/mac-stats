@@ -368,10 +368,23 @@ fn collapse_whitespace(text: &str) -> String {
                 // Rust whitespace. Nandinagari sign siddham (U+119E2, Po) is not Rust whitespace.
                 // Bhaiksuki danda / double danda / word separator / gap fillers (U+11C41–U+11C45, Po)
                 // are not Rust whitespace; Unicode-sample or mixed-script HTML can glue Latin tokens.
+                // Zanabazar Square head marks, tsheg, shad, and double-lined marks (U+11A3F–U+11A46, Po)
+                // are not Rust whitespace; Mongolian / Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Soyombo tsheg / shad / double shad and head / terminal marks (U+11A9A–U+11A9C, U+11A9E–U+11AA2, Po)
+                // are not Rust whitespace; U+11A9D MARK PLUTA (Lo) stays unmapped—letter-like, word-internal risk.
                 // Marchen head mark and shad (U+11C70–U+11C71, Po) are not Rust whitespace; Zhang-
                 // Zhung / Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // Makasar passimbang and end of section (U+11EF7–U+11EF8, Po) are not Rust whitespace;
                 // Sulawesi-script or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Kawi danda through closing spiral (U+11F43–U+11F4F, Po) are not Rust whitespace;
+                // Indonesian / Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Tamil Supplement END OF TEXT (U+11FFF, Po) is not Rust whitespace; mixed Tamil–Latin
+                // or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Cuneiform punctuation Old Assyrian word divider through diagonal quadcolon (U+12470–
+                // U+12474, Po) are not Rust whitespace; transliterated scholarly HTML can glue Latin
+                // tokens without ASCII space.
+                // Cypro-Minoan signs CM301 / CM302 (U+12FF1–U+12FF2, Po) are not Rust whitespace;
+                // epigraphic or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 '\u{0600}'..='\u{0605}'
                 | '\u{06DD}'
                 | '\u{0700}'..='\u{070D}'
@@ -542,9 +555,16 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1183B}'
                 | '\u{11944}'..='\u{11946}'
                 | '\u{119E2}'
+                | '\u{11A3F}'..='\u{11A46}'
+                | '\u{11A9A}'..='\u{11A9C}'
+                | '\u{11A9E}'..='\u{11AA2}'
                 | '\u{11C41}'..='\u{11C45}'
                 | '\u{11C70}'..='\u{11C71}'
                 | '\u{11EF7}'..='\u{11EF8}'
+                | '\u{11F43}'..='\u{11F4F}'
+                | '\u{11FFF}'
+                | '\u{12470}'..='\u{12474}'
+                | '\u{12FF1}'..='\u{12FF2}'
                 | '\u{13430}'..='\u{13455}'
                 | '\u{2FF0}'..='\u{2FFB}'
                 | '\u{1D173}'..='\u{1D17A}'
@@ -2073,10 +2093,79 @@ mod tests {
     }
 
     #[test]
+    fn zanabazar_square_and_soyombo_sentence_punctuation_separate_words() {
+        // Zanabazar Square U+11A3F–U+11A46 (head marks, tsheg, shad); Soyombo U+11A9A–U+11A9C,
+        // U+11A9E–U+11AA2 (tsheg, shad, head marks, terminal marks)—all Po; U+11A9D MARK PLUTA (Lo) omitted.
+        for cp in (0x11A3Fu32..=0x11A46)
+            .chain(0x11A9A..=0x11A9C)
+            .chain(0x11A9E..=0x11AA2)
+        {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
     fn marchen_and_makasar_sentence_punctuation_separate_words() {
         // Marchen U+11C70 HEAD MARK, U+11C71 MARK SHAD; Makasar U+11EF7 PASSIMBANG, U+11EF8 END OF
         // SECTION (all Po).
         for cp in (0x11C70u32..=0x11C71).chain(0x11EF7..=0x11EF8) {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn kawi_sentence_punctuation_and_tamil_end_of_text_separate_words() {
+        // Kawi U+11F43 DANDA through U+11F4F CLOSING SPIRAL (all Po); Tamil Supplement U+11FFF END OF
+        // TEXT (Po).
+        for cp in (0x11F43u32..=0x11F4F).chain(std::iter::once(0x11FFF)) {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn cuneiform_punctuation_and_cypro_minoan_po_signs_separate_words() {
+        // Cuneiform U+12470 OLD ASSYRIAN WORD DIVIDER through U+12474 DIAGONAL QUADCOLON (all Po);
+        // Cypro-Minoan U+12FF1 CM301 and U+12FF2 CM302 (Po).
+        for cp in (0x12470u32..=0x12474).chain(0x12FF1..=0x12FF2) {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
