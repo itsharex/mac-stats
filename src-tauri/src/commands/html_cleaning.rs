@@ -348,7 +348,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // HTML can glue Latin tokens. Chakma section mark and sentence punctuation (U+11140–
                 // U+11143, Po) are not Rust whitespace; U+11144–U+11147 (Lo/Mc) stay unmapped.
                 // Sharada danda / double danda / abbreviation / separator / sutra mark (U+111C5–U+111C8,
-                // U+111CD, Po) are not Rust whitespace; Sharada–Latin or Unicode-sample HTML can glue
+                // U+111CD, Po), sign siddham (U+111DB, Po), and continuation / section marks (U+111DD–
+                // U+111DF, Po) are not Rust whitespace; U+111DA EKAM and U+111DC HEADSTROKE (Lo) stay
+                // unmapped. Sharada–Latin or Unicode-sample HTML can glue
                 // Latin tokens without ASCII space. Khojki danda through abbreviation sign (U+11238–
                 // U+1123D, Po) are not Rust whitespace; Khojki–Latin or Unicode-sample HTML can glue
                 // Latin tokens without ASCII space. Mahajani abbreviation / section marks (U+11174–
@@ -396,6 +398,14 @@ fn collapse_whitespace(text: &str) -> String {
                 // Old Uyghur punctuation bar through four dots (U+10F86–U+10F89, Po) are not Rust
                 // whitespace; Turfan / Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // U+10F82–U+10F85 combining dots (Mn) stay unmapped—word-internal risk.
+                // Siddham sign siddham through section mark with circles and four enclosures
+                // (U+115C1–U+115D7, Po) are not Rust whitespace; U+115C0 SIGN NUKTA (Mn) stays
+                // unmapped—modifier-like, word-internal risk. Buddhist manuscript or Unicode-sample
+                // HTML can glue Latin tokens without ASCII space.
+                // Mongolian Supplement ornamental birga marks (U+11660–U+1166C, Po) are not Rust
+                // whitespace; vertical Mongolian typography or Unicode-sample HTML can glue Latin
+                // tokens without ASCII space—distinct from Basic Mongolian script U+1800–U+180E
+                // already mapped in one arm.
                 '\u{0600}'..='\u{0605}'
                 | '\u{06DD}'
                 | '\u{0700}'..='\u{070D}'
@@ -556,6 +566,8 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{11140}'..='\u{11143}'
                 | '\u{111C5}'..='\u{111C8}'
                 | '\u{111CD}'
+                | '\u{111DB}'
+                | '\u{111DD}'..='\u{111DF}'
                 | '\u{11238}'..='\u{1123D}'
                 | '\u{11174}'..='\u{11175}'
                 | '\u{112A9}'
@@ -566,7 +578,9 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1145B}'
                 | '\u{1145D}'
                 | '\u{114C6}'
+                | '\u{115C1}'..='\u{115D7}'
                 | '\u{11641}'..='\u{11643}'
+                | '\u{11660}'..='\u{1166C}'
                 | '\u{1173C}'..='\u{1173E}'
                 | '\u{1183B}'
                 | '\u{11944}'..='\u{11946}'
@@ -2057,13 +2071,60 @@ mod tests {
     #[test]
     fn chakma_sharada_and_khojki_sentence_punctuation_separate_words() {
         // Chakma: U+11140 SECTION MARK through U+11143 QUESTION MARK (Po). Sharada: U+111C5 DANDA
-        // through U+111C8 SEPARATOR and U+111CD SUTRA MARK (Po). Khojki: U+11238 DANDA through
+        // through U+111C8 SEPARATOR, U+111CD SUTRA MARK, U+111DB SIGN SIDDHAM, U+111DD CONTINUATION
+        // SIGN, U+111DE / U+111DF SECTION MARK-1 / -2 (all Po). Khojki: U+11238 DANDA through
         // U+1123D ABBREVIATION SIGN (Po). None are Rust whitespace.
         for cp in (0x11140u32..=0x11143)
             .chain(0x111C5..=0x111C8)
             .chain(std::iter::once(0x111CD))
+            .chain(std::iter::once(0x111DB))
+            .chain(0x111DD..=0x111DF)
             .chain(0x11238..=0x1123D)
         {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn siddham_sentence_punctuation_separate_words() {
+        // Siddham U+115C1 SIGN SIDDHAM through U+115D7 SECTION MARK WITH CIRCLES AND FOUR
+        // ENCLOSURES (all Po). U+115C0 SIGN NUKTA (Mn) omitted.
+        for cp in 0x115C1u32..=0x115D7 {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn mongolian_supplement_birga_ornaments_separate_words() {
+        // Mongolian Supplement U+11660 BIRGA WITH ORNAMENT through U+1166C TURNED SWIRL BIRGA WITH
+        // DOUBLE ORNAMENT (all Po). Distinct from Basic Mongolian U+1800–U+180E arm.
+        for cp in 0x11660u32..=0x1166C {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
