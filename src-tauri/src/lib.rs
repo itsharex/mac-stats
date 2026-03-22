@@ -21,7 +21,6 @@ pub mod agents;
 mod alerts;
 pub mod browser_agent;
 mod commands;
-mod search_result_shaping;
 pub mod config;
 pub mod discord;
 mod ffi;
@@ -34,6 +33,7 @@ mod perplexity;
 mod plugins;
 pub mod redmine;
 mod scheduler;
+mod search_result_shaping;
 pub mod security;
 mod session_memory;
 mod skills;
@@ -117,10 +117,10 @@ pub use metrics::{
     get_process_details, get_window_decorations, set_window_decorations, CpuDetails, SystemMetrics,
 };
 // Re-export for CLI (e.g. discord run-ollama)
+pub use commands::judge::run_judge_if_enabled;
 pub use commands::ollama::{
     answer_with_ollama_and_fetch, ensure_ollama_agent_ready_at_startup, OllamaReply, OllamaRequest,
 };
-pub use commands::judge::run_judge_if_enabled;
 
 // UI functions are now in ui module
 use ui::status_bar::{

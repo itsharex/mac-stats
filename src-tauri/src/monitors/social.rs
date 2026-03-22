@@ -65,7 +65,11 @@ impl MastodonMonitor {
             let timestamps: Vec<String> = notifications
                 .iter()
                 .filter(|n| n.get("type").and_then(|t| t.as_str()) == Some("mention"))
-                .filter_map(|n| n.get("created_at").and_then(|t| t.as_str()).map(String::from))
+                .filter_map(|n| {
+                    n.get("created_at")
+                        .and_then(|t| t.as_str())
+                        .map(String::from)
+                })
                 .collect();
             let count = timestamps.len() as u64;
             Ok((count, timestamps))

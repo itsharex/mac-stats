@@ -259,7 +259,8 @@ impl ModelCatalog {
             return Some(*best);
         }
         if let Some(best) = local
-            .iter().rfind(|m| m.capability == ModelCapability::Code)
+            .iter()
+            .rfind(|m| m.capability == ModelCapability::Code)
         {
             debug!(
                 "ModelCatalog: role=code -> {} (code/any, {:.1}B)",
@@ -287,7 +288,8 @@ impl ModelCatalog {
             return Some(*best);
         }
         if let Some(best) = local
-            .iter().rfind(|m| m.capability == ModelCapability::General)
+            .iter()
+            .rfind(|m| m.capability == ModelCapability::General)
         {
             debug!(
                 "ModelCatalog: role=general -> {} (general/any, {:.1}B)",

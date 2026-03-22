@@ -93,7 +93,9 @@ pub(crate) async fn handle_agent(
     }
     if selector_lower == "cursor-agent" || selector_lower == "cursor_agent" {
         return AgentResult {
-            message: "Cursor Agent is not available (cursor-agent CLI not on PATH). Answer without it.".to_string(),
+            message:
+                "Cursor Agent is not available (cursor-agent CLI not on PATH). Answer without it."
+                    .to_string(),
             agent_conversation_entry: None,
         };
     }
@@ -104,9 +106,7 @@ pub(crate) async fn handle_agent(
         None => {
             let list: String = agents
                 .iter()
-                .map(|a| {
-                    a.slug.as_deref().unwrap_or(a.name.as_str()).to_string()
-                })
+                .map(|a| a.slug.as_deref().unwrap_or(a.name.as_str()).to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
             info!(
@@ -125,8 +125,8 @@ pub(crate) async fn handle_agent(
 
     // Break out of AGENT: orchestrator loop when the last message was already an orchestrator result.
     let is_orchestrator = agent.id == "000";
-    let last_is_orchestrator_result = last_message_content
-        .is_some_and(|c| c.starts_with("Agent \"Orchestrator\""));
+    let last_is_orchestrator_result =
+        last_message_content.is_some_and(|c| c.starts_with("Agent \"Orchestrator\""));
     if is_orchestrator && last_is_orchestrator_result {
         info!("Agent router: skipping repeated AGENT: orchestrator (loop breaker)");
         return AgentResult {
@@ -437,10 +437,7 @@ pub(crate) async fn handle_run_cmd(
                 break;
             }
             Err(e) => {
-                info!(
-                    "Agent router: RUN_CMD failed (attempt {}): {}",
-                    attempt, e
-                );
+                info!("Agent router: RUN_CMD failed (attempt {}): {}", attempt, e);
                 if multi_tool_turn {
                     last_output = format!(
                         "RUN_CMD failed in a multi-step plan: {}.\n\nRe-plan the full task from here. Keep the request in the correct tool domain. If Redmine data is still needed, use REDMINE_API directly with concrete parameters. Do not reply with only another RUN_CMD.",

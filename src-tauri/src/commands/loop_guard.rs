@@ -94,14 +94,18 @@ mod tests {
     #[test]
     fn allows_first_call() {
         let mut guard = ToolLoopGuard::new();
-        assert!(guard.record_and_check("FETCH_URL", "https://example.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://example.com")
+            .is_none());
     }
 
     #[test]
     fn allows_up_to_max_same_call() {
         let mut guard = ToolLoopGuard::new();
         for _ in 0..MAX_SAME_CALL {
-            assert!(guard.record_and_check("FETCH_URL", "https://example.com").is_none());
+            assert!(guard
+                .record_and_check("FETCH_URL", "https://example.com")
+                .is_none());
         }
         let result = guard.record_and_check("FETCH_URL", "https://example.com");
         assert!(result.is_some());
@@ -123,24 +127,38 @@ mod tests {
         let mut guard = ToolLoopGuard::new();
         // Same arg, different tools: each tool's count is tracked independently.
         // Interleave with other calls to avoid triggering cycle detection.
-        assert!(guard.record_and_check("FETCH_URL", "https://example.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://example.com")
+            .is_none());
         assert!(guard.record_and_check("RUN_CMD", "uptime").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://example.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://example.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "test").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://example.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://example.com")
+            .is_none());
         // FETCH_URL at 3 — still allowed
-        assert!(guard.record_and_check("BROWSER_NAVIGATE", "https://example.com").is_none());
+        assert!(guard
+            .record_and_check("BROWSER_NAVIGATE", "https://example.com")
+            .is_none());
         // BROWSER_NAVIGATE at 1 — independent count
-        assert!(guard.record_and_check("BROWSER_NAVIGATE", "https://example.com").is_none());
+        assert!(guard
+            .record_and_check("BROWSER_NAVIGATE", "https://example.com")
+            .is_none());
         // BROWSER_NAVIGATE at 2 — still allowed
     }
 
     #[test]
     fn detects_ab_ab_cycle() {
         let mut guard = ToolLoopGuard::new();
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "test").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
         let result = guard.record_and_check("BRAVE_SEARCH", "test");
         assert!(result.is_some());
         assert!(result.unwrap().contains("Cycle detected"));
@@ -149,10 +167,16 @@ mod tests {
     #[test]
     fn detects_abc_abc_cycle() {
         let mut guard = ToolLoopGuard::new();
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "query").is_none());
-        assert!(guard.record_and_check("BROWSER_NAVIGATE", "https://b.com").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("BROWSER_NAVIGATE", "https://b.com")
+            .is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "query").is_none());
         let result = guard.record_and_check("BROWSER_NAVIGATE", "https://b.com");
         assert!(result.is_some());
@@ -162,25 +186,39 @@ mod tests {
     #[test]
     fn no_false_positive_on_short_history() {
         let mut guard = ToolLoopGuard::new();
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
     }
 
     #[test]
     fn no_false_positive_on_varied_pattern() {
         let mut guard = ToolLoopGuard::new();
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "q1").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://b.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://b.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "q2").is_none());
     }
 
     #[test]
     fn whitespace_normalization() {
         let mut guard = ToolLoopGuard::new();
-        assert!(guard.record_and_check("FETCH_URL", "  https://a.com  ").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "  https://a.com  ").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "  https://a.com  ")
+            .is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "  https://a.com  ")
+            .is_none());
         let result = guard.record_and_check("FETCH_URL", "https://a.com");
         assert!(result.is_some());
     }
@@ -191,9 +229,15 @@ mod tests {
         // DONE should never reach the guard in practice, but verify
         // that calling it multiple times doesn't trigger false positives
         // for the cycle check on surrounding calls.
-        assert!(guard.record_and_check("FETCH_URL", "https://a.com").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://a.com")
+            .is_none());
         assert!(guard.record_and_check("BRAVE_SEARCH", "query").is_none());
-        assert!(guard.record_and_check("FETCH_URL", "https://b.com").is_none());
-        assert!(guard.record_and_check("BRAVE_SEARCH", "other query").is_none());
+        assert!(guard
+            .record_and_check("FETCH_URL", "https://b.com")
+            .is_none());
+        assert!(guard
+            .record_and_check("BRAVE_SEARCH", "other query")
+            .is_none());
     }
 }

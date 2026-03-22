@@ -20,17 +20,17 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+use crate::{mac_stats_debug, mac_stats_info, mac_stats_warn};
+use headless_chrome::protocol::cdp::types::Event;
 use headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption;
 use headless_chrome::protocol::cdp::Page::DialogType;
-use headless_chrome::protocol::cdp::types::Event;
 use headless_chrome::types::Bounds;
 use headless_chrome::Browser;
 use headless_chrome::LaunchOptions;
 use regex::Regex;
 use serde::Deserialize;
-use url::Url;
 use std::path::PathBuf;
-use crate::{mac_stats_debug, mac_stats_info, mac_stats_warn};
+use url::Url;
 
 // ---------------------------------------------------------------------------
 // Browser state for BROWSER_NAVIGATE / BROWSER_CLICK / BROWSER_INPUT
@@ -95,7 +95,11 @@ fn get_ws_url(port: u16) -> Result<String, String> {
 /// Connect to Chrome at the given debugging port.
 pub fn connect_cdp(port: u16) -> Result<Browser, String> {
     let ws_url = get_ws_url(port)?;
-    mac_stats_info!("browser", "Browser agent: connecting to CDP at port {}", port);
+    mac_stats_info!(
+        "browser",
+        "Browser agent: connecting to CDP at port {}",
+        port
+    );
     Browser::connect_with_timeout(ws_url, Duration::from_secs(60))
         .map_err(|e| format!("CDP connect: {}", e))
 }
@@ -110,7 +114,8 @@ pub fn ensure_chrome_on_port(port: u16) {
         return;
     }
     if launch_chrome_on_port(port).is_ok() {
-        mac_stats_info!("browser/cdp",
+        mac_stats_info!(
+            "browser/cdp",
             "Browser agent [CDP]: launched Chrome on port {} (caller may retry CDP)",
             port
         );
@@ -156,7 +161,8 @@ fn launch_chrome_on_port(port: u16) -> Result<(), String> {
                 e, chrome_path
             )
         })?;
-    mac_stats_info!("browser/cdp",
+    mac_stats_info!(
+        "browser/cdp",
         "Browser agent [CDP]: launched Chrome on port {} (detached, lean flags)",
         port
     );
@@ -191,7 +197,8 @@ fn launch_chrome_on_port(port: u16) -> Result<(), String> {
                 e, port
             )
         })?;
-    mac_stats_info!("browser/cdp",
+    mac_stats_info!(
+        "browser/cdp",
         "Browser agent [CDP]: launched Chrome on port {} (detached, lean flags)",
         port
     );
@@ -345,9 +352,11 @@ fn try_dismiss_cookie_banner(tab: &headless_chrome::Tab) -> Result<bool, String>
                 i.index,
                 i.text.chars().take(50).collect::<String>()
             );
-            mac_stats_debug!("browser/cdp",
+            mac_stats_debug!(
+                "browser/cdp",
                 "Browser agent [CDP]: cookie banner — matched pattern, index {} text {:?}",
-                i.index, i.text
+                i.index,
+                i.text
             );
             let click_js = format!(
                 r#"
@@ -374,21 +383,24 @@ fn try_dismiss_cookie_banner(tab: &headless_chrome::Tab) -> Result<bool, String>
                 i.index
             );
             if let Err(e) = tab.evaluate(&click_js, false) {
-                mac_stats_warn!("browser/cdp",
+                mac_stats_warn!(
+                    "browser/cdp",
                     "Browser agent [CDP]: cookie banner click failed: {}",
                     e
                 );
                 return Ok(false);
             }
             std::thread::sleep(Duration::from_millis(700));
-            mac_stats_info!("browser/cdp",
+            mac_stats_info!(
+                "browser/cdp",
                 "Browser agent [CDP]: cookie banner dismissed (clicked element [{}])",
                 i.index
             );
             return Ok(true);
         }
     }
-    mac_stats_debug!("browser/cdp",
+    mac_stats_debug!(
+        "browser/cdp",
         "Browser agent [CDP]: cookie banner — no consent control found (checked {} elements)",
         interactables.len()
     );
@@ -482,7 +494,10 @@ pub fn fetch_page_and_extract_phones(port: u16, url: &str) -> Result<Vec<String>
 
 /// Launch Chrome via headless_chrome (Browser::default()), navigate to url, extract phone numbers. Use when no Chrome is listening on a port.
 pub fn launch_browser_and_extract_phones(url: &str) -> Result<Vec<String>, String> {
-    mac_stats_info!("browser", "Browser agent: launching Chrome via headless_chrome");
+    mac_stats_info!(
+        "browser",
+        "Browser agent: launching Chrome via headless_chrome"
+    );
     let browser = Browser::default().map_err(|e| format!("Launch Chrome: {}", e))?;
     for _ in 0..30 {
         std::thread::sleep(Duration::from_millis(200));
@@ -507,7 +522,8 @@ fn fetch_page_and_extract_phones_with_browser(
     tab.navigate_to(url)
         .map_err(|e| format!("Navigate: {}", e))?;
     if let Err(e) = tab.wait_until_navigated() {
-        mac_stats_warn!("browser",
+        mac_stats_warn!(
+            "browser",
             "Browser agent: wait_until_navigated failed (SPA?): {} — continuing after delay",
             e
         );
@@ -521,10 +537,18 @@ fn fetch_page_and_extract_phones_with_browser(
     let mut phones = extract_telephone_numbers(&text);
     if phones.is_empty() {
         if let Ok(html) = get_page_html(&tab) {
-            mac_stats_info!("browser", "Browser agent: page HTML length {} chars", html.len());
+            mac_stats_info!(
+                "browser",
+                "Browser agent: page HTML length {} chars",
+                html.len()
+            );
             let tel_links = extract_tel_from_html(&html);
             if !tel_links.is_empty() {
-                mac_stats_info!("browser", "Browser agent: found tel: links in HTML: {:?}", tel_links);
+                mac_stats_info!(
+                    "browser",
+                    "Browser agent: found tel: links in HTML: {:?}",
+                    tel_links
+                );
             }
             phones = tel_links;
         }
@@ -571,7 +595,8 @@ pub fn kill_orphaned_browser_processes() {
         {
             Ok(o) => o,
             Err(e) => {
-                mac_stats_debug!("browser",
+                mac_stats_debug!(
+                    "browser",
                     "Browser agent: pgrep for orphaned Chrome failed ({}), skipping cleanup",
                     e
                 );
@@ -588,7 +613,8 @@ pub fn kill_orphaned_browser_processes() {
             if let Ok(pid) = pid_str.parse::<i32>() {
                 if pid > 0 {
                     let _ = Command::new("kill").arg(pid.to_string()).status();
-                    mac_stats_info!("browser/cdp",
+                    mac_stats_info!(
+                        "browser/cdp",
                         "Browser agent [CDP]: killed orphaned headless Chrome PID {}",
                         pid
                     );
@@ -707,9 +733,14 @@ fn register_dialog_auto_dismiss(tab: &Arc<headless_chrome::Tab>) {
                     dialog.dismiss()
                 };
                 if let Err(e) = result {
-                    mac_stats_warn!("browser/cdp", "Browser agent [CDP]: failed to auto-dismiss JS dialog: {}", e);
+                    mac_stats_warn!(
+                        "browser/cdp",
+                        "Browser agent [CDP]: failed to auto-dismiss JS dialog: {}",
+                        e
+                    );
                 } else {
-                    mac_stats_info!("browser/cdp",
+                    mac_stats_info!(
+                        "browser/cdp",
                         "Browser agent [CDP]: auto-dismissed JS {:?} dialog: {:?}",
                         dialog_type,
                         message.chars().take(100).collect::<String>()
@@ -719,9 +750,16 @@ fn register_dialog_auto_dismiss(tab: &Arc<headless_chrome::Tab>) {
         }
     });
     if let Err(e) = tab.add_event_listener(listener) {
-        mac_stats_warn!("browser/cdp", "Browser agent [CDP]: failed to register dialog auto-dismiss handler: {}", e);
+        mac_stats_warn!(
+            "browser/cdp",
+            "Browser agent [CDP]: failed to register dialog auto-dismiss handler: {}",
+            e
+        );
     } else {
-        mac_stats_debug!("browser/cdp", "Browser agent [CDP]: registered JS dialog auto-dismiss handler on tab");
+        mac_stats_debug!(
+            "browser/cdp",
+            "Browser agent [CDP]: registered JS dialog auto-dismiss handler on tab"
+        );
     }
 }
 
@@ -772,7 +810,10 @@ where
         Err(e) => {
             if is_connection_error(&e) {
                 clear_browser_session_on_error(&e);
-                mac_stats_info!("browser/cdp", "Browser agent [CDP]: retrying after connection error (session cleared)");
+                mac_stats_info!(
+                    "browser/cdp",
+                    "Browser agent [CDP]: retrying after connection error (session cleared)"
+                );
                 f()
             } else {
                 Err(e)
@@ -794,19 +835,24 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
         {
             let b = browser.clone();
             *guard = Some((b.clone(), now, prefer_headless));
-            mac_stats_info!("browser/cdp",
+            mac_stats_info!(
+                "browser/cdp",
                 "Browser agent [CDP]: reusing existing session (idle timeout {}s, headless={})",
-                timeout_secs, prefer_headless
+                timeout_secs,
+                prefer_headless
             );
             return Ok(b);
         }
         if *was_headless != prefer_headless {
-            mac_stats_info!("browser/cdp",
+            mac_stats_info!(
+                "browser/cdp",
                 "Browser agent [CDP]: preference changed (headless {} → {}), creating new session",
-                was_headless, prefer_headless
+                was_headless,
+                prefer_headless
             );
         } else {
-            mac_stats_info!("browser/cdp",
+            mac_stats_info!(
+                "browser/cdp",
                 "Browser agent [CDP]: session idle > {}s, closing browser",
                 timeout_secs
             );
@@ -846,20 +892,24 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
         );
         launch_via_headless_chrome()?
     } else if get_ws_url(port).is_ok() {
-        mac_stats_info!("browser/cdp",
+        mac_stats_info!(
+            "browser/cdp",
             "Browser agent [CDP]: connecting to Chrome on port {} (visible)",
             port
         );
         connect_cdp(port)?
     } else {
-        mac_stats_info!("browser/cdp",
+        mac_stats_info!(
+            "browser/cdp",
             "Browser agent [CDP]: no Chrome on port {}, launching visible Chrome on {}",
-            port, port
+            port,
+            port
         );
         if launch_chrome_on_port(port).is_ok() {
             std::thread::sleep(Duration::from_secs(3));
             if get_ws_url(port).is_ok() {
-                mac_stats_info!("browser/cdp",
+                mac_stats_info!(
+                    "browser/cdp",
                     "Browser agent [CDP]: connecting to Chrome on port {} (after launch, visible)",
                     port
                 );
@@ -906,9 +956,7 @@ fn is_same_domain(current_url: &str, target_url: &str) -> bool {
         Ok(u) => u,
         Err(_) => return false,
     };
-    let scheme_ok = |u: &Url| {
-        u.scheme() == "http" || u.scheme() == "https"
-    };
+    let scheme_ok = |u: &Url| u.scheme() == "http" || u.scheme() == "https";
     if !scheme_ok(&current) || !scheme_ok(&target) {
         return false;
     }
@@ -936,8 +984,15 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
     let tabs = browser.get_tabs().lock().map_err(|e| e.to_string())?;
     let idx = *current_tab_index().lock().map_err(|e| e.to_string())?;
     let len = tabs.len();
-    let idx = if len == 0 { 0 } else { idx.min(len.saturating_sub(1)) };
-    let tab = tabs.get(idx).cloned().ok_or_else(|| "No tab in browser".to_string())?;
+    let idx = if len == 0 {
+        0
+    } else {
+        idx.min(len.saturating_sub(1))
+    };
+    let tab = tabs
+        .get(idx)
+        .cloned()
+        .ok_or_else(|| "No tab in browser".to_string())?;
     drop(tabs);
     let bounds = Bounds::Normal {
         left: None,
@@ -946,7 +1001,8 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
         height: Some(viewport_height() as f64),
     };
     if let Err(e) = tab.set_bounds(bounds) {
-        mac_stats_warn!("browser",
+        mac_stats_warn!(
+            "browser",
             "Browser agent: set_bounds {}x{} failed: {} (continuing)",
             viewport_width(),
             viewport_height(),
@@ -977,13 +1033,17 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
     }
 
     let nav_timeout_secs = crate::config::Config::browser_navigation_timeout_secs();
-    let same_domain_timeout_secs = crate::config::Config::browser_same_domain_navigation_timeout_secs();
-    mac_stats_info!("browser/cdp",
+    let same_domain_timeout_secs =
+        crate::config::Config::browser_same_domain_navigation_timeout_secs();
+    mac_stats_info!(
+        "browser/cdp",
         "Browser agent [CDP]: BROWSER_NAVIGATE: {} (new_tab={})",
-        url_normalized, new_tab
+        url_normalized,
+        new_tab
     );
     let (_browser, tab) = if new_tab {
-        let browser = get_or_create_browser(PORT).inspect_err(|e| clear_browser_session_on_error(e))?;
+        let browser =
+            get_or_create_browser(PORT).inspect_err(|e| clear_browser_session_on_error(e))?;
         let new_tab = browser.new_tab().map_err(|e| {
             let s = format!("New tab failed: {}", e);
             clear_browser_session_on_error(&s);
@@ -1007,7 +1067,8 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
     let current_url = tab.get_url();
     let actual_timeout_secs = if let Some(same_secs) = same_domain_timeout_secs {
         if is_same_domain(current_url.as_str(), &url_normalized) {
-            mac_stats_debug!("browser/cdp",
+            mac_stats_debug!(
+                "browser/cdp",
                 "Browser agent [CDP]: same-domain navigation, using {}s timeout",
                 same_secs
             );
@@ -1021,8 +1082,14 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
     tab.set_default_timeout(Duration::from_secs(actual_timeout_secs));
     tab.navigate_to(&url_normalized).map_err(|e| {
         let msg = format!("{}", e);
-        let s = if msg.to_lowercase().contains("net::") || msg.contains("404") || msg.contains("failed") {
-            format!("Navigation failed: {}", msg.trim_start_matches("Navigate failed: "))
+        let s = if msg.to_lowercase().contains("net::")
+            || msg.contains("404")
+            || msg.contains("failed")
+        {
+            format!(
+                "Navigation failed: {}",
+                msg.trim_start_matches("Navigate failed: ")
+            )
         } else {
             format!("Navigation failed: {}", msg)
         };
@@ -1034,7 +1101,11 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
         Err(e) => {
             let err_str = e.to_string();
             if err_str.to_lowercase().contains("timeout") {
-                mac_stats_debug!("browser/cdp", "Browser agent [CDP]: navigation wait timed out after {}s", actual_timeout_secs);
+                mac_stats_debug!(
+                    "browser/cdp",
+                    "Browser agent [CDP]: navigation wait timed out after {}s",
+                    actual_timeout_secs
+                );
                 return Err(format!(
                     "Navigation failed: timeout after {}s",
                     actual_timeout_secs
@@ -1052,7 +1123,8 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
         clear_browser_session_on_error(e);
     })?;
     // Auto-dismiss cookie banner so the user doesn't have to ask. Visible in logs and verbose mode.
-    mac_stats_debug!("browser/cdp",
+    mac_stats_debug!(
+        "browser/cdp",
         "Browser agent [CDP]: checking for cookie banner after navigate to {}",
         url_normalized
     );
@@ -1101,7 +1173,8 @@ fn go_back_inner() -> Result<String, String> {
                     nav_timeout_secs
                 ));
             }
-            mac_stats_warn!("browser/cdp",
+            mac_stats_warn!(
+                "browser/cdp",
                 "Browser agent [CDP]: go_back wait_until_navigated failed: {} — continuing",
                 e
             );
@@ -1119,7 +1192,11 @@ fn go_back_inner() -> Result<String, String> {
             .collect(),
     );
     set_last_browser_state_snapshot(snapshot.clone());
-    mac_stats_info!("browser/cdp", "Browser agent [CDP]: went back to {}", state.current_url);
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: went back to {}",
+        state.current_url
+    );
     Ok(snapshot)
 }
 
@@ -1543,7 +1620,10 @@ pub fn take_screenshot_current_page() -> Result<PathBuf, String> {
 }
 
 fn take_screenshot_current_page_inner() -> Result<PathBuf, String> {
-    mac_stats_info!("browser/cdp", "Browser agent [CDP]: take_screenshot_current_page (no navigation)");
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: take_screenshot_current_page (no navigation)"
+    );
     let (_, tab) = get_current_tab().inspect_err(|e| {
         clear_browser_session_on_error(e);
     })?;
@@ -1551,7 +1631,8 @@ fn take_screenshot_current_page_inner() -> Result<PathBuf, String> {
     if is_new_tab_or_blank(final_url.as_str()) {
         return Err(SESSION_RESET_MSG.to_string());
     }
-    mac_stats_info!("browser/cdp",
+    mac_stats_info!(
+        "browser/cdp",
         "Browser agent [CDP]: screenshotting current page: {}",
         final_url
     );
@@ -1569,7 +1650,11 @@ fn take_screenshot_current_page_inner() -> Result<PathBuf, String> {
     let filename = format!("{}_current.png", ts);
     let path = dir.join(&filename);
     std::fs::write(&path, &png_data).map_err(|e| format!("Write screenshot: {}", e))?;
-    mac_stats_info!("browser/cdp", "Browser agent [CDP]: screenshot saved to {:?}", path);
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: screenshot saved to {:?}",
+        path
+    );
     Ok(path)
 }
 
@@ -1586,12 +1671,17 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     if url_trimmed.is_empty() || url_trimmed.eq_ignore_ascii_case("current") {
         return take_screenshot_current_page_inner();
     }
-    mac_stats_info!("browser/cdp",
+    mac_stats_info!(
+        "browser/cdp",
         "Browser agent [CDP]: take_screenshot called with url (raw): {:?}",
         url
     );
     let url_normalized = normalize_url_for_screenshot(url_trimmed);
-    mac_stats_info!("browser/cdp", "Browser agent [CDP]: normalized URL: {}", url_normalized);
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: normalized URL: {}",
+        url_normalized
+    );
 
     // SSRF guard: block private/loopback/link-local URLs before CDP navigation
     if let Ok(parsed) = Url::parse(&url_normalized) {
@@ -1611,10 +1701,18 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     let tab = tabs.first().cloned().ok_or_else(|| "No tab".to_string())?;
     drop(tabs);
     register_dialog_auto_dismiss(&tab);
-    mac_stats_info!("browser/cdp", "Browser agent [CDP]: navigating to: {}", url_normalized);
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: navigating to: {}",
+        url_normalized
+    );
     tab.navigate_to(&url_normalized).map_err(|e| {
         let s = format!("Navigate: {}", e);
-        mac_stats_warn!("browser/cdp", "Browser agent [CDP]: navigate_to failed: {}", e);
+        mac_stats_warn!(
+            "browser/cdp",
+            "Browser agent [CDP]: navigate_to failed: {}",
+            e
+        );
         clear_browser_session_on_error(&s);
         s
     })?;
@@ -1626,7 +1724,8 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
         std::thread::sleep(Duration::from_secs(2));
     }
     let final_url = tab.get_url();
-    mac_stats_info!("browser/cdp",
+    mac_stats_info!(
+        "browser/cdp",
         "Browser agent [CDP]: navigated; final tab URL: {}",
         final_url
     );
@@ -1636,11 +1735,18 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
             .as_ref()
             .and_then(|v| v.as_str())
             .unwrap_or("(none)");
-        mac_stats_info!("browser/cdp", "Browser agent [CDP]: page title: {}", title_str);
+        mac_stats_info!(
+            "browser/cdp",
+            "Browser agent [CDP]: page title: {}",
+            title_str
+        );
         if title_str.to_lowercase().contains("404")
             || title_str.to_lowercase().contains("not found")
         {
-            mac_stats_warn!("browser/cdp", "Browser agent [CDP]: page appears to be 404 or not found");
+            mac_stats_warn!(
+                "browser/cdp",
+                "Browser agent [CDP]: page appears to be 404 or not found"
+            );
         }
     }
     std::thread::sleep(Duration::from_secs(2));
@@ -1664,7 +1770,11 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     let filename = format!("{}_{}.png", ts, domain);
     let path = dir.join(&filename);
     std::fs::write(&path, &png_data).map_err(|e| format!("Write screenshot: {}", e))?;
-    mac_stats_info!("browser/cdp", "Browser agent [CDP]: screenshot saved to {:?}", path);
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: screenshot saved to {:?}",
+        path
+    );
     Ok(path)
 }
 

@@ -1,6 +1,8 @@
 //! Ollama model management Tauri commands (list, pull, delete, embed, load/unload).
 
-use crate::ollama::{EmbedInput, EmbedResponse, ListResponse, OllamaClient, PsResponse, VersionResponse};
+use crate::ollama::{
+    EmbedInput, EmbedResponse, ListResponse, OllamaClient, PsResponse, VersionResponse,
+};
 use serde::{Deserialize, Serialize};
 
 use super::ollama_config::get_ollama_client;

@@ -270,17 +270,16 @@ pub async fn send_ollama_chat_messages_streaming(
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp
-            .text()
-            .await
-            .unwrap_or_else(|_| String::new());
+        let body = resp.text().await.unwrap_or_else(|_| String::new());
         if let Ok(err_payload) = serde_json::from_str::<crate::ollama::OllamaErrorResponse>(&body) {
             return Err(format!("Ollama error: {}", err_payload.error));
         }
         return Err(format!("Ollama HTTP {}: {}", status, body.trim()));
     }
 
-    let app_handle = APP_HANDLE.get().ok_or_else(|| "App handle not available for streaming".to_string())?;
+    let app_handle = APP_HANDLE
+        .get()
+        .ok_or_else(|| "App handle not available for streaming".to_string())?;
     let mut stream = resp.bytes_stream();
     let mut buf = Vec::<u8>::new();
     let mut full_content = String::new();
@@ -306,7 +305,8 @@ pub async fn send_ollama_chat_messages_streaming(
             };
             if let Some(delta) = parsed.message.content {
                 full_content.push_str(&delta);
-                let _ = app_handle.emit_all("ollama-chat-chunk", serde_json::json!({ "content": delta }));
+                let _ = app_handle
+                    .emit_all("ollama-chat-chunk", serde_json::json!({ "content": delta }));
             }
             if parsed.done {
                 let response = crate::ollama::ChatResponse {

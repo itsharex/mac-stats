@@ -306,8 +306,8 @@ pub(crate) async fn run_tool_loop(
             } else {
                 false
             };
-            let is_multi_tool_run_cmd_error =
-                tool == "RUN_CMD" && user_message.starts_with("RUN_CMD failed in a multi-step plan");
+            let is_multi_tool_run_cmd_error = tool == "RUN_CMD"
+                && user_message.starts_with("RUN_CMD failed in a multi-step plan");
 
             if multi_tool_turn
                 && !is_browser_error
@@ -398,8 +398,7 @@ pub(crate) async fn run_tool_loop(
                 if crate::commands::content_reduction::is_context_overflow_error(&e)
                     && crate::config::Config::context_overflow_truncate_enabled() =>
             {
-                let max_chars =
-                    crate::config::Config::context_overflow_max_result_chars();
+                let max_chars = crate::config::Config::context_overflow_max_result_chars();
                 let n = crate::commands::content_reduction::truncate_oversized_tool_results(
                     messages, max_chars,
                 );
@@ -424,9 +423,7 @@ pub(crate) async fn run_tool_loop(
                 .await
                 {
                     Ok(resp) => {
-                        info!(
-                            "Agent router: context overflow recovery succeeded after truncation"
-                        );
+                        info!("Agent router: context overflow recovery succeeded after truncation");
                         resp
                     }
                     Err(retry_err) => {
@@ -646,10 +643,9 @@ async fn dispatch_tool(
             }
             result.text
         }
-        "RUN_JS" => crate::commands::delegation_tool_dispatch::handle_run_js(
-            arg,
-            params.status_tx.as_ref(),
-        ),
+        "RUN_JS" => {
+            crate::commands::delegation_tool_dispatch::handle_run_js(arg, params.status_tx.as_ref())
+        }
         "SKILL" => {
             crate::commands::delegation_tool_dispatch::handle_skill(
                 arg,
@@ -767,11 +763,8 @@ async fn dispatch_tool(
             crate::commands::misc_tool_dispatch::handle_mcp(arg, params.status_tx.as_ref()).await
         }
         "CURSOR_AGENT" => {
-            crate::commands::misc_tool_dispatch::handle_cursor_agent(
-                arg,
-                params.status_tx.as_ref(),
-            )
-            .await
+            crate::commands::misc_tool_dispatch::handle_cursor_agent(arg, params.status_tx.as_ref())
+                .await
         }
         "REDMINE_API" => {
             crate::commands::network_tool_dispatch::handle_redmine_api(

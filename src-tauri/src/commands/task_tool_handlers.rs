@@ -100,10 +100,7 @@ pub(crate) fn handle_schedule(
                 reply_to_channel_id,
             ) {
                 Ok(crate::scheduler::ScheduleAddOutcome::Added) => {
-                    info!(
-                        "Agent router: SCHEDULE at added (id={}, at={})",
-                        id, at_str
-                    );
+                    info!("Agent router: SCHEDULE at added (id={}, at={})", id, at_str);
                     let task_preview: String = task.chars().take(100).collect();
                     format!(
                         "One-time schedule added. Schedule ID: **{}** (at {}): \"{}\". Tell the user the schedule ID is {} and they can remove it with \"Remove schedule: {}\" or REMOVE_SCHEDULE: {}.",
@@ -202,10 +199,7 @@ pub(crate) fn handle_task_append(
         Ok(path) => {
             *current_task_path = Some(path.clone());
             let task_label = crate::task::task_file_name(&path);
-            send_status(
-                status_tx,
-                &format!("Appending to task '{}'…", task_label),
-            );
+            send_status(status_tx, &format!("Appending to task '{}'…", task_label));
             let content_to_append = if let Some(raw) = last_run_cmd_raw_output.take() {
                 info!(
                     "Agent router: TASK_APPEND using full RUN_CMD output ({} chars) for task '{}'",
@@ -237,10 +231,7 @@ pub(crate) fn handle_task_append(
 // TASK_STATUS
 // ---------------------------------------------------------------------------
 
-pub(crate) fn handle_task_status(
-    arg: &str,
-    current_task_path: &mut Option<PathBuf>,
-) -> String {
+pub(crate) fn handle_task_status(arg: &str, current_task_path: &mut Option<PathBuf>) -> String {
     let parts: Vec<&str> = arg.split_whitespace().collect();
     if parts.len() < 2 {
         return "TASK_STATUS requires: TASK_STATUS: <path or task id> wip|finished.".to_string();
@@ -258,13 +249,10 @@ pub(crate) fn handle_task_status(
         }
     }
     match status {
-        None => {
-            "TASK_STATUS status must be wip, finished, unsuccessful, or paused.".to_string()
-        }
+        None => "TASK_STATUS status must be wip, finished, unsuccessful, or paused.".to_string(),
         Some(status) => match crate::task::resolve_task_path(&path_or_id) {
             Ok(path) => {
-                if status == "finished"
-                    && !crate::task::all_sub_tasks_closed(&path).unwrap_or(true)
+                if status == "finished" && !crate::task::all_sub_tasks_closed(&path).unwrap_or(true)
                 {
                     "Cannot set status to finished: not all sub-tasks (## Sub-tasks: ...) are finished or unsuccessful.".to_string()
                 } else {
@@ -390,10 +378,8 @@ pub(crate) fn handle_task_assign(
             *current_task_path = Some(path.clone());
             match crate::task::set_assignee(&path, agent_id) {
                 Ok(()) => {
-                    let _ = crate::task::append_to_task(
-                        &path,
-                        &format!("Reassigned to {}.", agent_id),
-                    );
+                    let _ =
+                        crate::task::append_to_task(&path, &format!("Reassigned to {}.", agent_id));
                     format!("Task assigned to {}.", agent_id)
                 }
                 Err(e) => format!("TASK_ASSIGN failed: {}.", e),
@@ -413,15 +399,14 @@ pub(crate) fn handle_task_sleep(
     status_tx: &Option<tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
     let parts: Vec<&str> = arg.split_whitespace().collect();
-    let (path_or_id, until_str) = if parts.len() >= 3
-        && parts[parts.len() - 2].eq_ignore_ascii_case("until")
-    {
-        (parts[..parts.len() - 2].join(" "), parts[parts.len() - 1])
-    } else if parts.len() >= 2 {
-        (parts[..parts.len() - 1].join(" "), parts[parts.len() - 1])
-    } else {
-        ("".to_string(), "")
-    };
+    let (path_or_id, until_str) =
+        if parts.len() >= 3 && parts[parts.len() - 2].eq_ignore_ascii_case("until") {
+            (parts[..parts.len() - 2].join(" "), parts[parts.len() - 1])
+        } else if parts.len() >= 2 {
+            (parts[..parts.len() - 1].join(" "), parts[parts.len() - 1])
+        } else {
+            ("".to_string(), "")
+        };
     if path_or_id.is_empty() || until_str.is_empty() {
         return "TASK_SLEEP requires: TASK_SLEEP: <path or task id> until <ISO datetime> (e.g. 2025-02-10T09:00:00).".to_string();
     }
@@ -436,10 +421,8 @@ pub(crate) fn handle_task_sleep(
             if let Ok(new_path) = crate::task::set_task_status(&path, "paused") {
                 *current_task_path = Some(new_path.clone());
                 let _ = crate::task::set_paused_until(&new_path, Some(until_str));
-                let _ = crate::task::append_to_task(
-                    &new_path,
-                    &format!("Paused until {}.", until_str),
-                );
+                let _ =
+                    crate::task::append_to_task(&new_path, &format!("Paused until {}.", until_str));
             }
             format!(
                 "Task paused until {}. It will resume automatically after that time.",

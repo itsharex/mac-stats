@@ -117,7 +117,10 @@ mod tests {
         let allow = vec!["ollama".to_string()];
         assert!(target_matches_allowlist("mac_stats::ollama", &allow));
         assert!(target_matches_allowlist("mac_stats::ollama/api", &allow));
-        assert!(!target_matches_allowlist("mac_stats::ollama_legacy", &allow));
+        assert!(!target_matches_allowlist(
+            "mac_stats::ollama_legacy",
+            &allow
+        ));
     }
 
     #[test]

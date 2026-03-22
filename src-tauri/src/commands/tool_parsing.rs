@@ -349,9 +349,7 @@ pub(crate) fn parse_all_tools_from_response(content: &str) -> Vec<(String, Strin
 /// Parse PYTHON_SCRIPT from full response: (id, topic, script_body).
 /// Script body is taken from a ` ```python ... ``` ` block, or from all lines
 /// after PYTHON_SCRIPT: until another tool line or end.
-pub(crate) fn parse_python_script_from_response(
-    content: &str,
-) -> Option<(String, String, String)> {
+pub(crate) fn parse_python_script_from_response(content: &str) -> Option<(String, String, String)> {
     let prefix = "PYTHON_SCRIPT:";
     let mut id_topic_line: Option<&str> = None;
     let mut python_line_index = None::<usize>;
@@ -652,7 +650,9 @@ mod tests {
     #[test]
     fn line_prefix_detects_numbered_recommend() {
         assert!(line_starts_with_tool_prefix("1. RECOMMEND: RUN_CMD: date"));
-        assert!(line_starts_with_tool_prefix("2) FETCH_URL: https://example.com"));
+        assert!(line_starts_with_tool_prefix(
+            "2) FETCH_URL: https://example.com"
+        ));
     }
 
     #[test]
@@ -708,7 +708,8 @@ mod tests {
 
     #[test]
     fn code_detect_fenced_js_block() {
-        let content = "Here is the code:\n```javascript\nconsole.log('hello')\n```\nThat should work.";
+        let content =
+            "Here is the code:\n```javascript\nconsole.log('hello')\n```\nThat should work.";
         let result = detect_and_extract_js_code(content);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), "'hello'");
@@ -734,7 +735,10 @@ mod tests {
     fn code_detect_prose_mentioning_code_no_trigger() {
         let content = "You can use `console.log(x)` to debug your JavaScript code. The function keyword defines a function, and => creates an arrow function.";
         let result = detect_and_extract_js_code(content);
-        assert!(result.is_none(), "Prose mentioning code should not trigger code execution");
+        assert!(
+            result.is_none(),
+            "Prose mentioning code should not trigger code execution"
+        );
     }
 
     #[test]
@@ -761,7 +765,10 @@ mod tests {
     fn code_detect_untagged_block_without_js_no_trigger() {
         let content = "```\nSELECT * FROM users WHERE id = 1;\n```";
         let result = detect_and_extract_js_code(content);
-        assert!(result.is_none(), "SQL in untagged block should not trigger JS execution");
+        assert!(
+            result.is_none(),
+            "SQL in untagged block should not trigger JS execution"
+        );
     }
 
     #[test]

@@ -10,6 +10,20 @@ use crate::ollama::ChatMessage;
 
 pub(crate) const CONVERSATION_HISTORY_CAP: usize = 20;
 
+/// Keep the last `cap` items in chronological order (oldest first).
+///
+/// Same effect as `items.into_iter().rev().take(cap).rev().collect()` but skips work when
+/// `items.len() <= cap`. Used for conversation history caps (agent router, Discord having_fun).
+pub(crate) fn cap_tail_chronological<T>(items: Vec<T>, cap: usize) -> Vec<T> {
+    if cap == 0 {
+        return Vec::new();
+    }
+    if items.len() <= cap {
+        return items;
+    }
+    items.into_iter().rev().take(cap).rev().collect()
+}
+
 fn annotate_discord_401(mut msg: ChatMessage) -> ChatMessage {
     if msg.role == "assistant" && looks_like_discord_401_confusion(&msg.content) {
         msg.content.push_str(
@@ -139,5 +153,37 @@ pub(crate) async fn prepare_conversation_history(
         vec![]
     } else {
         raw_history.into_iter().map(annotate_discord_401).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cap_tail_chronological;
+
+    #[test]
+    fn cap_tail_keeps_last_n_in_chronological_order() {
+        let v: Vec<i32> = (1..=25).collect();
+        let out = cap_tail_chronological(v, 20);
+        assert_eq!(out, (6..=25).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn cap_tail_unchanged_when_vec_shorter_than_cap() {
+        let v = vec!["a", "b"];
+        let out = cap_tail_chronological(v, 20);
+        assert_eq!(out, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn cap_tail_zero_returns_empty() {
+        let v = vec![1, 2, 3];
+        assert!(cap_tail_chronological(v, 0).is_empty());
+    }
+
+    #[test]
+    fn cap_tail_exact_cap_preserves_all() {
+        let v = vec![1, 2, 3, 4, 5];
+        let out = cap_tail_chronological(v, 5);
+        assert_eq!(out, vec![1, 2, 3, 4, 5]);
     }
 }

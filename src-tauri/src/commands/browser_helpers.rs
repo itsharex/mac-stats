@@ -121,7 +121,9 @@ pub(crate) fn is_coding_like_request(question: &str) -> bool {
         || q.contains("code change")
         || q.contains("organize")
         || (q.contains("folder") && (q.contains("organize") || q.contains("structure")))
-        || (q.contains("make ") && (q.contains("change") || q.contains("edit")) && q.contains("project"))
+        || (q.contains("make ")
+            && (q.contains("change") || q.contains("edit"))
+            && q.contains("project"))
         || q.contains("cursor-agent")
         || q.contains("cursor agent")
 }

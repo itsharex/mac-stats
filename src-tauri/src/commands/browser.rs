@@ -106,13 +106,14 @@ fn is_ipv6_unique_local(addr: &Ipv6Addr) -> bool {
 /// any resolved IP is on the blocklist. Hosts listed in `allowed_hosts` bypass the IP check.
 pub fn validate_url_no_ssrf(url: &Url, allowed_hosts: &[String]) -> Result<(), String> {
     if !url.username().is_empty() || url.password().is_some() {
-        return Err(
-            "URL contains credentials (userinfo) and was blocked for security".to_string(),
-        );
+        return Err("URL contains credentials (userinfo) and was blocked for security".to_string());
     }
     let host = url.host_str().ok_or("URL has no host")?;
     if allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(host)) {
-        info!("SSRF guard: host '{}' is in ssrfAllowedHosts, skipping IP check", host);
+        info!(
+            "SSRF guard: host '{}' is in ssrfAllowedHosts, skipping IP check",
+            host
+        );
         return Ok(());
     }
     let port = url
@@ -133,7 +134,9 @@ pub fn validate_url_no_ssrf(url: &Url, allowed_hosts: &[String]) -> Result<(), S
         if is_blocked_ip(&addr.ip()) {
             warn!(
                 "SSRF guard: blocked URL {} — host '{}' resolves to private/loopback address {}",
-                url, host, addr.ip()
+                url,
+                host,
+                addr.ip()
             );
             return Err(format!(
                 "URL targets a private network ({}) and was blocked to prevent SSRF",
@@ -352,20 +355,32 @@ mod tests {
 
     #[test]
     fn is_blocked_ip_private_ranges() {
-        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(10, 0, 0, 1))));
-        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(172, 16, 0, 1))));
-        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 0, 1))));
+        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(
+            10, 0, 0, 1
+        ))));
+        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(
+            172, 16, 0, 1
+        ))));
+        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(
+            192, 168, 0, 1
+        ))));
     }
 
     #[test]
     fn is_blocked_ip_link_local() {
-        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(169, 254, 169, 254))));
+        assert!(is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(
+            169, 254, 169, 254
+        ))));
     }
 
     #[test]
     fn is_blocked_ip_public_is_ok() {
-        assert!(!is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(8, 8, 8, 8))));
-        assert!(!is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(1, 1, 1, 1))));
+        assert!(!is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(
+            8, 8, 8, 8
+        ))));
+        assert!(!is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(
+            1, 1, 1, 1
+        ))));
     }
 
     #[test]

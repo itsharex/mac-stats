@@ -18,7 +18,10 @@ pub struct ShapableSearchResult {
 fn normalized_domain(url: &str) -> String {
     url::Url::parse(url)
         .ok()
-        .and_then(|u| u.host_str().map(|s| s.trim_start_matches("www.").to_string()))
+        .and_then(|u| {
+            u.host_str()
+                .map(|s| s.trim_start_matches("www.").to_string())
+        })
         .unwrap_or_default()
 }
 
@@ -44,7 +47,10 @@ pub fn shape_search_results(
         if r.snippet.chars().count() > snippet_max_chars {
             r.snippet = format!(
                 "{}…",
-                r.snippet.chars().take(snippet_max_chars).collect::<String>()
+                r.snippet
+                    .chars()
+                    .take(snippet_max_chars)
+                    .collect::<String>()
             );
         }
         per_domain.insert(domain, count + 1);

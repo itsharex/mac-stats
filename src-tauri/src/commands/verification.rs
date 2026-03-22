@@ -4,16 +4,16 @@
 use base64::Engine;
 use std::path::{Path, PathBuf};
 
+use crate::commands::browser_helpers::{
+    browser_retry_grounding_prompt, explicit_no_playable_video_finding, is_browser_task_request,
+    is_video_review_request,
+};
 use crate::commands::ollama::send_ollama_chat_messages;
 use crate::commands::perplexity_helpers::is_news_query;
 use crate::commands::redmine_helpers::{
     extract_redmine_time_entries_summary_for_reply, is_grounded_redmine_time_entries_blocked_reply,
-    is_redmine_time_entries_request, is_redmine_review_or_summarize_only,
+    is_redmine_review_or_summarize_only, is_redmine_time_entries_request,
     redmine_time_entries_range,
-};
-use crate::commands::browser_helpers::{
-    browser_retry_grounding_prompt, explicit_no_playable_video_finding, is_browser_task_request,
-    is_video_review_request,
 };
 
 /// Reply from the agent: text plus optional attachment paths (e.g. screenshots) for Discord.
@@ -119,7 +119,10 @@ pub(crate) fn first_image_as_base64(paths: &[PathBuf]) -> Option<String> {
 
 /// Returns the verification-prompt block when the last news search had only hub/landing pages
 /// and the request is news-like; otherwise "".
-pub(crate) fn verification_news_hub_only_block(news_search_was_hub_only: Option<bool>, question: &str) -> &'static str {
+pub(crate) fn verification_news_hub_only_block(
+    news_search_was_hub_only: Option<bool>,
+    question: &str,
+) -> &'static str {
     const HUB_ONLY_BLOCK: &str = "The search results given to the assistant for this news request were only hub/landing/tag/standings pages (no concrete article links). If the assistant's answer presents them as complete recent news articles, reply NO and state that article-grade sources were not found.\n\n";
     if news_search_was_hub_only == Some(true) && is_news_query(question) {
         HUB_ONLY_BLOCK
@@ -222,23 +225,24 @@ pub(crate) fn sanitize_success_criteria(question: &str, criteria: Vec<String>) -
             }
             continue;
         }
-        if generic_news_request && !explicit_football_request
+        if generic_news_request
+            && !explicit_football_request
             && (lower.contains("football club")
                 || lower.contains("sports website")
                 || lower.contains("related to the team"))
-            {
-                let replacement = if lower.contains("sports website") {
-                    "credible named sources cited".to_string()
-                } else if lower.contains("related to the team") {
-                    "major recent developments involving Barcelona were covered".to_string()
-                } else {
-                    "recent news items involving Barcelona were summarized".to_string()
-                };
-                if !sanitized.iter().any(|existing| existing == &replacement) {
-                    sanitized.push(replacement);
-                }
-                continue;
+        {
+            let replacement = if lower.contains("sports website") {
+                "credible named sources cited".to_string()
+            } else if lower.contains("related to the team") {
+                "major recent developments involving Barcelona were covered".to_string()
+            } else {
+                "recent news items involving Barcelona were summarized".to_string()
+            };
+            if !sanitized.iter().any(|existing| existing == &replacement) {
+                sanitized.push(replacement);
             }
+            continue;
+        }
         if generic_news_request
             && !explicit_named_sources
             && (lower.contains("bbc") || lower.contains("cnn") || lower.contains("reuters"))
@@ -270,7 +274,10 @@ pub(crate) fn sanitize_success_criteria(question: &str, criteria: Vec<String>) -
 
 /// Build a short summary of the last N turns (user/assistant pairs) for the new-topic check.
 /// Each message content is truncated to avoid blowing context.
-pub(crate) fn summarize_last_turns(messages: &[crate::ollama::ChatMessage], max_turns: usize) -> String {
+pub(crate) fn summarize_last_turns(
+    messages: &[crate::ollama::ChatMessage],
+    max_turns: usize,
+) -> String {
     const PER_MSG: usize = 120;
     let take = (max_turns * 2).min(messages.len());
     let start = messages.len().saturating_sub(take);
@@ -439,8 +446,7 @@ pub(crate) async fn verify_completion(
     } else {
         String::new()
     };
-    let news_hub_only_block =
-        verification_news_hub_only_block(news_search_was_hub_only, question);
+    let news_hub_only_block = verification_news_hub_only_block(news_search_was_hub_only, question);
     let news_format_note = verification_news_format_note(question);
     let verification_tail = if screenshot_requested {
         "Did we fully satisfy the request (including any requested screenshot/file attachment)? Reply YES or NO. If NO, on the next line add one sentence: what's missing."
@@ -600,9 +606,7 @@ pub(crate) fn build_verification_retry_hint(
     attachment_paths: &[PathBuf],
     last_browser_extract: Option<&str>,
 ) -> String {
-    let reason_lower = reason
-        .map(|r| r.to_lowercase())
-        .unwrap_or_default();
+    let reason_lower = reason.map(|r| r.to_lowercase()).unwrap_or_default();
 
     let reason_about_attachments = reason_lower.contains("screenshot")
         || reason_lower.contains("attachment")
@@ -862,7 +866,8 @@ mod tests {
 
     #[test]
     fn verification_news_hub_only_block_included_when_hub_only_and_news_query() {
-        let block = verification_news_hub_only_block(Some(true), "what's the latest news on Barcelona?");
+        let block =
+            verification_news_hub_only_block(Some(true), "what's the latest news on Barcelona?");
         assert!(!block.is_empty());
         assert!(block.contains("hub/landing/tag/standings"));
         assert!(block.contains("article-grade sources were not found"));

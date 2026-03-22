@@ -5,9 +5,7 @@ use crate::commands::ollama::send_ollama_chat_messages;
 use crate::commands::redmine_helpers::{
     extract_redmine_time_entries_summary_for_reply, question_explicitly_requests_json,
 };
-use crate::commands::tool_parsing::{
-    normalize_inline_tool_sequences, parse_one_tool_at_line,
-};
+use crate::commands::tool_parsing::{normalize_inline_tool_sequences, parse_one_tool_at_line};
 use tracing::info;
 
 /// Build the runtime date/time context block injected into agent system prompts.

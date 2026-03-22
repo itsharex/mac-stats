@@ -137,7 +137,9 @@ impl Plugin {
                 #[cfg(unix)]
                 {
                     // SAFETY: pid is our child process; we kill it on timeout. libc::kill is async-signal-safe.
-                    unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+                    unsafe {
+                        libc::kill(pid as i32, libc::SIGKILL);
+                    }
                 }
                 let _ = rx.recv(); // Let the thread receive wait_with_output result and exit.
                 let _ = child_handle.join();
@@ -154,8 +156,7 @@ impl Plugin {
                         status: "error".to_string(),
                         message: Some(format!(
                             "Plugin script timed out after {}s (plugin: {})",
-                            self.timeout_secs,
-                            self.id
+                            self.timeout_secs, self.id
                         )),
                         data: None,
                         metrics: None,
@@ -186,7 +187,11 @@ impl Plugin {
             serde_json::from_str(&stdout).with_context(|| {
                 const SNIP: usize = 400;
                 let snippet = if stdout.len() > SNIP {
-                    format!("{}... (truncated, total {} chars)", &stdout[..SNIP], stdout.len())
+                    format!(
+                        "{}... (truncated, total {} chars)",
+                        &stdout[..SNIP],
+                        stdout.len()
+                    )
                 } else {
                     stdout.to_string()
                 };
@@ -222,9 +227,7 @@ impl Plugin {
             };
             let msg = format!(
                 "Script execution failed (plugin: {}, exit code: {}): {}",
-                self.id,
-                exit_code,
-                stderr_display
+                self.id, exit_code, stderr_display
             );
             warn!("{}", msg);
             PluginOutput {

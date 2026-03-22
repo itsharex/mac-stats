@@ -465,7 +465,10 @@ fn try_pre_route_ollama_api(q_lower: &str) -> Option<String> {
 fn try_pre_route_discord_api(question: &str) -> Option<String> {
     crate::discord::get_discord_token()?;
     let result = match_discord_api_pattern(question)?;
-    info!("Agent router: pre-routed to {} (Discord)", crate::logging::ellipse(&result, 80));
+    info!(
+        "Agent router: pre-routed to {} (Discord)",
+        crate::logging::ellipse(&result, 80)
+    );
     Some(result)
 }
 
@@ -647,10 +650,7 @@ mod tests {
     #[test]
     fn fetch_url_keyword_whats_on() {
         let r = try_pre_route_fetch_url("what's on https://news.example.com?");
-        assert_eq!(
-            r,
-            Some("FETCH_URL: https://news.example.com".to_string())
-        );
+        assert_eq!(r, Some("FETCH_URL: https://news.example.com".to_string()));
     }
 
     #[test]
@@ -707,17 +707,17 @@ mod tests {
     #[test]
     fn fetch_url_http_scheme() {
         let r = try_pre_route_fetch_url("fetch http://localhost:8080/api");
-        assert_eq!(
-            r,
-            Some("FETCH_URL: http://localhost:8080/api".to_string())
-        );
+        assert_eq!(r, Some("FETCH_URL: http://localhost:8080/api".to_string()));
     }
 
     // --- extract_search_query tests ---
 
     #[test]
     fn search_query_search_for() {
-        let r = extract_search_query("search for rust async patterns", "search for rust async patterns");
+        let r = extract_search_query(
+            "search for rust async patterns",
+            "search for rust async patterns",
+        );
         assert_eq!(r, Some(("rust async patterns".to_string(), false)));
     }
 
@@ -729,13 +729,19 @@ mod tests {
 
     #[test]
     fn search_query_google() {
-        let r = extract_search_query("google best restaurants in berlin", "google best restaurants in berlin");
+        let r = extract_search_query(
+            "google best restaurants in berlin",
+            "google best restaurants in berlin",
+        );
         assert_eq!(r, Some(("best restaurants in berlin".to_string(), false)));
     }
 
     #[test]
     fn search_query_look_up() {
-        let r = extract_search_query("look up tauri v2 documentation", "look up tauri v2 documentation");
+        let r = extract_search_query(
+            "look up tauri v2 documentation",
+            "look up tauri v2 documentation",
+        );
         assert_eq!(r, Some(("tauri v2 documentation".to_string(), false)));
     }
 
@@ -747,7 +753,10 @@ mod tests {
 
     #[test]
     fn search_query_web_search() {
-        let r = extract_search_query("web search for climate change 2026", "web search for climate change 2026");
+        let r = extract_search_query(
+            "web search for climate change 2026",
+            "web search for climate change 2026",
+        );
         assert_eq!(r, Some(("climate change 2026".to_string(), false)));
     }
 
@@ -777,13 +786,19 @@ mod tests {
 
     #[test]
     fn search_query_search_online_for() {
-        let r = extract_search_query("search online for weather berlin", "search online for weather berlin");
+        let r = extract_search_query(
+            "search online for weather berlin",
+            "search online for weather berlin",
+        );
         assert_eq!(r, Some(("weather berlin".to_string(), false)));
     }
 
     #[test]
     fn search_query_research_is_research() {
-        let r = extract_search_query("research quantum computing advances", "research quantum computing advances");
+        let r = extract_search_query(
+            "research quantum computing advances",
+            "research quantum computing advances",
+        );
         assert_eq!(r, Some(("quantum computing advances".to_string(), true)));
     }
 
@@ -816,10 +831,7 @@ mod tests {
 
     #[test]
     fn search_query_strips_trailing_question_mark() {
-        let r = extract_search_query(
-            "search for what is serde?",
-            "search for what is serde?",
-        );
+        let r = extract_search_query("search for what is serde?", "search for what is serde?");
         assert_eq!(r, Some(("what is serde".to_string(), false)));
     }
 
@@ -855,10 +867,7 @@ mod tests {
 
     #[test]
     fn search_query_longer_pattern_preferred() {
-        let r = extract_search_query(
-            "search the web for tauri v2",
-            "search the web for tauri v2",
-        );
+        let r = extract_search_query("search the web for tauri v2", "search the web for tauri v2");
         assert_eq!(r, Some(("tauri v2".to_string(), false)));
     }
 
@@ -1006,7 +1015,10 @@ mod tests {
     #[test]
     fn task_no_match() {
         assert_eq!(
-            try_pre_route_task_commands("create a task about testing", "create a task about testing"),
+            try_pre_route_task_commands(
+                "create a task about testing",
+                "create a task about testing"
+            ),
             None
         );
     }
@@ -1095,10 +1107,7 @@ mod tests {
 
     #[test]
     fn ollama_no_match() {
-        assert_eq!(
-            try_pre_route_ollama_api("tell me about llama3"),
-            None
-        );
+        assert_eq!(try_pre_route_ollama_api("tell me about llama3"), None);
     }
 
     // --- Management commands compound / skip tests ---
@@ -1148,7 +1157,9 @@ mod tests {
     #[test]
     fn discord_explicit_prefix_post() {
         assert_eq!(
-            match_discord_api_pattern("DISCORD_API: POST /channels/123/messages {\"content\":\"hi\"}"),
+            match_discord_api_pattern(
+                "DISCORD_API: POST /channels/123/messages {\"content\":\"hi\"}"
+            ),
             Some("DISCORD_API: POST /channels/123/messages {\"content\":\"hi\"}".to_string())
         );
     }
@@ -1299,17 +1310,11 @@ mod tests {
 
     #[test]
     fn discord_no_match() {
-        assert_eq!(
-            match_discord_api_pattern("tell me about discord"),
-            None
-        );
+        assert_eq!(match_discord_api_pattern("tell me about discord"), None);
     }
 
     #[test]
     fn discord_empty_prefix() {
-        assert_eq!(
-            match_discord_api_pattern("DISCORD_API:"),
-            None
-        );
+        assert_eq!(match_discord_api_pattern("DISCORD_API:"), None);
     }
 }

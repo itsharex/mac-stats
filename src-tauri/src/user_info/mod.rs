@@ -56,7 +56,12 @@ struct UserInfoCache {
 
 fn user_info_cache() -> &'static Mutex<UserInfoCache> {
     static CACHE: OnceLock<Mutex<UserInfoCache>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(UserInfoCache { map: HashMap::new(), mtime: None }))
+    CACHE.get_or_init(|| {
+        Mutex::new(UserInfoCache {
+            map: HashMap::new(),
+            mtime: None,
+        })
+    })
 }
 
 fn path_modified(path: &Path) -> Option<SystemTime> {
@@ -172,7 +177,10 @@ pub fn maybe_update_display_name_from_discord(user_id: u64, display_name: &str) 
         serde_json::to_string_pretty(&file_data).unwrap_or_default(),
     ) {
         Ok(()) => {
-            debug!("user_info: updated display_name for user {} to {:?}", user_id, name);
+            debug!(
+                "user_info: updated display_name for user {} to {:?}",
+                user_id, name
+            );
             // Refresh cache so next get_user_details sees the new data without re-reading from disk.
             let map: HashMap<String, UserDetails> = file_data
                 .users

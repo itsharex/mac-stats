@@ -475,39 +475,84 @@ pub fn load_messages_from_latest_session_file(
     parse_session_file(&path)
 }
 
+/// Finish the current `## User` / `## Assistant` block and append to `out`.
+/// If no heading was open, drop any leading lines (same as ignoring a malformed prefix).
+fn flush_session_block(
+    out: &mut Vec<(String, String)>,
+    current_role: &mut Option<&'static str>,
+    body_lines: &mut Vec<String>,
+) {
+    let Some(r) = current_role.take() else {
+        body_lines.clear();
+        return;
+    };
+    let body_str = body_lines.join("\n").trim().to_string();
+    body_lines.clear();
+    if let Some(normalized) = normalize_conversational_message(r, &body_str) {
+        if !is_internal_artifact(r, &normalized) {
+            out.push((r.to_string(), normalized));
+        }
+    }
+}
+
+/// Parse persisted session markdown. Only lines that trim to exactly `## User` or `## Assistant`
+/// start a new block; lines like `## Notes` inside a message stay in the body (splitting on
+/// `\n## ` previously dropped those turns — see docs/022_feature_review_plan.md F1).
+fn parse_session_markdown(content: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut current_role: Option<&'static str> = None;
+    let mut body_lines: Vec<String> = Vec::new();
+
+    for line in content.lines() {
+        let t = line.trim();
+        if t == "## User" {
+            flush_session_block(&mut out, &mut current_role, &mut body_lines);
+            current_role = Some("user");
+        } else if t == "## Assistant" {
+            flush_session_block(&mut out, &mut current_role, &mut body_lines);
+            current_role = Some("assistant");
+        } else {
+            body_lines.push(line.to_string());
+        }
+    }
+    flush_session_block(&mut out, &mut current_role, &mut body_lines);
+    out
+}
+
 fn parse_session_file(path: &Path) -> Vec<(String, String)> {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    let mut out = Vec::new();
-    for block in content.split("\n## ") {
-        let block = block.trim().trim_start_matches("## ").trim();
-        if block.is_empty() {
-            continue;
-        }
-        let (role, body) = if let Some(rest) = block.strip_prefix("User\n") {
-            ("user", rest.trim())
-        } else if let Some(rest) = block.strip_prefix("Assistant\n") {
-            ("assistant", rest.trim())
-        } else {
-            continue;
-        };
-        if let Some(normalized) = normalize_conversational_message(role, body) {
-            if !is_internal_artifact(role, &normalized) {
-                out.push((role.to_string(), normalized));
-            }
-        }
-    }
-    out
+    parse_session_markdown(&content)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         add_message, clear_session, extract_assistant_final_answer, get_messages,
-        normalize_conversational_message, session_filename_matches_id,
+        normalize_conversational_message, parse_session_markdown, session_filename_matches_id,
     };
+
+    #[test]
+    fn get_messages_before_add_user_excludes_current_turn() {
+        // Mirrors Discord: load `prior` via get_messages, then add_message("user", …).
+        let sid = 99998_u64;
+        clear_session("discord", sid);
+        add_message("discord", sid, "user", "first");
+        add_message("discord", sid, "assistant", "reply");
+        let prior = get_messages("discord", sid);
+        assert_eq!(prior.len(), 2);
+        assert_eq!(prior[1].1, "reply");
+        add_message("discord", sid, "user", "current question");
+        let after = get_messages("discord", sid);
+        assert_eq!(after.len(), 3);
+        assert!(
+            !prior.iter().any(|(_, c)| c == "current question"),
+            "prior snapshot must not include the user turn added after get_messages"
+        );
+        clear_session("discord", sid);
+    }
 
     #[test]
     fn internal_artifacts_not_persisted() {
@@ -578,7 +623,53 @@ mod tests {
 
     #[test]
     fn session_filename_rejects_non_session_files() {
-        assert!(!session_filename_matches_id("other-42-20260320-153045.md", 42));
-        assert!(!session_filename_matches_id("session-memory-42-20260320-153045.md", 42));
+        assert!(!session_filename_matches_id(
+            "other-42-20260320-153045.md",
+            42
+        ));
+        assert!(!session_filename_matches_id(
+            "session-memory-42-20260320-153045.md",
+            42
+        ));
+    }
+
+    #[test]
+    fn parse_session_markdown_well_formed_two_turns() {
+        let md = "## User\n\nHello\n\n## Assistant\n\nHi there\n";
+        let v = parse_session_markdown(md);
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].0, "user");
+        assert_eq!(v[0].1, "Hello");
+        assert_eq!(v[1].0, "assistant");
+        assert_eq!(v[1].1, "Hi there");
+    }
+
+    /// Lines that look like markdown headings but are not exactly `## User` / `## Assistant` must
+    /// stay inside the message (022 F1: `## ` in content).
+    #[test]
+    fn parse_session_markdown_keeps_fake_headings_in_body() {
+        let md = "## User\n\nSee ## Notes\nbelow\n\n## Assistant\n\nOK\n";
+        let v = parse_session_markdown(md);
+        assert_eq!(v.len(), 2);
+        assert!(v[0].1.contains("## Notes"));
+        assert!(v[0].1.contains("below"));
+        assert_eq!(v[1].1, "OK");
+    }
+
+    #[test]
+    fn parse_session_markdown_empty_user_block_skipped() {
+        let md = "## User\n\n## Assistant\n\nOnly reply\n";
+        let v = parse_session_markdown(md);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].0, "assistant");
+        assert_eq!(v[0].1, "Only reply");
+    }
+
+    #[test]
+    fn parse_session_markdown_leading_garbage_before_first_heading_dropped() {
+        let md = "orphan line\n## User\n\nHi\n";
+        let v = parse_session_markdown(md);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].1, "Hi");
     }
 }

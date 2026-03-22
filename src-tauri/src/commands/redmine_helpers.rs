@@ -308,7 +308,10 @@ mod tests {
 
     #[test]
     fn grounded_redmine_time_entries_failure_reply_for_dns_blocker_is_user_facing() {
-        let today = chrono::Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let today = chrono::Utc::now()
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string();
         let text = format!(
             "Redmine API result:\n\nRedmine GET failed: error sending request for url (https://example.invalid/time_entries.json?from={d}&to={d}&offset=0&limit=100): error trying to connect: dns error: failed to lookup address information: nodename nor servname provided, or not known\n\nUse this data to answer the user's question.",
             d = today
@@ -319,7 +322,10 @@ mod tests {
         )
         .expect("expected grounded failure reply");
 
-        assert!(reply.contains(&format!("Could not retrieve Redmine time entries for {}", today)));
+        assert!(reply.contains(&format!(
+            "Could not retrieve Redmine time entries for {}",
+            today
+        )));
         assert!(reply.contains("configured Redmine host could not be resolved"));
         assert!(reply.contains("No Redmine data was fetched"));
         assert!(!reply.contains("no time entries were found"));
@@ -327,7 +333,10 @@ mod tests {
 
     #[test]
     fn verification_accepts_grounded_redmine_blocked_reply() {
-        let today = chrono::Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let today = chrono::Utc::now()
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string();
         let reply = format!(
             "Could not retrieve Redmine time entries for {} because the configured Redmine host could not be resolved. No Redmine data was fetched. Fix the Redmine configuration or connectivity, then retry.",
             today
@@ -422,6 +431,8 @@ mod tests {
 
     #[test]
     fn question_explicitly_requests_json_negative() {
-        assert!(!question_explicitly_requests_json("review redmine ticket 7209"));
+        assert!(!question_explicitly_requests_json(
+            "review redmine ticket 7209"
+        ));
     }
 }

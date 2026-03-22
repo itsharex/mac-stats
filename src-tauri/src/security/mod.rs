@@ -149,10 +149,9 @@ fn read_credential_accounts_list() -> Result<Vec<String>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let content = fs::read_to_string(&path)
-        .context("Failed to read credential accounts file")?;
-    let accounts: Vec<String> = serde_json::from_str(&content)
-        .context("Failed to parse credential_accounts.json")?;
+    let content = fs::read_to_string(&path).context("Failed to read credential accounts file")?;
+    let accounts: Vec<String> =
+        serde_json::from_str(&content).context("Failed to parse credential_accounts.json")?;
     Ok(accounts)
 }
 
@@ -162,7 +161,8 @@ fn write_credential_accounts_list(accounts: &[String]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).context("Failed to create .mac-stats directory")?;
     }
-    let content = serde_json::to_string_pretty(accounts).context("Failed to serialize accounts list")?;
+    let content =
+        serde_json::to_string_pretty(accounts).context("Failed to serialize accounts list")?;
     fs::write(&path, content).context("Failed to write credential_accounts.json")?;
     Ok(())
 }

@@ -95,7 +95,11 @@ pub fn run_python_script(id: &str, topic: &str, script_body: &str) -> Result<Str
         .arg(&script_path)
         .output()
         .map_err(|e| {
-            let msg = format!("Failed to run python3: {} (script: {})", e, script_path.display());
+            let msg = format!(
+                "Failed to run python3: {} (script: {})",
+                e,
+                script_path.display()
+            );
             warn!("PYTHON_SCRIPT: {}", msg);
             msg
         })?;

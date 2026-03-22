@@ -201,15 +201,13 @@ fn main() {
                 rt.block_on(async {
                     mac_stats::config::Config::ensure_defaults();
                     mac_stats::ensure_ollama_agent_ready_at_startup().await;
-                    match mac_stats::answer_with_ollama_and_fetch(
-                        mac_stats::OllamaRequest {
-                            question: question.clone(),
-                            allow_schedule: true,
-                            retry_on_verification_no: true,
-                            from_remote: true,
-                            ..Default::default()
-                        },
-                    )
+                    match mac_stats::answer_with_ollama_and_fetch(mac_stats::OllamaRequest {
+                        question: question.clone(),
+                        allow_schedule: true,
+                        retry_on_verification_no: true,
+                        from_remote: true,
+                        ..Default::default()
+                    })
                     .await
                     {
                         Ok(reply) => {

@@ -353,7 +353,9 @@ mod tests {
 
     #[test]
     fn does_not_match_unrelated_errors() {
-        assert!(!is_context_overflow_error("Ollama HTTP 503: service unavailable"));
+        assert!(!is_context_overflow_error(
+            "Ollama HTTP 503: service unavailable"
+        ));
         assert!(!is_context_overflow_error("connection refused"));
         assert!(!is_context_overflow_error("rate limit exceeded"));
         assert!(!is_context_overflow_error("timeout"));
@@ -370,10 +372,7 @@ mod tests {
     #[test]
     fn truncate_tool_results_skips_system_prompt() {
         let big = "x".repeat(10_000);
-        let mut msgs = vec![
-            make_msg("system", &big),
-            make_msg("user", "hello"),
-        ];
+        let mut msgs = vec![make_msg("system", &big), make_msg("user", "hello")];
         let n = truncate_oversized_tool_results(&mut msgs, 500);
         assert_eq!(n, 0, "system prompt at index 0 should not be truncated");
         assert_eq!(msgs[0].content.len(), 10_000);
@@ -443,7 +442,8 @@ mod tests {
 
     #[test]
     fn sanitize_role_ordering_error() {
-        let msg = sanitize_ollama_error_for_user("Ollama error: roles must alternate user/assistant");
+        let msg =
+            sanitize_ollama_error_for_user("Ollama error: roles must alternate user/assistant");
         assert!(msg.is_some());
         let msg = msg.unwrap();
         assert!(msg.contains("ordering"));

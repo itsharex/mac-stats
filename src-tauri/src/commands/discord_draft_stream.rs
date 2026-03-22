@@ -126,11 +126,13 @@ pub fn spawn_discord_draft_editor(
                             Ok(Cmd::Update(t)) => latest = t,
                             Ok(Cmd::Flush { text, reply }) => {
                                 if clamp_discord_content(&latest) != last_sent {
-                                    let wait = next_allowed.saturating_duration_since(Instant::now());
+                                    let wait =
+                                        next_allowed.saturating_duration_since(Instant::now());
                                     if !wait.is_zero() {
                                         tokio::time::sleep(wait).await;
                                     }
-                                    let _ = apply_edit(&ctx, &mut message, &latest, "draft update").await;
+                                    let _ = apply_edit(&ctx, &mut message, &latest, "draft update")
+                                        .await;
                                 }
                                 let _ = apply_edit(&ctx, &mut message, &text, "draft flush").await;
                                 let _ = reply.send(());

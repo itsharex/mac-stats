@@ -8,6 +8,15 @@ use std::fs;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
+/// Stored `check_interval_secs` must be at least 1. Zero makes `elapsed >= interval` true even
+/// when `elapsed` is 0 (same instant as `last_check`), so a monitor could be scheduled every
+/// `run_due_monitor_checks` pass if anything invoked it more than once per wake.
+const MIN_MONITOR_CHECK_INTERVAL_SECS: u64 = 1;
+
+fn clamp_monitor_check_interval_secs(stored: u64) -> u64 {
+    stored.max(MIN_MONITOR_CHECK_INTERVAL_SECS)
+}
+
 // Global monitor storage (in production, use proper state management)
 fn get_monitors() -> &'static Mutex<HashMap<String, Box<dyn crate::monitors::MonitorCheck + Send>>>
 {
@@ -218,8 +227,9 @@ fn load_monitors() -> Result<(), String> {
 
             // Apply saved settings using the struct fields directly
             // Since WebsiteMonitor fields are public, we can set them
+            let check_interval_secs = clamp_monitor_check_interval_secs(pm.check_interval_secs);
             monitor.timeout_secs = pm.timeout_secs;
-            monitor.check_interval_secs = pm.check_interval_secs;
+            monitor.check_interval_secs = check_interval_secs;
             monitor.verify_ssl = pm.verify_ssl;
 
             // Restore stats if available
@@ -232,6 +242,7 @@ fn load_monitors() -> Result<(), String> {
 
             // Store config without stats (stats stored separately)
             let mut config_without_stats = pm.clone();
+            config_without_stats.check_interval_secs = check_interval_secs;
             config_without_stats.last_check = None;
             config_without_stats.last_status = None;
             configs.insert(pm.id.clone(), config_without_stats);
@@ -246,7 +257,7 @@ fn load_monitors() -> Result<(), String> {
             );
 
             info!("Monitor: Loaded website monitor - ID: {}, Name: {}, URL: {}, Timeout: {}s, Interval: {}s, SSL: {}, Last check: {:?}", 
-                  pm.id, pm.name, pm.url, pm.timeout_secs, pm.check_interval_secs, pm.verify_ssl, pm.last_check);
+                  pm.id, pm.name, pm.url, pm.timeout_secs, check_interval_secs, pm.verify_ssl, pm.last_check);
             loaded_count += 1;
         }
         // Add other monitor types here as needed
@@ -285,7 +296,7 @@ pub fn run_due_monitor_checks() {
         .filter(|id| {
             let interval_secs = configs
                 .get(*id)
-                .map(|c| c.check_interval_secs as i64)
+                .map(|c| clamp_monitor_check_interval_secs(c.check_interval_secs) as i64)
                 .unwrap_or(60);
             let last = stats.get(*id).and_then(|s| s.last_check);
             match last {
@@ -307,8 +318,7 @@ pub fn run_due_monitor_checks() {
 
 /// Snapshot of (monitor_id, status) for each monitor that has a last_status.
 /// Used by periodic alert evaluation to run SiteDown and similar rules per monitor.
-pub fn get_monitor_statuses_snapshot(
-) -> Vec<(String, crate::monitors::MonitorStatus)> {
+pub fn get_monitor_statuses_snapshot() -> Vec<(String, crate::monitors::MonitorStatus)> {
     let stats = match get_monitor_stats().try_lock() {
         Ok(s) => s,
         Err(_) => return Vec::new(),
@@ -345,6 +355,7 @@ pub fn add_website_monitor(request: AddWebsiteMonitorRequest) -> Result<Monitor,
         debug!("Monitor: Set timeout to {} seconds", timeout);
     }
     if let Some(interval) = request.check_interval_secs {
+        let interval = clamp_monitor_check_interval_secs(interval);
         monitor.check_interval_secs = interval;
         debug!("Monitor: Set check interval to {} seconds", interval);
     }
@@ -515,7 +526,9 @@ pub fn list_monitors() -> Result<Vec<String>, String> {
 pub fn list_monitors_with_details() -> Result<Vec<MonitorDetails>, String> {
     let configs = get_monitor_configs().lock().map_err(|e| e.to_string())?;
 
-    Ok(configs.values().map(|pm| MonitorDetails {
+    Ok(configs
+        .values()
+        .map(|pm| MonitorDetails {
             id: pm.id.clone(),
             name: pm.name.clone(),
             url: Some(pm.url.clone()),
@@ -629,4 +642,24 @@ pub fn get_monitor_status(
     let stats = get_monitor_stats().lock().map_err(|e| e.to_string())?;
 
     Ok(stats.get(&monitor_id).and_then(|s| s.last_status.clone()))
+}
+
+#[cfg(test)]
+mod monitor_interval_tests {
+    use super::clamp_monitor_check_interval_secs;
+
+    #[test]
+    fn clamp_zero_becomes_one() {
+        assert_eq!(clamp_monitor_check_interval_secs(0), 1);
+    }
+
+    #[test]
+    fn clamp_one_unchanged() {
+        assert_eq!(clamp_monitor_check_interval_secs(1), 1);
+    }
+
+    #[test]
+    fn clamp_large_unchanged() {
+        assert_eq!(clamp_monitor_check_interval_secs(60), 60);
+    }
 }

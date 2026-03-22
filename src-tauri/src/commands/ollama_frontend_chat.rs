@@ -131,7 +131,10 @@ pub async fn ollama_chat_with_execution(
         images: None,
     });
 
-    info!("Ollama Chat with Execution: Sending initial request to Ollama (stream={})", request.stream);
+    info!(
+        "Ollama Chat with Execution: Sending initial request to Ollama (stream={})",
+        request.stream
+    );
     let mut response = if request.stream {
         send_ollama_chat_messages_streaming(messages.clone(), None, None).await
     } else {
@@ -191,12 +194,10 @@ pub async fn ollama_chat_with_execution(
         let follow_up_request = ChatRequest {
             messages: follow_up_messages.clone(),
         };
-        response = ollama_chat(follow_up_request)
-            .await
-            .map_err(|e| {
-                crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
-                    .unwrap_or_else(|| format!("Failed to send follow-up after fetch: {}", e))
-            })?;
+        response = ollama_chat(follow_up_request).await.map_err(|e| {
+            crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                .unwrap_or_else(|| format!("Failed to send follow-up after fetch: {}", e))
+        })?;
         response_content = response.message.content.clone();
         messages = follow_up_messages;
         info!(
@@ -214,7 +215,9 @@ pub async fn ollama_chat_with_execution(
     let mut processed_content = response_content.replace("\\n", "\n");
     processed_content = processed_content.replace("javascript\n", "");
 
-    if let Some(code) = crate::commands::tool_parsing::detect_and_extract_js_code(&processed_content) {
+    if let Some(code) =
+        crate::commands::tool_parsing::detect_and_extract_js_code(&processed_content)
+    {
         info!(
             "Ollama Chat with Execution: Extracted code ({} chars):\n{}",
             code.len(),
@@ -335,12 +338,10 @@ pub async fn ollama_chat_continue_with_result(
     let chat_request = ChatRequest { messages };
 
     info!("Ollama Chat Continue: Sending follow-up to Ollama");
-    let response = ollama_chat(chat_request)
-        .await
-        .map_err(|e| {
-            crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
-                .unwrap_or_else(|| format!("Failed to send follow-up: {}", e))
-        })?;
+    let response = ollama_chat(chat_request).await.map_err(|e| {
+        crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+            .unwrap_or_else(|| format!("Failed to send follow-up: {}", e))
+    })?;
 
     let response_content = response.message.content;
     info!(
@@ -352,7 +353,9 @@ pub async fn ollama_chat_continue_with_result(
     let mut processed_content = response_content.replace("\\n", "\n");
     processed_content = processed_content.replace("javascript\n", "");
 
-    if let Some(code) = crate::commands::tool_parsing::detect_and_extract_js_code(&processed_content) {
+    if let Some(code) =
+        crate::commands::tool_parsing::detect_and_extract_js_code(&processed_content)
+    {
         info!(
             "Ollama Chat Continue: Extracted code for re-execution ({} chars):\n{}",
             code.len(),

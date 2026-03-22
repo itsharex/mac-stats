@@ -135,13 +135,8 @@ impl AlertManager {
                 if required_secs == 0 {
                     // Immediate rule — fire right away
                 } else {
-                    let first_true = *self
-                        .condition_since
-                        .entry(alert_id.clone())
-                        .or_insert(now);
-                    let sustained = now
-                        .signed_duration_since(first_true)
-                        .num_seconds();
+                    let first_true = *self.condition_since.entry(alert_id.clone()).or_insert(now);
+                    let sustained = now.signed_duration_since(first_true).num_seconds();
                     if sustained < required_secs as i64 {
                         continue; // not sustained long enough yet
                     }
@@ -160,11 +155,7 @@ impl AlertManager {
             for channel_id in &alert.channels {
                 if let Some(channel) = self.channels.get_mut(channel_id.as_str()) {
                     if let Err(e) = channel.send(&message, &context) {
-                        tracing::error!(
-                            "Failed to send alert to channel {}: {}",
-                            channel_id,
-                            e
-                        );
+                        tracing::error!("Failed to send alert to channel {}: {}", channel_id, e);
                     }
                 }
             }

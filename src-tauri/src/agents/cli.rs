@@ -171,9 +171,8 @@ mod tests {
 
     #[test]
     fn parse_testing_md_splits_sections_into_prompts() {
-        let prompts = parse_testing_md(
-            "## Test: one\nFirst prompt.\n\n## Test: two\nSecond prompt.\n",
-        );
+        let prompts =
+            parse_testing_md("## Test: one\nFirst prompt.\n\n## Test: two\nSecond prompt.\n");
         assert_eq!(prompts, vec!["First prompt.", "Second prompt."]);
     }
 

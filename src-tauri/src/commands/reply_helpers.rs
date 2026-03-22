@@ -144,7 +144,10 @@ pub(crate) async fn mastodon_post(status: &str, visibility: &str) -> Result<Stri
 }
 
 /// Append a line to a file, creating it if needed. Returns the path on success.
-pub(crate) fn append_to_file(path: &std::path::Path, content: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn append_to_file(
+    path: &std::path::Path,
+    content: &str,
+) -> Result<std::path::PathBuf, String> {
     use std::io::Write;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {}", e))?;

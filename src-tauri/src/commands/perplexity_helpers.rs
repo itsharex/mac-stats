@@ -31,7 +31,10 @@ pub(crate) async fn handle_perplexity_search(
         "🔎 Searching (Perplexity) for \"{}\"…",
         crate::logging::ellipse(search_arg, 35)
     ));
-    info!("Discord/Ollama: PERPLEXITY_SEARCH requested: {}", search_arg);
+    info!(
+        "Discord/Ollama: PERPLEXITY_SEARCH requested: {}",
+        search_arg
+    );
 
     let q_lower = question.to_lowercase();
     let is_news = is_news_query(question);
@@ -164,13 +167,14 @@ fn format_search_results_markdown(
             } else {
                 format!("- **Date:** {}\n", date_str)
             };
-            let page_type = if is_news && is_likely_article_like_result(&r.title, &r.url, &r.snippet) {
-                "- **Page type:** article-like\n"
-            } else if is_news {
-                "- **Page type:** hub/landing page\n"
-            } else {
-                ""
-            };
+            let page_type =
+                if is_news && is_likely_article_like_result(&r.title, &r.url, &r.snippet) {
+                    "- **Page type:** article-like\n"
+                } else if is_news {
+                    "- **Page type:** hub/landing page\n"
+                } else {
+                    ""
+                };
             format!(
                 "### {}. {}\n- **URL:** {}\n{}{}- **Snippet:** {}",
                 i + 1,
@@ -209,7 +213,11 @@ async fn auto_screenshot_urls(
         .await;
         match nav_result {
             Ok(Ok(_)) => {
-                send_status(&format!("📸 Taking screenshot {} of {}…", i + 1, urls.len()));
+                send_status(&format!(
+                    "📸 Taking screenshot {} of {}…",
+                    i + 1,
+                    urls.len()
+                ));
                 let shot_result =
                     tokio::task::spawn_blocking(crate::browser_agent::take_screenshot_current_page)
                         .await;
@@ -667,8 +675,7 @@ mod tests {
 
     #[test]
     fn build_perplexity_news_tool_suffix_includes_hub_only_warning_when_no_article_like() {
-        let suffix =
-            build_perplexity_news_tool_suffix(false, None, false);
+        let suffix = build_perplexity_news_tool_suffix(false, None, false);
         assert!(
             suffix.contains("Article-grade results were not found"),
             "hub-only suffix must contain Article-grade warning, got: {:?}",
@@ -679,8 +686,7 @@ mod tests {
 
     #[test]
     fn build_perplexity_news_tool_suffix_no_hub_only_warning_when_article_like() {
-        let suffix =
-            build_perplexity_news_tool_suffix(true, None, false);
+        let suffix = build_perplexity_news_tool_suffix(true, None, false);
         assert!(
             !suffix.contains("Article-grade results were not found"),
             "when search had article-like results, suffix must not contain hub-only warning"

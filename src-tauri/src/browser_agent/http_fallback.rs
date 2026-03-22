@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
-use scraper::{Html, Selector};
 use crate::mac_stats_info;
+use scraper::{Html, Selector};
 use url::Url;
 
 use crate::commands::browser::fetch_page_content;

@@ -6,9 +6,7 @@
 use tracing::info;
 
 use crate::commands::content_reduction::{reduce_fetched_content_to_fit, CHARS_PER_TOKEN};
-use crate::commands::redmine_helpers::{
-    is_redmine_review_or_summarize_only,
-};
+use crate::commands::redmine_helpers::is_redmine_review_or_summarize_only;
 
 fn send_status(tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>, msg: &str) {
     if let Some(tx) = tx {
@@ -72,19 +70,15 @@ pub(crate) async fn handle_fetch_url(
 ) -> Result<String, String> {
     send_status(
         status_tx,
-        &format!(
-            "🌐 Fetching page at {}…",
-            crate::logging::ellipse(arg, 45)
-        ),
+        &format!("🌐 Fetching page at {}…", crate::logging::ellipse(arg, 45)),
     );
     info!("Discord/Ollama: FETCH_URL requested: {}", arg);
     let url = arg.to_string();
-    let fetch_result = tokio::task::spawn_blocking(move || {
-        crate::commands::browser::fetch_page_content(&url)
-    })
-    .await
-    .map_err(|e| format!("Fetch task: {}", e))?
-    .map_err(|e| format!("Fetch page failed: {}", e));
+    let fetch_result =
+        tokio::task::spawn_blocking(move || crate::commands::browser::fetch_page_content(&url))
+            .await
+            .map_err(|e| format!("Fetch task: {}", e))?
+            .map_err(|e| format!("Fetch page failed: {}", e));
 
     match fetch_result {
         Ok(body) => {
@@ -126,13 +120,12 @@ pub(crate) async fn handle_fetch_url(
                     crate::logging::ellipse(&e, 300)
                 );
                 let url_lower = arg.to_lowercase();
-                let redmine_hint = if url_lower.contains("redmine")
-                    || url_lower.contains("/issues/")
-                {
-                    " For Redmine tickets use REDMINE_API or say \"review ticket <id>\"."
-                } else {
-                    ""
-                };
+                let redmine_hint =
+                    if url_lower.contains("redmine") || url_lower.contains("/issues/") {
+                        " For Redmine tickets use REDMINE_API or say \"review ticket <id>\"."
+                    } else {
+                        ""
+                    };
                 Ok(format!(
                     "That URL could not be fetched (connection or server error).{redmine_hint} Answer without that page."
                 ))
@@ -197,9 +190,7 @@ pub(crate) async fn handle_discord_api(
             successful_call: None,
         };
     }
-    if last_successful_call
-        .is_some_and(|(m, p)| m == &method && p == &path)
-    {
+    if last_successful_call.is_some_and(|(m, p)| m == &method && p == &path) {
         return DiscordApiResult {
             message: "You already received the data for this endpoint above. Format it for the user and reply; do not call DISCORD_API again for the same path."
                 .to_string(),
@@ -222,10 +213,7 @@ pub(crate) async fn handle_discord_api(
         Err(e) => {
             let msg = crate::discord::api::sanitize_discord_api_error(&e);
             DiscordApiResult {
-                message: format!(
-                    "Discord API failed: {}. Answer without this result.",
-                    msg
-                ),
+                message: format!("Discord API failed: {}. Answer without this result.", msg),
                 successful_call: None,
             }
         }
@@ -257,10 +245,7 @@ pub(crate) async fn handle_redmine_api(
             .to_string();
     }
 
-    send_status(
-        status_tx,
-        &format!("Querying Redmine: {} {}", method, path),
-    );
+    send_status(status_tx, &format!("Querying Redmine: {} {}", method, path));
     info!(
         "Agent router [{}]: REDMINE_API {} {}",
         request_id, method, path
@@ -292,12 +277,7 @@ pub(crate) async fn handle_redmine_api(
                     let id = path
                         .trim_start_matches('/')
                         .strip_prefix("issues/")
-                        .map(|s| {
-                            s.split(['.', '?'])
-                                .next()
-                                .unwrap_or("")
-                                .to_string()
-                        })
+                        .map(|s| s.split(['.', '?']).next().unwrap_or("").to_string())
                         .unwrap_or_default();
                     if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) {
                         msg.push_str(&format!(
@@ -309,9 +289,6 @@ pub(crate) async fn handle_redmine_api(
             }
             msg
         }
-        Err(e) => format!(
-            "Redmine API failed: {}. Answer without this result.",
-            e
-        ),
+        Err(e) => format!("Redmine API failed: {}. Answer without this result.", e),
     }
 }

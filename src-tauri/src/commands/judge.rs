@@ -66,7 +66,10 @@ fn build_judge_user_message(
         .collect::<Vec<_>>()
         .join("\n");
     let gt_block = match ground_truth {
-        Some(gt) => format!("\n\nGround truth (highest-priority criteria):\n{}", truncate(gt, 2000)),
+        Some(gt) => format!(
+            "\n\nGround truth (highest-priority criteria):\n{}",
+            truncate(gt, 2000)
+        ),
         None => String::new(),
     };
     format!(
@@ -103,13 +106,8 @@ pub async fn run_judge(
     screenshot_paths: &[PathBuf],
     ground_truth: Option<&str>,
 ) -> JudgeVerdict {
-    let user_content = build_judge_user_message(
-        task,
-        result,
-        step_summaries,
-        screenshot_paths,
-        ground_truth,
-    );
+    let user_content =
+        build_judge_user_message(task, result, step_summaries, screenshot_paths, ground_truth);
     let messages = vec![
         crate::ollama::ChatMessage {
             role: "system".to_string(),
@@ -122,19 +120,14 @@ pub async fn run_judge(
             images: None,
         },
     ];
-    let response = match crate::commands::ollama::send_ollama_chat_messages(
-        messages,
-        None,
-        None,
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            warn!("Agent judge: LLM call failed: {}", e);
-            return JudgeVerdict::default();
-        }
-    };
+    let response =
+        match crate::commands::ollama::send_ollama_chat_messages(messages, None, None).await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Agent judge: LLM call failed: {}", e);
+                return JudgeVerdict::default();
+            }
+        };
     let raw = response.message.content.trim();
     // Try to extract JSON from the response (model might wrap in markdown).
     let json_str = if let Some(start) = raw.find('{') {
@@ -170,7 +163,14 @@ pub async fn run_judge_if_enabled(
         return;
     }
     let step_summaries: Vec<String> = vec![];
-    let verdict = run_judge(task, result, &step_summaries, attachment_paths, ground_truth).await;
+    let verdict = run_judge(
+        task,
+        result,
+        &step_summaries,
+        attachment_paths,
+        ground_truth,
+    )
+    .await;
     let v = verdict.verdict.unwrap_or(false);
     let reason = verdict
         .reasoning

@@ -636,7 +636,10 @@ pub async fn call_tool(
         Err(e) => e,
     };
     if is_transient_mcp_error(&err) {
-        warn!("MCP call_tool {} transient error, retrying once: {}", tool_name, err);
+        warn!(
+            "MCP call_tool {} transient error, retrying once: {}",
+            tool_name, err
+        );
         err = match call_tool_once(server_url, tool_name, params).await {
             Ok(t) => return Ok(t),
             Err(e) => e,

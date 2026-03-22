@@ -7,15 +7,30 @@ use scraper::{ElementRef, Html, Node};
 
 /// Tags whose entire subtree is dropped (content is never useful for the LLM).
 const SKIP_TAGS: &[&str] = &[
-    "script", "style", "head", "meta", "link", "noscript", "svg", "iframe",
-    "object", "embed",
+    "script", "style", "head", "meta", "link", "noscript", "svg", "iframe", "object", "embed",
 ];
 
 /// Block-level tags that get a newline before them in the output.
 const BLOCK_TAGS: &[&str] = &[
-    "p", "div", "section", "article", "main", "header", "footer", "nav",
-    "aside", "blockquote", "pre", "figure", "figcaption", "details",
-    "summary", "table", "tr", "br", "hr",
+    "p",
+    "div",
+    "section",
+    "article",
+    "main",
+    "header",
+    "footer",
+    "nav",
+    "aside",
+    "blockquote",
+    "pre",
+    "figure",
+    "figcaption",
+    "details",
+    "summary",
+    "table",
+    "tr",
+    "br",
+    "hr",
 ];
 
 /// Strip HTML noise and return clean, structured text suitable for an LLM.
@@ -211,7 +226,8 @@ mod tests {
 
     #[test]
     fn strips_svg_entirely() {
-        let html = r#"<html><body><p>Before</p><svg><path d="M0 0"/></svg><p>After</p></body></html>"#;
+        let html =
+            r#"<html><body><p>Before</p><svg><path d="M0 0"/></svg><p>After</p></body></html>"#;
         let cleaned = clean_html(html);
         assert!(!cleaned.contains("path"));
         assert!(cleaned.contains("Before"));
@@ -229,7 +245,8 @@ mod tests {
 
     #[test]
     fn empty_page_returns_empty() {
-        let html = "<html><head><script>all js</script></head><body><script>more</script></body></html>";
+        let html =
+            "<html><head><script>all js</script></head><body><script>more</script></body></html>";
         let cleaned = clean_html(html);
         assert!(cleaned.trim().is_empty());
     }
@@ -239,7 +256,11 @@ mod tests {
         let html = "<html><body><p>A</p>\n\n\n\n\n<p>B</p></body></html>";
         let cleaned = clean_html(html);
         let newline_runs: Vec<&str> = cleaned.split("\n\n\n").collect();
-        assert_eq!(newline_runs.len(), 1, "Should not have 3+ consecutive newlines");
+        assert_eq!(
+            newline_runs.len(),
+            1,
+            "Should not have 3+ consecutive newlines"
+        );
     }
 
     #[test]
@@ -273,7 +294,11 @@ mod tests {
             </body></html>"#;
         let cleaned = clean_html(html);
         let ratio = cleaned.len() as f64 / html.len() as f64;
-        assert!(ratio < 0.5, "Cleaned should be <50% of original, got {:.0}%", ratio * 100.0);
+        assert!(
+            ratio < 0.5,
+            "Cleaned should be <50% of original, got {:.0}%",
+            ratio * 100.0
+        );
         assert!(cleaned.contains("# Welcome to Our Site"));
         assert!(cleaned.contains("main content"));
         assert!(cleaned.contains("[a link](https://example.com/link)"));

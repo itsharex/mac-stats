@@ -33,9 +33,7 @@ fn merge_debounced_contents(parts: &[DebouncedPart]) -> String {
     if parts.len() == 1 {
         return parts[0].content.clone();
     }
-    let same_author = parts
-        .windows(2)
-        .all(|w| w[0].author_id == w[1].author_id);
+    let same_author = parts.windows(2).all(|w| w[0].author_id == w[1].author_id);
     if same_author {
         parts
             .iter()
@@ -102,14 +100,7 @@ pub(super) async fn enqueue_or_run_router(
     if discord_message_bypasses_debounce(&new_message, &content, debounce_ms)
         || !attachment_images_base64.is_empty()
     {
-        run_discord_ollama_router(
-            ctx,
-            new_message,
-            content,
-            attachment_images_base64,
-            mode,
-        )
-        .await;
+        run_discord_ollama_router(ctx, new_message, content, attachment_images_base64, mode).await;
         return;
     }
 
@@ -128,9 +119,7 @@ pub(super) async fn enqueue_or_run_router(
     };
 
     let gen = {
-        let mut map = pending_map()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut map = pending_map().lock().unwrap_or_else(|e| e.into_inner());
         let entry = map.entry(channel_id).or_insert(ChannelPending {
             generation: 0,
             parts: Vec::new(),
@@ -150,9 +139,7 @@ pub(super) async fn enqueue_or_run_router(
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(debounce_ms)).await;
         let pending = {
-            let mut map = pending_map()
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let mut map = pending_map().lock().unwrap_or_else(|e| e.into_inner());
             let Some(p) = map.get(&channel_id) else {
                 return;
             };

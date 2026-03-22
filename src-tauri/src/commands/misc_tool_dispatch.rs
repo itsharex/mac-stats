@@ -6,9 +6,8 @@
 use tracing::info;
 
 use crate::commands::ollama_models::{
-    delete_ollama_model, get_ollama_version, list_ollama_models_full,
-    list_ollama_running_models, load_ollama_model, ollama_embeddings,
-    pull_ollama_model, unload_ollama_model,
+    delete_ollama_model, get_ollama_version, list_ollama_models_full, list_ollama_running_models,
+    load_ollama_model, ollama_embeddings, pull_ollama_model, unload_ollama_model,
 };
 use crate::commands::reply_helpers::{append_to_file, mastodon_post};
 
@@ -173,9 +172,7 @@ pub(crate) async fn handle_mcp(
             } else {
                 (arg.to_string(), None)
             };
-            match crate::mcp::call_tool(&server_url, &mcp_tool_name, mcp_args)
-                .await
-            {
+            match crate::mcp::call_tool(&server_url, &mcp_tool_name, mcp_args).await {
                 Ok(result) => {
                     info!(
                         "Agent router: MCP tool {} completed ({} chars)",
@@ -188,10 +185,7 @@ pub(crate) async fn handle_mcp(
                     )
                 }
                 Err(e) => {
-                    info!(
-                        "Agent router: MCP tool {} failed: {}",
-                        mcp_tool_name, e
-                    );
+                    info!("Agent router: MCP tool {} failed: {}", mcp_tool_name, e);
                     let hint = mcp_stdio_troubleshooting_hint(&server_url, &e);
                     format!(
                         "MCP tool \"{}\" failed: {}. Answer the user without this result.{}",
@@ -310,10 +304,7 @@ pub(crate) async fn handle_mastodon_post(
     }
 }
 
-pub(crate) fn handle_memory_append(
-    arg: &str,
-    discord_reply_channel_id: Option<u64>,
-) -> String {
+pub(crate) fn handle_memory_append(arg: &str, discord_reply_channel_id: Option<u64>) -> String {
     let arg = arg.trim();
     if arg.is_empty() {
         return "MEMORY_APPEND requires content. Usage: MEMORY_APPEND: <lesson> or MEMORY_APPEND: agent:<slug-or-id> <lesson>".to_string();
@@ -332,9 +323,7 @@ pub(crate) fn handle_memory_append(
     let lesson_line = format!("- {}\n", lesson.trim_start_matches("- "));
     let result = if let Some(selector) = target {
         let agents = crate::agents::load_agents();
-        if let Some(agent) =
-            crate::agents::find_agent_by_id_or_name(&agents, &selector)
-        {
+        if let Some(agent) = crate::agents::find_agent_by_id_or_name(&agents, &selector) {
             if let Some(dir) = crate::agents::get_agent_dir(&agent.id) {
                 let path = dir.join("memory.md");
                 append_to_file(&path, &lesson_line)
@@ -346,9 +335,7 @@ pub(crate) fn handle_memory_append(
         }
     } else {
         let path = discord_reply_channel_id
-            .map(
-                crate::config::Config::memory_file_path_for_discord_channel,
-            )
+            .map(crate::config::Config::memory_file_path_for_discord_channel)
             .unwrap_or_else(crate::config::Config::memory_file_path);
         append_to_file(&path, &lesson_line)
     };

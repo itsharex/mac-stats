@@ -346,9 +346,9 @@ pub struct OllamaClient {
 
 impl OllamaClient {
     pub fn new(config: OllamaConfig) -> Result<Self> {
-
         config.validate()?;
-        mac_stats_info!("ollama/api",
+        mac_stats_info!(
+            "ollama/api",
             "Ollama: Initializing client with endpoint: {}",
             config.endpoint
         );
@@ -370,7 +370,6 @@ impl OllamaClient {
     /// Check if Ollama is available
     #[allow(dead_code)] // May be used in future or via direct client access
     pub async fn check_connection(&self) -> Result<bool> {
-
         let url = format!("{}/api/tags", self.config.endpoint);
         mac_stats_debug!("ollama/api", "Ollama: Checking connection to {}", url);
 
@@ -380,7 +379,8 @@ impl OllamaClient {
         if let Ok(Some(api_key)) = self.config.get_api_key() {
             let masked = security::mask_credential(&api_key);
             request = request.header("Authorization", format!("Bearer {}", api_key));
-            mac_stats_debug!("ollama/api",
+            mac_stats_debug!(
+                "ollama/api",
                 "Ollama: Using API key for authentication (masked: {})",
                 masked
             );
@@ -390,9 +390,14 @@ impl OllamaClient {
             Ok(response) => {
                 let success = response.status().is_success();
                 if success {
-                    mac_stats_info!("ollama/api", "Ollama: Connection successful to {}", self.config.endpoint);
+                    mac_stats_info!(
+                        "ollama/api",
+                        "Ollama: Connection successful to {}",
+                        self.config.endpoint
+                    );
                 } else {
-                    mac_stats_debug!("ollama/api",
+                    mac_stats_debug!(
+                        "ollama/api",
                         "Ollama: Connection failed - HTTP status: {}",
                         response.status()
                     );
@@ -413,7 +418,10 @@ impl OllamaClient {
 
         let url = format!("{}/api/chat", self.config.endpoint);
         mac_stats_info!("ollama/api", "Ollama: Using endpoint: {}", url);
-        mac_stats_info!("ollama/api", "Ollama: Streaming is disabled (stream: false)");
+        mac_stats_info!(
+            "ollama/api",
+            "Ollama: Streaming is disabled (stream: false)"
+        );
 
         let options = if self.config.temperature.is_some() || self.config.num_ctx.is_some() {
             Some(ChatOptions {
@@ -434,9 +442,11 @@ impl OllamaClient {
         // Log raw request JSON before sending
         let request_json = serde_json::to_string_pretty(&request)
             .unwrap_or_else(|_| "Failed to serialize request".to_string());
-        mac_stats_info!("ollama/api",
+        mac_stats_info!(
+            "ollama/api",
             "Ollama: Sending HTTP POST to {} with request JSON:\n{}",
-            url, request_json
+            url,
+            request_json
         );
 
         let mut http_request = self.client.post(&url).json(&request);
@@ -445,7 +455,8 @@ impl OllamaClient {
         if let Ok(Some(api_key)) = self.config.get_api_key() {
             let masked = security::mask_credential(&api_key);
             http_request = http_request.header("Authorization", format!("Bearer {}", api_key));
-            mac_stats_debug!("ollama/api",
+            mac_stats_debug!(
+                "ollama/api",
                 "Ollama: Using API key for chat request (masked: {})",
                 masked
             );
@@ -464,9 +475,11 @@ impl OllamaClient {
         // Log raw response JSON
         let response_json = serde_json::to_string_pretty(&response)
             .unwrap_or_else(|_| "Failed to serialize response".to_string());
-        mac_stats_info!("ollama/api",
+        mac_stats_info!(
+            "ollama/api",
             "Ollama: Received HTTP response in {:?} with response JSON:\n{}",
-            duration, response_json
+            duration,
+            response_json
         );
 
         Ok(response)
@@ -495,7 +508,8 @@ impl OllamaClient {
             .json::<ListResponse>()
             .await
             .context("Failed to parse /api/tags response")?;
-        mac_stats_info!("ollama/api",
+        mac_stats_info!(
+            "ollama/api",
             "Ollama: list_models_full returned {} models",
             response.models.len()
         );
@@ -542,7 +556,13 @@ impl OllamaClient {
     pub async fn pull_model(&self, model: &str, stream: bool) -> Result<()> {
         let url = format!("{}/api/pull", self.config.endpoint.trim_end_matches('/'));
         let body = serde_json::json!({ "model": model, "stream": stream });
-        mac_stats_debug!("ollama/api", "Ollama: POST {} model={} stream={}", url, model, stream);
+        mac_stats_debug!(
+            "ollama/api",
+            "Ollama: POST {} model={} stream={}",
+            url,
+            model,
+            stream
+        );
         let mut request = self.client.post(&url).json(&body);
         if let Ok(Some(api_key)) = self.config.get_api_key() {
             request = request.header("Authorization", format!("Bearer {}", api_key));
@@ -659,9 +679,12 @@ impl OllamaClient {
         if let Some(ka) = keep_alive {
             body["keep_alive"] = serde_json::Value::String(ka.to_string());
         }
-        mac_stats_debug!("ollama/api",
+        mac_stats_debug!(
+            "ollama/api",
             "Ollama: POST {} load model={} keep_alive={:?}",
-            url, model, keep_alive
+            url,
+            model,
+            keep_alive
         );
         let mut request = self.client.post(&url).json(&body);
         if let Ok(Some(api_key)) = self.config.get_api_key() {

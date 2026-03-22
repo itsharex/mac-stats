@@ -175,7 +175,9 @@ impl Config {
     pub fn credential_accounts_file_path() -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             let home_path = PathBuf::from(home);
-            return home_path.join(".mac-stats").join("credential_accounts.json");
+            return home_path
+                .join(".mac-stats")
+                .join("credential_accounts.json");
         }
         std::env::temp_dir().join("mac-stats-credential_accounts.json")
     }
@@ -578,10 +580,7 @@ impl Config {
         let config_path = Self::config_file_path();
         if let Ok(content) = std::fs::read_to_string(&config_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(n) = json
-                    .get("browserIdleTimeoutSecs")
-                    .and_then(|v| v.as_u64())
-                {
+                if let Some(n) = json.get("browserIdleTimeoutSecs").and_then(|v| v.as_u64()) {
                     return n.clamp(MIN, MAX);
                 }
             }
@@ -1298,7 +1297,8 @@ mod tests {
 
     #[test]
     fn merge_prompt_content_empty_existing_returns_default() {
-        let result = Config::merge_prompt_content("", "Default paragraph one.\n\nDefault paragraph two.");
+        let result =
+            Config::merge_prompt_content("", "Default paragraph one.\n\nDefault paragraph two.");
         assert_eq!(result, "Default paragraph one.\n\nDefault paragraph two.");
     }
 
@@ -1346,7 +1346,8 @@ mod tests {
 
     #[test]
     fn merge_prompt_content_key_matching_is_exact_first_line() {
-        let existing = "**Tool-first rule:** If the user request can be fulfilled\nwith extra details.";
+        let existing =
+            "**Tool-first rule:** If the user request can be fulfilled\nwith extra details.";
         let default = "**Tool-first rule:** If the user request can be fulfilled\nwith default details.\n\n**New rule:** Something else.";
         let result = Config::merge_prompt_content(existing, default);
         assert!(

@@ -137,7 +137,10 @@ pub fn run_periodic_alert_evaluation() {
             custom_data: HashMap::new(),
         };
         if let Err(e) = manager.evaluate(ctx) {
-            debug!("Alert: periodic evaluation failed for monitor {}: {}", monitor_id, e);
+            debug!(
+                "Alert: periodic evaluation failed for monitor {}: {}",
+                monitor_id, e
+            );
         }
     }
 }

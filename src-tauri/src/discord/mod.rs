@@ -32,6 +32,8 @@ use std::time::UNIX_EPOCH;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
+use crate::commands::session_history::cap_tail_chronological;
+
 /// Time-of-day period for having_fun: influences tone (e.g. quieter at night).
 #[derive(Clone, Copy)]
 enum TimeOfDay {
@@ -411,7 +413,9 @@ fn load_channel_config_full() -> (
                 let debounce_ms = if immediate {
                     Some(0u64)
                 } else {
-                    obj.get("debounce_ms").and_then(|v| v.as_u64()).map(|n| n.min(60_000))
+                    obj.get("debounce_ms")
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n.min(60_000))
                 };
                 ChannelSettings {
                     mode,
@@ -1157,11 +1161,8 @@ async fn having_fun_respond(
     });
 
     const HISTORY_CAP: usize = 20;
-    for (role, content) in prior
+    for (role, content) in cap_tail_chronological(prior, HISTORY_CAP)
         .into_iter()
-        .rev()
-        .take(HISTORY_CAP)
-        .rev()
         .filter(|(_, content)| !is_agent_failure_notice(content))
     {
         ollama_msgs.push(crate::ollama::ChatMessage {
@@ -1214,9 +1215,7 @@ async fn having_fun_respond(
                 let emoji = first_line.strip_prefix("REACT:").unwrap_or("").trim();
                 if !emoji.is_empty() && emoji.len() <= 20 && reply.lines().count() <= 2 {
                     if let Some(msg_id) = messages.last().and_then(|m| m.message_id) {
-                        if let Ok(discord_msg) = channel
-                            .message(ctx, MessageId::new(msg_id))
-                            .await
+                        if let Ok(discord_msg) = channel.message(ctx, MessageId::new(msg_id)).await
                         {
                             if discord_msg
                                 .react(ctx, ReactionType::Unicode(emoji.to_string()))
@@ -1309,11 +1308,8 @@ async fn having_fun_idle_thought(channel_id: u64, ctx: &Context) {
     });
 
     const HISTORY_CAP: usize = 10;
-    for (role, content) in prior
+    for (role, content) in cap_tail_chronological(prior, HISTORY_CAP)
         .into_iter()
-        .rev()
-        .take(HISTORY_CAP)
-        .rev()
         .filter(|(_, content)| !is_agent_failure_notice(content))
     {
         ollama_msgs.push(crate::ollama::ChatMessage {
@@ -1633,7 +1629,8 @@ fn parse_discord_ollama_overrides(
     let (skill_content, requested_skill_selector) = match skill_selector {
         Some(ref sel) => {
             let skills = crate::skills::load_skills();
-            let content = crate::skills::find_skill_by_number_or_topic(&skills, sel).map(|s| s.content.clone());
+            let content = crate::skills::find_skill_by_number_or_topic(&skills, sel)
+                .map(|s| s.content.clone());
             (content, Some(sel.clone()))
         }
         None => (None, None),
@@ -1932,16 +1929,14 @@ pub(super) async fn run_discord_ollama_router(
     const CRITERIA_PROGRESS: &str = "Extracting success criteria…";
     // Placeholder message edited in-place while tools run (throttled); flushed with the final reply.
     let throttle_ms = crate::config::Config::discord_draft_throttle_ms();
-    let discord_draft = match new_message
-        .channel_id
-        .say(&ctx, "Processing…")
-        .await
-    {
-        Ok(placeholder) => Some(crate::commands::discord_draft_stream::spawn_discord_draft_editor(
-            ctx.clone(),
-            placeholder,
-            std::time::Duration::from_millis(throttle_ms),
-        )),
+    let discord_draft = match new_message.channel_id.say(&ctx, "Processing…").await {
+        Ok(placeholder) => Some(
+            crate::commands::discord_draft_stream::spawn_discord_draft_editor(
+                ctx.clone(),
+                placeholder,
+                std::time::Duration::from_millis(throttle_ms),
+            ),
+        ),
         Err(e) => {
             debug!(
                 "Discord: draft placeholder send failed (using reply-only mode): {}",
@@ -2067,7 +2062,9 @@ pub(super) async fn run_discord_ollama_router(
                         "Something went wrong on my side — try again in a bit.".to_string(),
                         Vec::new(),
                     )
-                } else if let Some(friendly) = crate::commands::content_reduction::sanitize_ollama_error_for_user(&e) {
+                } else if let Some(friendly) =
+                    crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                {
                     (friendly, Vec::new())
                 } else {
                     let err_lower = e.to_string().to_lowercase();
@@ -2176,7 +2173,10 @@ pub(super) async fn run_discord_ollama_router(
             if let Err(e2) = new_message.channel_id.say(&ctx, fallback).await {
                 error!("Discord: could not send fallback message either: {}", e2);
             } else {
-                info!("Discord: sent fallback message to channel {} (reply send failed: {})", channel_id_u64, err_str);
+                info!(
+                    "Discord: sent fallback message to channel {} (reply send failed: {})",
+                    channel_id_u64, err_str
+                );
             }
             break;
         }
@@ -2248,7 +2248,10 @@ pub(super) async fn run_discord_ollama_router(
             if let Err(_e) = send_result {
                 let fallback = "Could not send attachment(s) to this channel (check bot permissions: Send Messages, Attach Files).";
                 if let Err(e2) = new_message.channel_id.say(&ctx, fallback).await {
-                    error!("Discord: could not send fallback message for attachment failure: {}", e2);
+                    error!(
+                        "Discord: could not send fallback message for attachment failure: {}",
+                        e2
+                    );
                 }
             } else {
                 info!(

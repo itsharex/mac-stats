@@ -166,9 +166,7 @@ pub async fn discord_api_request(
         if crate::logging::VERBOSITY.load(Ordering::Relaxed) >= 3 {
             debug!("Discord API request body (decoded): {}", body_str);
         }
-        Some(
-            serde_json::from_str(body_str).map_err(|e| format!("Invalid JSON body: {}", e))?,
-        )
+        Some(serde_json::from_str(body_str).map_err(|e| format!("Invalid JSON body: {}", e))?)
     } else {
         None
     };
@@ -216,13 +214,8 @@ pub async fn discord_api_request(
         let body_text = resp.text().await.unwrap_or_default();
 
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            wait_for_rate_limit(
-                retry_after_hdr,
-                &body_text,
-                &mut rate_limit_retries,
-                &route,
-            )
-            .await?;
+            wait_for_rate_limit(retry_after_hdr, &body_text, &mut rate_limit_retries, &route)
+                .await?;
             continue;
         }
 

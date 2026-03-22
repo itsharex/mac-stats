@@ -346,19 +346,21 @@ async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, S
             query, id_info
         );
         match crate::commands::brave::get_brave_api_key() {
-            Some(api_key) => match crate::commands::brave::brave_web_search(query, &api_key).await {
-                Ok(results) => {
-                    info!(
-                        "Scheduler: BRAVE_SEARCH succeeded ({} chars)",
-                        results.chars().count()
-                    );
-                    return Ok(None);
+            Some(api_key) => {
+                match crate::commands::brave::brave_web_search(query, &api_key).await {
+                    Ok(results) => {
+                        info!(
+                            "Scheduler: BRAVE_SEARCH succeeded ({} chars)",
+                            results.chars().count()
+                        );
+                        return Ok(None);
+                    }
+                    Err(e) => {
+                        error!("Scheduler: BRAVE_SEARCH failed (id={}): {}", id_info, e);
+                        return Err(e.to_string());
+                    }
                 }
-                Err(e) => {
-                    error!("Scheduler: BRAVE_SEARCH failed (id={}): {}", id_info, e);
-                    return Err(e.to_string());
-                }
-            },
+            }
             None => {
                 warn!(
                     "Scheduler: BRAVE_SEARCH skipped (no API key) (id={})",
@@ -582,7 +584,8 @@ async fn scheduler_loop() {
                                     text.clone()
                                 };
                                 if let Err(e) =
-                                    crate::discord::send_message_to_channel(channel_id, &message).await
+                                    crate::discord::send_message_to_channel(channel_id, &message)
+                                        .await
                                 {
                                     error!(
                                         "Scheduler: failed to send result to Discord channel {}: {}",
@@ -607,7 +610,8 @@ async fn scheduler_loop() {
                                 .map(|sid| format!("[Schedule: {}] Failed: {}", sid, msg))
                                 .unwrap_or_else(|| format!("Schedule failed: {}", msg));
                             if let Err(e) =
-                                crate::discord::send_message_to_channel(channel_id, &failure_msg).await
+                                crate::discord::send_message_to_channel(channel_id, &failure_msg)
+                                    .await
                             {
                                 error!(
                                     "Scheduler: failed to send failure message to Discord channel {}: {}",
@@ -741,13 +745,10 @@ pub fn add_schedule_at(
 
     let task_norm = task_normalized_for_dedup(&task);
     let is_duplicate = file_data.schedules.iter().any(|e| {
-        e.at.as_deref() == Some(at_str.as_str())
-            && task_normalized_for_dedup(&e.task) == task_norm
+        e.at.as_deref() == Some(at_str.as_str()) && task_normalized_for_dedup(&e.task) == task_norm
     });
     if is_duplicate {
-        info!(
-            "Scheduler: skipping duplicate one-shot (same at and task already scheduled)"
-        );
+        info!("Scheduler: skipping duplicate one-shot (same at and task already scheduled)");
         return Ok(ScheduleAddOutcome::AlreadyExists);
     }
 

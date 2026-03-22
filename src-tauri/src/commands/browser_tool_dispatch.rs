@@ -43,10 +43,7 @@ pub(crate) async fn handle_browser_screenshot(
         }
     } else {
         send_status(status_tx, "📸 Taking screenshot of current page");
-        match tokio::task::spawn_blocking(
-            crate::browser_agent::take_screenshot_current_page,
-        )
-        .await
+        match tokio::task::spawn_blocking(crate::browser_agent::take_screenshot_current_page).await
         {
             Ok(Ok(path)) => {
                 if let Some(tx) = status_tx {
@@ -119,16 +116,12 @@ pub(crate) async fn handle_browser_navigate(
                     "BROWSER_NAVIGATE CDP failed, ensuring Chrome on 9222 and retrying: {}",
                     crate::logging::ellipse(&cdp_err, 120)
                 );
-                tokio::task::spawn_blocking(|| {
-                    crate::browser_agent::ensure_chrome_on_port(9222)
-                })
-                .await
-                .ok();
+                tokio::task::spawn_blocking(|| crate::browser_agent::ensure_chrome_on_port(9222))
+                    .await
+                    .ok();
                 match tokio::task::spawn_blocking({
                     let u = url_arg.clone();
-                    move || {
-                        crate::browser_agent::navigate_and_get_state_with_options(&u, new_tab)
-                    }
+                    move || crate::browser_agent::navigate_and_get_state_with_options(&u, new_tab)
                 })
                 .await
                 {
@@ -149,10 +142,7 @@ pub(crate) async fn handle_browser_navigate(
                                 crate::logging::ellipse(&cdp_err2, 80),
                                 http_err
                             ),
-                            Err(e) => format!(
-                                "BROWSER_NAVIGATE HTTP fallback task error: {}",
-                                e
-                            ),
+                            Err(e) => format!("BROWSER_NAVIGATE HTTP fallback task error: {}", e),
                         }
                     }
                     Err(e) => {
@@ -178,10 +168,9 @@ pub(crate) async fn handle_browser_go_back(
     info!("Agent router [{}]: BROWSER_GO_BACK", request_id);
     match tokio::task::spawn_blocking(crate::browser_agent::go_back).await {
         Ok(Ok(state_str)) => state_str,
-        Ok(Err(e)) => append_latest_browser_state_guidance(&format!(
-            "BROWSER_GO_BACK failed: {}",
-            e
-        )),
+        Ok(Err(e)) => {
+            append_latest_browser_state_guidance(&format!("BROWSER_GO_BACK failed: {}", e))
+        }
         Err(e) => format!("BROWSER_GO_BACK task error: {}", e),
     }
 }
@@ -341,15 +330,9 @@ pub(crate) async fn handle_browser_scroll(
     };
     send_status(
         status_tx,
-        &format!(
-            "📜 Scrolling {}…",
-            crate::logging::ellipse(&scroll_arg, 20)
-        ),
+        &format!("📜 Scrolling {}…", crate::logging::ellipse(&scroll_arg, 20)),
     );
-    match tokio::task::spawn_blocking(move || {
-        crate::browser_agent::scroll_page(&scroll_arg)
-    })
-    .await
+    match tokio::task::spawn_blocking(move || crate::browser_agent::scroll_page(&scroll_arg)).await
     {
         Ok(Ok(state_str)) => state_str,
         Ok(Err(e)) => {
@@ -364,16 +347,10 @@ pub(crate) async fn handle_browser_scroll(
 }
 
 pub(crate) async fn handle_browser_extract() -> String {
-    match tokio::task::spawn_blocking(crate::browser_agent::extract_page_text)
-        .await
-    {
+    match tokio::task::spawn_blocking(crate::browser_agent::extract_page_text).await {
         Ok(Ok(text)) => text,
         Ok(Err(_cdp_err)) => {
-            match tokio::task::spawn_blocking(
-                crate::browser_agent::extract_http,
-            )
-            .await
-            {
+            match tokio::task::spawn_blocking(crate::browser_agent::extract_http).await {
                 Ok(Ok(text)) => text,
                 Ok(Err(e)) => format!(
                     "BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
@@ -401,10 +378,8 @@ pub(crate) async fn handle_browser_search_page(
             crate::logging::ellipse(&pattern, 30)
         ),
     );
-    match tokio::task::spawn_blocking(move || {
-        crate::browser_agent::search_page_text(&pattern)
-    })
-    .await
+    match tokio::task::spawn_blocking(move || crate::browser_agent::search_page_text(&pattern))
+        .await
     {
         Ok(Ok(result)) => result,
         Ok(Err(e)) => {

@@ -240,7 +240,8 @@ pub async fn run_periodic_session_compaction() {
         } else {
             None
         };
-        let compact_result = compact_conversation_history(&messages, &actual_question, discord_ch).await;
+        let compact_result =
+            compact_conversation_history(&messages, &actual_question, discord_ch).await;
         let compact_result = match compact_result {
             Ok(ok) => Ok(ok),
             Err(e) => {
@@ -343,7 +344,10 @@ mod tests {
     #[test]
     fn cap_context_truncates_at_sentence_boundary() {
         let first = "a".repeat(11_950);
-        let text = format!("{}. This part should be cut off because the total is over 12000 bytes.", first);
+        let text = format!(
+            "{}. This part should be cut off because the total is over 12000 bytes.",
+            first
+        );
         assert!(text.len() > MAX_COMPACTION_CONTEXT_BYTES);
 
         let capped = cap_context(&text);
@@ -380,13 +384,19 @@ mod tests {
     fn cap_context_multibyte_utf8_near_boundary() {
         let prefix = "a".repeat(11_970);
         // each '—' (em-dash) is 3 bytes; place several near the budget boundary
-        let text = format!("{}. Summary—with—em—dashes—that—push—past—the—limit—and—keep—going.", prefix);
+        let text = format!(
+            "{}. Summary—with—em—dashes—that—push—past—the—limit—and—keep—going.",
+            prefix
+        );
         assert!(text.len() > MAX_COMPACTION_CONTEXT_BYTES);
 
         let capped = cap_context(&text);
         assert!(capped.len() <= MAX_COMPACTION_CONTEXT_BYTES);
         assert!(capped.ends_with(TRUNCATION_MARKER));
-        assert!(capped.is_char_boundary(capped.len()), "result must be valid UTF-8");
+        assert!(
+            capped.is_char_boundary(capped.len()),
+            "result must be valid UTF-8"
+        );
     }
 
     #[test]

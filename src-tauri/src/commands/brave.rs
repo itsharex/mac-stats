@@ -166,7 +166,11 @@ pub async fn brave_web_search(query: &str, api_key: &str) -> Result<String, Stri
                 .and_then(|t| t.as_str())
                 .unwrap_or("(no title)")
                 .to_string();
-            let url = r.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+            let url = r
+                .get("url")
+                .and_then(|u| u.as_str())
+                .unwrap_or("")
+                .to_string();
             let snippet = r
                 .get("description")
                 .and_then(|d| d.as_str())
@@ -202,11 +206,7 @@ pub async fn brave_web_search(query: &str, api_key: &str) -> Result<String, Stri
     let text = if shaped.is_empty() {
         "No web results found.".to_string()
     } else {
-        crate::search_result_shaping::format_search_results_blob(
-            &shaped,
-            &heading,
-            MAX_BLOB_CHARS,
-        )
+        crate::search_result_shaping::format_search_results_blob(&shaped, &heading, MAX_BLOB_CHARS)
     };
     info!(
         "Brave agent: got {} results for \"{}\" (shaped to {}, blob {} bytes)",
