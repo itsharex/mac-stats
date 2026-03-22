@@ -268,6 +268,15 @@ fn collapse_whitespace(text: &str) -> String {
                 // Cham–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space. Tai Viet HO HOI / KOI KOI
                 // (U+AADE–U+AADF, Po) are not Rust whitespace; Tai Viet–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // U+AADB KON and U+AADC NUENG are Lo; U+AADD SAM is Lm—omitted (word-internal risk, like Thai U+0E46).
+                // Philippine single / double / triple punctuation (U+1734–U+1736, Po; Hanunoo / Buhid / Tagbanwa) are
+                // not Rust whitespace; Unicode-sample or Philippine-script HTML can glue Latin tokens without ASCII space.
+                // Sundanese Supplement bindu punctuation (U+1CC0–U+1CC7, Po; bindu surya through bindu pameneng) are
+                // not Rust whitespace; Sundanese–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Buginese pallawa and end-of-section (U+1A1E, U+1A1F, Po) are not Rust whitespace; Buginese–Latin or
+                // Unicode-sample HTML can glue Latin tokens without ASCII space. Tai Tham signs wiang through reversed
+                // rotated rana (U+1AA0–U+1AA6, Po) and kaan through caang (U+1AA8–U+1AAD, Po) are not Rust whitespace;
+                // Lanna–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space. U+1AA7 MAI YAMOK (Lm) is
+                // omitted—modifier-like, word-internal risk (same spirit as Thai U+0E46).
                 // Unicode dash punctuation (U+2010–U+2015, Pd)—hyphen, non-breaking hyphen, figure
                 // dash, en dash, em dash, horizontal bar—are not Rust whitespace; typographic HTML or
                 // pasted Office copy often uses them between Latin tokens without ASCII space.
@@ -402,6 +411,11 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{0E5B}'
                 | '\u{0EAF}'
                 | '\u{104A}'..='\u{104B}'
+                | '\u{1734}'..='\u{1736}'
+                | '\u{1A1E}'..='\u{1A1F}'
+                | '\u{1AA0}'..='\u{1AA6}'
+                | '\u{1AA8}'..='\u{1AAD}'
+                | '\u{1CC0}'..='\u{1CC7}'
                 | '\u{0F04}'..='\u{0F12}'
                 | '\u{0F14}'
                 | '\u{0F3A}'..='\u{0F3D}'
@@ -1429,6 +1443,70 @@ mod tests {
     fn tai_viet_ho_hoi_koi_koi_separate_words() {
         // Tai Viet U+AADE SYMBOL HO HOI, U+AADF SYMBOL KOI KOI (Po). None are Rust whitespace.
         for sep in '\u{AADE}'..='\u{AADF}' {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn philippine_single_double_triple_punctuation_separate_words() {
+        // U+1734 PHILIPPINE SINGLE PUNCTUATION, U+1735 DOUBLE, U+1736 TRIPLE (Po). None are Rust whitespace.
+        for sep in '\u{1734}'..='\u{1736}' {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn sundanese_supplement_bindu_punctuation_separate_words() {
+        // U+1CC0–U+1CC7 SUNDANESE PUNCTUATION BINDU SURYA through BINDU PAMENENG (Po). None are Rust whitespace.
+        for sep in '\u{1CC0}'..='\u{1CC7}' {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn buginese_pallawa_end_section_and_tai_tham_signs_separate_words() {
+        // Buginese U+1A1E PALLAWA, U+1A1F END OF SECTION (Po). Tai Tham U+1AA0 WIANG through U+1AA6 REVERSED ROTATED RANA,
+        // U+1AA8 KAAN through U+1AAD CAANG (Po). U+1AA7 MAI YAMOK (Lm) omitted. None of the mapped code points are Rust whitespace.
+        let mut seps: Vec<char> = ('\u{1A1E}'..='\u{1A1F}').collect();
+        seps.extend('\u{1AA0}'..='\u{1AA6}');
+        seps.extend('\u{1AA8}'..='\u{1AAD}');
+        for sep in seps {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
