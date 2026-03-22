@@ -192,11 +192,20 @@ fn collapse_whitespace(text: &str) -> String {
                 // Arabic number signs / ayah markers (U+0600–U+0605, U+06DD, U+08E2), Arabic
                 // Extended-A currency format marks (U+0890–U+0891, pound/piastre mark above), and
                 // Syriac abbreviation mark (U+070F) are Cf and not Rust whitespace; RTL scholarly
-                // or financial HTML can place them between scripts without a real space. Mongolian U+1806 (TODO SOFT
-                // HYPHEN) and U+180A (NIRUGU) are Cf but lie outside U+180B–U+180E (FVS / vowel sep).
+                // or financial HTML can place them between scripts without a real space. Mongolian
+                // U+1800–U+180E (BIRGA through vowel separator) are Po/Pd/Mn/Cf and not Rust
+                // whitespace—sentence punctuation (U+1800–U+1805, U+1807–U+180A), TODO soft hyphen
+                // (U+1806, Pd), free variation selectors (U+180B–U+180D, Mn), vowel separator
+                // (U+180E, Cf)—so mixed or pasted Mongolian/Manchu HTML can glue Latin tokens.
                 // Ethiopic wordspace (U+1361, Po) and Braille pattern blank (U+2800, So) are not Rust
-                // whitespace. Duployan shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not
-                // Rust whitespace either.
+                // whitespace. Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn) and
+                // shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust whitespace.
+                // Kaithi number signs (U+110BD, U+110CD, Cf) are not Rust whitespace; Indic numeral
+                // layout HTML can place them between scripts without an ASCII space. Egyptian
+                // hieroglyph format joiners / segment markers (U+13430–U+13438, Cf) and musical
+                // symbol begin/end beam–tie–slur–phrase (U+1D173–
+                // U+1D17A, Cf) are not Rust whitespace; scholarly or MusicXML-derived HTML can place
+                // them between scripts without an ASCII space.
                 '\u{0600}'..='\u{0605}'
                 | '\u{06DD}'
                 | '\u{070F}'
@@ -216,16 +225,19 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{200E}'
                 | '\u{200F}'
                 | '\u{202A}'..='\u{202E}'
-                | '\u{1806}'
-                | '\u{180A}'
-                | '\u{180B}'..='\u{180E}'
+                | '\u{1800}'..='\u{180E}'
                 | '\u{115F}'
                 | '\u{1160}'
                 | '\u{3164}'
                 | '\u{FFA0}'
                 | '\u{1361}'
                 | '\u{2800}'
+                | '\u{1BC9D}'..='\u{1BC9E}'
                 | '\u{1BCA0}'..='\u{1BCA3}'
+                | '\u{110BD}'
+                | '\u{110CD}'
+                | '\u{13430}'..='\u{13438}'
+                | '\u{1D173}'..='\u{1D17A}'
                 | '\u{FE00}'..='\u{FE0F}'
                 | '\u{E0100}'..='\u{E01EF}'
                 | '\u{E0000}'..='\u{E007F}'
@@ -584,15 +596,35 @@ mod tests {
     }
 
     #[test]
-    fn invisible_fillers_separate_words() {
-        // U+1806 Mongolian TODO SOFT HYPHEN; U+180A NIRUGU; U+180B–U+180D Mongolian free variation
-        // selectors; U+180E Mongolian vowel separator; U+115F/U+1160 Hangul choseong/jungseong
-        // fillers; U+3164 Hangul filler; U+FFA0 halfwidth Hangul filler: not Unicode whitespace in
-        // Rust, so they glue tokens in `split_whitespace()` without normalization.
+    fn mongolian_punctuation_separates_words() {
+        // U+1800–U+1805 (Mongolian/Manchu sentence punctuation, Po), U+1806 (TODO soft hyphen, Pd),
+        // U+1807–U+180A (Sibe boundary / Manchu stops / NIRUGU, Po): not Rust whitespace, so
+        // `hello᠁world`-style text stays one token without normalization.
         for sep in [
-            '\u{1806}', '\u{180A}', '\u{180B}', '\u{180C}', '\u{180D}', '\u{180E}', '\u{115F}',
-            '\u{1160}', '\u{3164}', '\u{FFA0}',
+            '\u{1800}', '\u{1801}', '\u{1802}', '\u{1803}', '\u{1804}', '\u{1805}', '\u{1806}',
+            '\u{1807}', '\u{1808}', '\u{1809}', '\u{180A}',
         ] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn invisible_fillers_separate_words() {
+        // U+180B–U+180E Mongolian free variation selectors (Mn) and vowel separator (Cf);
+        // U+115F/U+1160 Hangul choseong/jungseong fillers; U+3164 Hangul filler; U+FFA0 halfwidth
+        // Hangul filler: not Unicode whitespace in Rust, so they glue tokens in `split_whitespace()`
+        // without normalization. (U+1800–U+180A punctuation: `mongolian_punctuation_separates_words`.)
+        for sep in ['\u{180B}', '\u{180C}', '\u{180D}', '\u{180E}', '\u{115F}', '\u{1160}', '\u{3164}', '\u{FFA0}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
@@ -636,10 +668,76 @@ mod tests {
     }
 
     #[test]
-    fn duployan_shorthand_format_separates_words() {
-        // U+1BCA0–U+1BCA3: Duployan shorthand format overlap / step controls are Cf and not Rust
-        // whitespace.
-        for cp in 0x1BCA0u32..=0x1BCA3 {
+    fn egyptian_hieroglyph_format_controls_separate_words() {
+        // U+13430–U+13438: Egyptian hieroglyph joiners and segment markers are Cf and not Rust
+        // whitespace, so mixed or transliterated HTML can glue Latin tokens.
+        for cp in 0x13430u32..=0x13438 {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn musical_symbol_format_controls_separate_words() {
+        // U+1D173–U+1D17A: musical symbol begin/end beam, tie, slur, phrase (Cf) are not Rust
+        // whitespace; MusicXML or similar text can insert them between letters.
+        for cp in 0x1D173u32..=0x1D17A {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn duployan_selectors_and_shorthand_format_separate_words() {
+        // U+1BC9D–U+1BC9E: Duployan thick letter selector / double mark (Mn). U+1BCA0–U+1BCA3:
+        // shorthand format overlap / step (Cf). None are Rust whitespace. (U+1BC9F is Po—visible
+        // punctuation; not mapped.)
+        for cp in (0x1BC9Du32..=0x1BC9E).chain(0x1BCA0..=0x1BCA3) {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn kaithi_number_format_signs_separate_words() {
+        // U+110BD / U+110CD: Kaithi number sign and number sign above (Cf) are not Rust whitespace.
+        for cp in [0x110BDu32, 0x110CD] {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
