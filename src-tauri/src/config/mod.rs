@@ -315,6 +315,31 @@ impl Config {
         DEFAULT_SECS
     }
 
+    /// Milliseconds to wait after the last Discord message in a channel before merging buffered
+    /// messages and calling Ollama once. Default 2000. Set to 0 to disable debouncing (every message
+    /// is immediate). Config: `discord_debounce_ms`; override: env `MAC_STATS_DISCORD_DEBOUNCE_MS`.
+    /// Clamped to 0..=60_000. Per-channel override: `discord_channels.json` on a channel object
+    /// as `debounce_ms` (0 = immediate for that channel) or `immediate_ollama`: true.
+    pub fn discord_debounce_ms() -> u64 {
+        const DEFAULT_MS: u64 = 2000;
+        const MAX_MS: u64 = 60_000;
+        let from_env = std::env::var("MAC_STATS_DISCORD_DEBOUNCE_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok());
+        if let Some(ms) = from_env {
+            return ms.min(MAX_MS);
+        }
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(n) = json.get("discord_debounce_ms").and_then(|v| v.as_u64()) {
+                    return n.min(MAX_MS);
+                }
+            }
+        }
+        DEFAULT_MS
+    }
+
     /// Ollama /api/chat request timeout in seconds. Used for all chat requests (UI, Discord, session compaction).
     /// Default 300 (5 min). Config: config.json `ollamaChatTimeoutSecs`;
     /// override: env `MAC_STATS_OLLAMA_CHAT_TIMEOUT_SECS`. Clamped to 15..=900.

@@ -62,6 +62,7 @@ mac-stats can run a Discord bot that connects via the **Gateway** and responds t
 
 ## 4. Behavior
 
+- **Inbound debounce (full router only):** Rapid messages in the **same channel** that use the full Ollama agent router (not having_fun’s casual buffer) are merged into **one** Ollama run after a short quiet period. Default wait is **2000 ms** in `~/.mac-stats/config.json` as **`discord_debounce_ms`** (0 = disable debouncing). Override with env **`MAC_STATS_DISCORD_DEBOUNCE_MS`**. Per-channel: in `discord_channels.json`, on a channel object set **`debounce_ms`** (milliseconds, 0 = immediate) or **`immediate_ollama`:** `true`. **Bypass debouncing** (handled immediately): any message with **attachments**, content starting with **`/`**, **`new session:`** / session-reset phrases, or image payloads for vision. On app disconnect, any **still-queued** batch is **discarded** and logged (no flush).
 - **Platform formatting:** When the reply is sent to Discord, the system prompt includes **Platform formatting (Discord)** so the model avoids markdown tables (uses bullet lists instead) and wraps links in `<>` to suppress embeds (e.g. `<https://example.com>`). This keeps messages readable and reduces embed clutter in the channel.
 - Listens for **direct messages** to the bot and for **messages that @mention the bot** in guilds.
 - Ignores the bot’s own messages and messages that don’t mention it (in guilds).

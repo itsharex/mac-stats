@@ -137,7 +137,10 @@ pub async fn ollama_chat_with_execution(
     } else {
         send_ollama_chat_messages(messages.clone(), None, None).await
     }
-    .map_err(|e| format!("Failed to send chat request: {}", e))?;
+    .map_err(|e| {
+        crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+            .unwrap_or_else(|| format!("Failed to send chat request: {}", e))
+    })?;
 
     let mut response_content = response.message.content.clone();
     const MAX_FETCH_ITERATIONS: u32 = 3;
@@ -190,7 +193,10 @@ pub async fn ollama_chat_with_execution(
         };
         response = ollama_chat(follow_up_request)
             .await
-            .map_err(|e| format!("Failed to send follow-up after fetch: {}", e))?;
+            .map_err(|e| {
+                crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                    .unwrap_or_else(|| format!("Failed to send follow-up after fetch: {}", e))
+            })?;
         response_content = response.message.content.clone();
         messages = follow_up_messages;
         info!(
@@ -331,7 +337,10 @@ pub async fn ollama_chat_continue_with_result(
     info!("Ollama Chat Continue: Sending follow-up to Ollama");
     let response = ollama_chat(chat_request)
         .await
-        .map_err(|e| format!("Failed to send follow-up: {}", e))?;
+        .map_err(|e| {
+            crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                .unwrap_or_else(|| format!("Failed to send follow-up: {}", e))
+        })?;
 
     let response_content = response.message.content;
     info!(

@@ -7,8 +7,13 @@
 //!
 //! Channel config is loaded from `~/.mac-stats/discord_channels.json` and is **reloaded
 //! automatically** when the file is modified (no app restart needed).
+//!
+//! Rapid full-router Discord messages in the same channel can be debounced (see
+//! `config.json` `discord_debounce_ms` and `message_debounce`).
 
 pub mod api;
+
+mod message_debounce;
 
 use base64::Engine;
 use chrono::Timelike;
@@ -169,7 +174,7 @@ const DISCORD_MESSAGE_MAX_CHARS: usize = 2000;
 
 /// Per-channel listen mode loaded from `~/.mac-stats/discord_channels.json`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ChannelMode {
+pub(super) enum ChannelMode {
     /// Only respond when @mentioned or in DMs (default).
     MentionOnly,
     /// Respond to every human message in this channel (no @mention required). Bots ignored.
@@ -187,6 +192,8 @@ struct ChannelSettings {
     model: Option<String>,
     /// Optional agent override for this channel (e.g. "abliterated"). Uses that agent's soul+skill and model.
     agent: Option<String>,
+    /// Per-channel debounce override in ms. `Some(0)` = no debounce (immediate Ollama). `None` = use global `discord_debounce_ms` from config.json.
+    debounce_ms: Option<u64>,
 }
 
 /// Having-fun timeframes: min/max in seconds. Each use picks a random value in [min, max].
@@ -282,6 +289,7 @@ fn load_channel_config_full() -> (
         prompt: None,
         model: None,
         agent: None,
+        debounce_ms: None,
     };
     let path = crate::config::Config::discord_channels_path();
     let json = match std::fs::read_to_string(&path) {
@@ -332,6 +340,7 @@ fn load_channel_config_full() -> (
         prompt: default_prompt,
         model: None,
         agent: None,
+        debounce_ms: None,
     };
 
     let default_verbose_dm = parsed
@@ -375,6 +384,7 @@ fn load_channel_config_full() -> (
                     prompt: None,
                     model: None,
                     agent: None,
+                    debounce_ms: None,
                 }
             } else if let Some(obj) = v.as_object() {
                 let mode = obj
@@ -394,11 +404,21 @@ fn load_channel_config_full() -> (
                     .get("agent")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
+                let immediate = obj
+                    .get("immediate_ollama")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let debounce_ms = if immediate {
+                    Some(0u64)
+                } else {
+                    obj.get("debounce_ms").and_then(|v| v.as_u64()).map(|n| n.min(60_000))
+                };
                 ChannelSettings {
                     mode,
                     prompt,
                     model,
                     agent,
+                    debounce_ms,
                 }
             } else {
                 continue;
@@ -530,6 +550,7 @@ fn channel_settings(channel_id: u64) -> ChannelSettings {
                 prompt: None,
                 model: None,
                 agent: None,
+                debounce_ms: None,
             };
         }
     };
@@ -539,6 +560,7 @@ fn channel_settings(channel_id: u64) -> ChannelSettings {
             prompt: None,
             model: None,
             agent: None,
+            debounce_ms: None,
         };
     };
     overrides
@@ -1702,6 +1724,512 @@ pub fn get_discord_display_name(user_id: u64) -> Option<String> {
         .and_then(|map| map.get(&user_id).cloned())
 }
 
+fn effective_discord_debounce_ms(chan: &ChannelSettings) -> u64 {
+    chan.debounce_ms
+        .unwrap_or_else(crate::config::Config::discord_debounce_ms)
+}
+
+/// Full agent-router path for a Discord message (possibly debounced merge in `content`).
+pub(super) async fn run_discord_ollama_router(
+    ctx: Context,
+    new_message: Message,
+    content: String,
+    attachment_images_base64: Vec<String>,
+    mode: ChannelMode,
+) {
+    let bot_id = match BOT_USER_ID.get() {
+        Some(id) => *id,
+        None => {
+            debug!("Discord: Ignoring (bot id not set) in run_discord_ollama_router");
+            return;
+        }
+    };
+    let is_dm = new_message.guild_id.is_none();
+    let mentions_bot = new_message.mentions.iter().any(|u| u.id == bot_id);
+    let chan = channel_settings(new_message.channel_id.get());
+
+    let (
+        mut question,
+        mut model_override,
+        options_override,
+        skill_content,
+        requested_skill_selector,
+        agent_selector,
+        verbose_opt,
+    ) = parse_discord_ollama_overrides(&content);
+
+    // User requested a skill (e.g. "skill: 99") but it was not found — reply with available skills and return.
+    if requested_skill_selector.is_some() && skill_content.is_none() {
+        let selector = requested_skill_selector.as_deref().unwrap_or("?");
+        let skills = crate::skills::load_skills();
+        let available: String = if skills.is_empty() {
+            "none (add skill-N-topic.md files to ~/.mac-stats/agents/skills/)".to_string()
+        } else {
+            skills
+                .iter()
+                .map(|s| format!("{}-{}", s.number, s.topic))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let err_msg = format!(
+            "Skill \"{}\" not found. Available: {}.",
+            selector, available
+        );
+        info!("Discord: {}", err_msg);
+        if let Err(e) = new_message.channel_id.say(&ctx, &err_msg).await {
+            error!("Discord: failed to send skill-not-found message: {}", e);
+        }
+        return;
+    }
+
+    let escalation = is_escalation_message(&question);
+    if escalation {
+        info!("Discord: escalation detected (user wants task actually completed)");
+        crate::config::Config::append_escalation_pattern_if_new(&question);
+    }
+    let verbose = match verbose_opt {
+        Some(v) => v,
+        None if is_dm => default_verbose_for_dm(),
+        None => default_verbose_for_channel(),
+    };
+    // Natural-language model switch: "switch model to: X and do Y" -> use model X, question = Y
+    if model_override.is_none() {
+        if let Some((model, rest)) = extract_model_switch_from_question(&question) {
+            model_override = Some(model);
+            if !rest.is_empty() {
+                question = rest;
+            }
+        }
+    }
+    // Channel prompt from discord_channels.json; used when no explicit skill: override
+    let skill_content = skill_content.or(chan.prompt);
+    // Agent: from message (e.g. "agent: abliterated") or from channel config (e.g. agents-aliberated channel)
+    let agents = crate::agents::load_agents();
+    let agent_override = agent_selector
+        .as_ref()
+        .and_then(|sel| crate::agents::find_agent_by_id_or_name(&agents, sel).cloned())
+        .or_else(|| {
+            chan.agent
+                .as_ref()
+                .and_then(|sel| crate::agents::find_agent_by_id_or_name(&agents, sel).cloned())
+        });
+    // Model: from message or from channel config (when no agent override)
+    let model_override = model_override.or(chan.model.clone());
+
+    let trigger = if is_dm {
+        "DM"
+    } else if mentions_bot {
+        "mention"
+    } else {
+        "all_messages"
+    };
+    info!(
+        "Discord: {} from {} (channel {}) verbose={}",
+        trigger, new_message.author.name, new_message.channel_id, verbose
+    );
+
+    let channel_id_u64 = new_message.channel_id.get();
+
+    // "New session:" prefix clears conversation history so the model starts fresh.
+    let question = {
+        let lower = question.trim().to_lowercase();
+        if lower.starts_with("new session:") || lower.starts_with("new session ") {
+            crate::session_memory::clear_session("discord", channel_id_u64);
+            info!(
+                "Discord: new session requested, cleared history for channel {}",
+                channel_id_u64
+            );
+            let stripped = question.trim();
+            let colon_pos = stripped.find(':').or_else(|| stripped.find(' '));
+            match colon_pos {
+                Some(i) if stripped[..i].to_lowercase().trim() == "new session" => {
+                    stripped[i + 1..].trim().to_string()
+                }
+                _ => stripped.replacen("new session", "", 1).trim().to_string(),
+            }
+        } else {
+            question.to_string()
+        }
+    };
+
+    const LOG_MAX: usize = 800;
+    let to_ollama = if question.chars().count() <= LOG_MAX {
+        question.to_string()
+    } else {
+        format!(
+            "{} ({} chars)",
+            crate::logging::ellipse(&question, LOG_MAX),
+            question.chars().count()
+        )
+    };
+    info!("Discord→Ollama: sending: {}", to_ollama);
+
+    // Load prior conversation (in-memory, or from latest session file after restart) before adding this turn.
+    // If the user asks to clear/new session (any language), clear session and start fresh (see docs/035).
+    let did_session_reset = crate::session_memory::user_wants_session_reset(&content);
+    let prior = if did_session_reset {
+        crate::session_memory::clear_session("discord", channel_id_u64);
+        tracing::info!(
+            "Discord: user requested session reset (e.g. clear session / new session), starting fresh"
+        );
+        vec![]
+    } else {
+        let mut p = crate::session_memory::get_messages("discord", channel_id_u64);
+        if p.is_empty() {
+            p = crate::session_memory::load_messages_from_latest_session_file(
+                "discord",
+                channel_id_u64,
+            );
+        }
+        p
+    };
+    let conversation_history: Option<Vec<crate::ollama::ChatMessage>> = if prior.is_empty() {
+        None
+    } else {
+        Some(
+            prior
+                .into_iter()
+                .map(|(role, content)| crate::ollama::ChatMessage {
+                    role,
+                    content,
+                    images: None,
+                })
+                .collect(),
+        )
+    };
+    // After session reset, inject Session Startup instruction + current date so the agent knows which memory to read (see Session Startup in docs).
+    let question_for_ollama = if did_session_reset {
+        tracing::info!("Discord: injected Session Startup + current date (session reset)");
+        format!(
+            "{}\n\n{}",
+            crate::session_memory::session_reset_instruction_with_date_utc(),
+            question
+        )
+    } else {
+        question.clone()
+    };
+    // Short-term memory: add user message when we receive the request (store original content)
+    crate::session_memory::add_message("discord", channel_id_u64, "user", &content);
+
+    // Record author's display name for reuse in prompts and API context
+    let author_id_u64 = new_message.author.id.get();
+    let display_name = new_message
+        .author
+        .global_name
+        .as_deref()
+        .unwrap_or(&new_message.author.name)
+        .to_string();
+    set_discord_user_name(author_id_u64, display_name.clone());
+    crate::user_info::maybe_update_display_name_from_discord(author_id_u64, &display_name);
+
+    // Channel for status updates. Only posted to Discord when verbose mode is on;
+    // otherwise they are only logged internally to keep the channel clean for other bots.
+    let (status_tx, mut status_rx) = mpsc::unbounded_channel::<String>();
+    let ctx_send = ctx.clone();
+    let channel_id = new_message.channel_id;
+    const EDIT_PREFIX: &str = "EDIT:";
+    const ATTACH_PREFIX: &str = "ATTACH:";
+    const CRITERIA_PROGRESS: &str = "Extracting success criteria…";
+    let status_task = tokio::spawn(async move {
+        let mut last_criteria_message: Option<Message> = None;
+        while let Some(msg) = status_rx.recv().await {
+            debug!("Discord status (verbose={}): {}", verbose, msg);
+            if !verbose {
+                continue;
+            }
+            if let Some(path_str) = msg.strip_prefix(ATTACH_PREFIX) {
+                let path = PathBuf::from(path_str.trim());
+                if allowed_attachment_path(&path) {
+                    use serenity::builder::CreateAttachment;
+                    use serenity::builder::CreateMessage;
+                    if let Ok(att) = CreateAttachment::path(&path).await {
+                        let builder = CreateMessage::new()
+                            .content("Screenshot:")
+                            .add_files(vec![att]);
+                        if let Err(e) = channel_id.send_message(&ctx_send, builder).await {
+                            debug!("Discord: send screenshot now failed: {}", e);
+                        }
+                    }
+                }
+                continue;
+            }
+            if let Some(edit_content) = msg.strip_prefix(EDIT_PREFIX) {
+                if let Some(mut m) = last_criteria_message.take() {
+                    if let Err(e) = m
+                        .edit(&ctx_send, EditMessage::new().content(edit_content))
+                        .await
+                    {
+                        debug!("Discord: edit status message failed: {}", e);
+                    }
+                }
+            } else {
+                match channel_id.say(&ctx_send, &msg).await {
+                    Ok(message) if msg == CRITERIA_PROGRESS => {
+                        last_criteria_message = Some(message);
+                    }
+                    Err(e) => {
+                        debug!("Discord: status message failed: {}", e);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    });
+
+    // Show "Werner_Amvara is typing..." while processing. Fires immediately,
+    // then every 8s (indicator lasts ~10s server-side). Cancelled when reply is ready.
+    let typing_ctx = ctx.clone();
+    let typing_channel = new_message.channel_id;
+    let typing_cancel = tokio_util::sync::CancellationToken::new();
+    let typing_token = typing_cancel.clone();
+    let typing_task = tokio::spawn(async move {
+        loop {
+            let _ = typing_channel.broadcast_typing(&typing_ctx).await;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(8)) => {}
+                _ = typing_token.cancelled() => break,
+            }
+        }
+    });
+
+    let attachment_images_for_ollama = if attachment_images_base64.is_empty() {
+        None
+    } else {
+        Some(attachment_images_base64)
+    };
+    if let Some(ref imgs) = attachment_images_for_ollama {
+        info!(
+            "Discord: sending {} image attachment(s) to Ollama (user_id={}, channel_id={})",
+            imgs.len(),
+            author_id_u64,
+            channel_id_u64
+        );
+    }
+    info!(
+        "Discord: processing message (channel {}) — {}",
+        channel_id_u64,
+        crate::config::Config::version_display()
+    );
+    let (reply_text, attachment_paths) =
+        match crate::commands::ollama::answer_with_ollama_and_fetch(
+            crate::commands::ollama::OllamaRequest {
+                question: question_for_ollama.clone(),
+                status_tx: Some(status_tx),
+                discord_reply_channel_id: Some(channel_id_u64),
+                discord_user_id: Some(author_id_u64),
+                discord_user_name: Some(display_name),
+                model_override,
+                options_override,
+                skill_content,
+                agent_override,
+                allow_schedule: true,
+                conversation_history,
+                escalation,
+                retry_on_verification_no: true,
+                from_remote: true,
+                attachment_images_base64: attachment_images_for_ollama,
+                discord_is_dm: Some(is_dm),
+                ..Default::default()
+            },
+        )
+        .await
+        {
+            Ok(r) => (r.text, r.attachment_paths),
+            Err(e) => {
+                error!(
+                    "Discord: Failed to generate reply (channel {}): {}",
+                    channel_id_u64, e
+                );
+                let (reply_text, attachments) = if mode == ChannelMode::HavingFun {
+                    (
+                        "Something went wrong on my side — try again in a bit.".to_string(),
+                        Vec::new(),
+                    )
+                } else if let Some(friendly) = crate::commands::content_reduction::sanitize_ollama_error_for_user(&e) {
+                    (friendly, Vec::new())
+                } else {
+                    let err_lower = e.to_string().to_lowercase();
+                    let hint = if err_lower.contains("timed out") || err_lower.contains("timeout") {
+                        "Request timed out — Ollama may be busy; try again in a moment."
+                    } else {
+                        "Is Ollama configured?"
+                    };
+                    (
+                        format!("Sorry, I couldn't generate a reply: {}. ({})", e, hint),
+                        Vec::new(),
+                    )
+                };
+                (reply_text, attachments)
+            }
+        };
+
+    typing_cancel.cancel();
+    let _ = typing_task.await;
+
+    // Sender was moved into answer_with_ollama_and_fetch and is dropped when it returns, so status_rx gets None.
+    // Wait for the status task to finish so all status messages are sent before we send the final reply.
+    let _ = status_task.await;
+
+    // Optional agent judge: when enabled, evaluate run and log verdict to debug log (no user impact).
+    crate::commands::judge::run_judge_if_enabled(
+        &question_for_ollama,
+        &reply_text,
+        &attachment_paths,
+        None,
+    )
+    .await;
+
+    // Log full reply if ≤500 chars (or always in -vv), else first 500 + ellipsis.
+    const RECV_LOG_MAX: usize = 500;
+    let reply = strip_leading_label(reply_text.trim());
+    let nchars = reply.chars().count();
+    let verbosity = crate::logging::VERBOSITY.load(Ordering::Relaxed);
+    if verbosity >= 2 || nchars <= RECV_LOG_MAX {
+        info!("Discord←Ollama: received ({} chars): {}", nchars, reply);
+    } else {
+        info!(
+            "Discord←Ollama: received ({} chars): {}",
+            nchars,
+            crate::logging::ellipse(&reply, RECV_LOG_MAX)
+        );
+    }
+
+    let chunks = split_message_for_discord(&reply);
+    for (i, chunk) in chunks.iter().enumerate() {
+        if verbosity >= 3 {
+            debug!(
+                "Discord outbound (decoded) reply part {}/{}: {}",
+                i + 1,
+                chunks.len(),
+                chunk
+            );
+        }
+        let mut say_result = new_message.channel_id.say(&ctx, chunk).await;
+        if say_result.is_err() {
+            if let Err(ref e) = say_result {
+                let err_str = e.to_string();
+                error!(
+                    "Discord: Failed to send reply (part {}/{}): {}",
+                    i + 1,
+                    chunks.len(),
+                    err_str
+                );
+                let lower = err_str.to_lowercase();
+                if lower.contains("permission") || lower.contains("missing permissions") {
+                    info!(
+                        "Discord: missing permissions for channel {} — ensure bot has Send Messages and View Channel in this channel (and in server invite: bot scope with these permissions)",
+                        channel_id_u64
+                    );
+                }
+            }
+            // One retry on transient/rate errors
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            say_result = new_message.channel_id.say(&ctx, chunk).await;
+        }
+        if let Err(e) = say_result {
+            let err_str = e.to_string();
+            let is_permission = err_str.to_lowercase().contains("permission");
+            let fallback = if is_permission {
+                "Reply could not be sent to this channel (missing permissions). Check bot permissions for this channel."
+            } else {
+                "Reply could not be sent to this channel. Check bot permissions or try again later."
+            };
+            if let Err(e2) = new_message.channel_id.say(&ctx, fallback).await {
+                error!("Discord: could not send fallback message either: {}", e2);
+            } else {
+                info!("Discord: sent fallback message to channel {} (reply send failed: {})", channel_id_u64, err_str);
+            }
+            break;
+        }
+        if chunks.len() > 1 && i < chunks.len() - 1 {
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        }
+    }
+
+    // Send attachment(s) if any (e.g. BROWSER_SCREENSHOT); only paths under ~/.mac-stats/screenshots/.
+    // Always send the batch so screenshots reliably reach Discord (verbose per-ATTACH can be unreliable).
+    let allowed: Vec<_> = attachment_paths
+        .iter()
+        .filter(|p| allowed_attachment_path(p))
+        .cloned()
+        .collect();
+    if allowed.len() != attachment_paths.len() && !attachment_paths.is_empty() {
+        info!(
+            "Discord: {} of {} attachment(s) under screenshots dir (rest skipped)",
+            allowed.len(),
+            attachment_paths.len()
+        );
+    }
+    if !attachment_paths.is_empty() && allowed.is_empty() {
+        info!(
+            "Discord: had {} attachment path(s) but none allowed (must be under ~/.mac-stats/screenshots/)",
+            attachment_paths.len()
+        );
+    }
+    if !allowed.is_empty() {
+        info!(
+            "Discord: sending {} screenshot(s) to channel {}",
+            allowed.len(),
+            channel_id_u64
+        );
+        use serenity::builder::CreateAttachment;
+        use serenity::builder::CreateMessage;
+        let mut attachments = Vec::with_capacity(allowed.len());
+        for path in &allowed {
+            match CreateAttachment::path(path).await {
+                Ok(att) => attachments.push(att),
+                Err(e) => {
+                    error!(
+                        "Discord: failed to read attachment {}: {}",
+                        path.display(),
+                        e
+                    );
+                }
+            }
+        }
+        if !attachments.is_empty() {
+            let builder = CreateMessage::new()
+                .content("Screenshot(s) as requested:")
+                .add_files(attachments);
+            let send_result = new_message.channel_id.send_message(&ctx, builder).await;
+            if let Err(ref e) = send_result {
+                let err_str = e.to_string();
+                error!(
+                    "Discord: Failed to send attachment(s) to channel {}: {}",
+                    channel_id_u64, err_str
+                );
+                let lower = err_str.to_lowercase();
+                if lower.contains("permission") || lower.contains("missing permissions") {
+                    info!(
+                        "Discord: missing permissions for channel {} (attachments) — ensure bot has Send Messages and Attach Files in this channel",
+                        channel_id_u64
+                    );
+                }
+            }
+            if let Err(_e) = send_result {
+                let fallback = "Could not send attachment(s) to this channel (check bot permissions: Send Messages, Attach Files).";
+                if let Err(e2) = new_message.channel_id.say(&ctx, fallback).await {
+                    error!("Discord: could not send fallback message for attachment failure: {}", e2);
+                }
+            } else {
+                info!(
+                    "Discord: sent {} attachment(s) to channel {}",
+                    allowed.len(),
+                    channel_id_u64
+                );
+            }
+        } else {
+            error!(
+                "Discord: all {} path(s) failed CreateAttachment::path",
+                allowed.len()
+            );
+        }
+    }
+
+    // Short-term memory: add assistant reply (user was added when request received); persist when > 3 messages
+    crate::session_memory::add_message("discord", channel_id_u64, "assistant", &reply);
+}
+
 struct Handler;
 
 #[serenity::async_trait]
@@ -1810,485 +2338,16 @@ impl EventHandler for Handler {
             }
         }
 
-        let (
-            mut question,
-            mut model_override,
-            options_override,
-            skill_content,
-            requested_skill_selector,
-            agent_selector,
-            verbose_opt,
-        ) = parse_discord_ollama_overrides(&content);
-
-        // User requested a skill (e.g. "skill: 99") but it was not found — reply with available skills and return.
-        if requested_skill_selector.is_some() && skill_content.is_none() {
-            let selector = requested_skill_selector.as_deref().unwrap_or("?");
-            let skills = crate::skills::load_skills();
-            let available: String = if skills.is_empty() {
-                "none (add skill-N-topic.md files to ~/.mac-stats/agents/skills/)".to_string()
-            } else {
-                skills
-                    .iter()
-                    .map(|s| format!("{}-{}", s.number, s.topic))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            let err_msg = format!(
-                "Skill \"{}\" not found. Available: {}.",
-                selector, available
-            );
-            info!("Discord: {}", err_msg);
-            if let Err(e) = new_message.channel_id.say(&ctx, &err_msg).await {
-                error!("Discord: failed to send skill-not-found message: {}", e);
-            }
-            return;
-        }
-
-        let escalation = is_escalation_message(&question);
-        if escalation {
-            info!("Discord: escalation detected (user wants task actually completed)");
-            crate::config::Config::append_escalation_pattern_if_new(&question);
-        }
-        let verbose = match verbose_opt {
-            Some(v) => v,
-            None if is_dm => default_verbose_for_dm(),
-            None => default_verbose_for_channel(),
-        };
-        // Natural-language model switch: "switch model to: X and do Y" -> use model X, question = Y
-        if model_override.is_none() {
-            if let Some((model, rest)) = extract_model_switch_from_question(&question) {
-                model_override = Some(model);
-                if !rest.is_empty() {
-                    question = rest;
-                }
-            }
-        }
-        // Channel prompt from discord_channels.json; used when no explicit skill: override
-        let skill_content = skill_content.or(chan.prompt);
-        // Agent: from message (e.g. "agent: abliterated") or from channel config (e.g. agents-aliberated channel)
-        let agents = crate::agents::load_agents();
-        let agent_override = agent_selector
-            .as_ref()
-            .and_then(|sel| crate::agents::find_agent_by_id_or_name(&agents, sel).cloned())
-            .or_else(|| {
-                chan.agent
-                    .as_ref()
-                    .and_then(|sel| crate::agents::find_agent_by_id_or_name(&agents, sel).cloned())
-            });
-        // Model: from message or from channel config (when no agent override)
-        let model_override = model_override.or(chan.model.clone());
-
-        let trigger = if is_dm {
-            "DM"
-        } else if mentions_bot {
-            "mention"
-        } else {
-            "all_messages"
-        };
-        info!(
-            "Discord: {} from {} (channel {}) verbose={}",
-            trigger, new_message.author.name, new_message.channel_id, verbose
-        );
-
-        let channel_id_u64 = new_message.channel_id.get();
-
-        // "New session:" prefix clears conversation history so the model starts fresh.
-        let question = {
-            let lower = question.trim().to_lowercase();
-            if lower.starts_with("new session:") || lower.starts_with("new session ") {
-                crate::session_memory::clear_session("discord", channel_id_u64);
-                info!(
-                    "Discord: new session requested, cleared history for channel {}",
-                    channel_id_u64
-                );
-                let stripped = question.trim();
-                let colon_pos = stripped.find(':').or_else(|| stripped.find(' '));
-                match colon_pos {
-                    Some(i) if stripped[..i].to_lowercase().trim() == "new session" => {
-                        stripped[i + 1..].trim().to_string()
-                    }
-                    _ => stripped.replacen("new session", "", 1).trim().to_string(),
-                }
-            } else {
-                question.to_string()
-            }
-        };
-
-        const LOG_MAX: usize = 800;
-        let to_ollama = if question.chars().count() <= LOG_MAX {
-            question.to_string()
-        } else {
-            format!(
-                "{} ({} chars)",
-                crate::logging::ellipse(&question, LOG_MAX),
-                question.chars().count()
-            )
-        };
-        info!("Discord→Ollama: sending: {}", to_ollama);
-
-        // Load prior conversation (in-memory, or from latest session file after restart) before adding this turn.
-        // If the user asks to clear/new session (any language), clear session and start fresh (see docs/035).
-        let did_session_reset = crate::session_memory::user_wants_session_reset(&content);
-        let prior = if did_session_reset {
-            crate::session_memory::clear_session("discord", channel_id_u64);
-            tracing::info!(
-                "Discord: user requested session reset (e.g. clear session / new session), starting fresh"
-            );
-            vec![]
-        } else {
-            let mut p = crate::session_memory::get_messages("discord", channel_id_u64);
-            if p.is_empty() {
-                p = crate::session_memory::load_messages_from_latest_session_file(
-                    "discord",
-                    channel_id_u64,
-                );
-            }
-            p
-        };
-        let conversation_history: Option<Vec<crate::ollama::ChatMessage>> = if prior.is_empty() {
-            None
-        } else {
-            Some(
-                prior
-                    .into_iter()
-                    .map(|(role, content)| crate::ollama::ChatMessage {
-                        role,
-                        content,
-                        images: None,
-                    })
-                    .collect(),
-            )
-        };
-        // After session reset, inject Session Startup instruction + current date so the agent knows which memory to read (see Session Startup in docs).
-        let question_for_ollama = if did_session_reset {
-            tracing::info!("Discord: injected Session Startup + current date (session reset)");
-            format!(
-                "{}\n\n{}",
-                crate::session_memory::session_reset_instruction_with_date_utc(),
-                question
-            )
-        } else {
-            question.clone()
-        };
-        // Short-term memory: add user message when we receive the request (store original content)
-        crate::session_memory::add_message("discord", channel_id_u64, "user", &content);
-
-        // Record author's display name for reuse in prompts and API context
-        let author_id_u64 = new_message.author.id.get();
-        let display_name = new_message
-            .author
-            .global_name
-            .as_deref()
-            .unwrap_or(&new_message.author.name)
-            .to_string();
-        set_discord_user_name(author_id_u64, display_name.clone());
-        crate::user_info::maybe_update_display_name_from_discord(author_id_u64, &display_name);
-
-        // Channel for status updates. Only posted to Discord when verbose mode is on;
-        // otherwise they are only logged internally to keep the channel clean for other bots.
-        let (status_tx, mut status_rx) = mpsc::unbounded_channel::<String>();
-        let ctx_send = ctx.clone();
-        let channel_id = new_message.channel_id;
-        const EDIT_PREFIX: &str = "EDIT:";
-        const ATTACH_PREFIX: &str = "ATTACH:";
-        const CRITERIA_PROGRESS: &str = "Extracting success criteria…";
-        let status_task = tokio::spawn(async move {
-            let mut last_criteria_message: Option<Message> = None;
-            while let Some(msg) = status_rx.recv().await {
-                debug!("Discord status (verbose={}): {}", verbose, msg);
-                if !verbose {
-                    continue;
-                }
-                if let Some(path_str) = msg.strip_prefix(ATTACH_PREFIX) {
-                    let path = PathBuf::from(path_str.trim());
-                    if allowed_attachment_path(&path) {
-                        use serenity::builder::CreateAttachment;
-                        use serenity::builder::CreateMessage;
-                        if let Ok(att) = CreateAttachment::path(&path).await {
-                            let builder = CreateMessage::new()
-                                .content("Screenshot:")
-                                .add_files(vec![att]);
-                            if let Err(e) = channel_id.send_message(&ctx_send, builder).await {
-                                debug!("Discord: send screenshot now failed: {}", e);
-                            }
-                        }
-                    }
-                    continue;
-                }
-                if let Some(edit_content) = msg.strip_prefix(EDIT_PREFIX) {
-                    if let Some(mut m) = last_criteria_message.take() {
-                        if let Err(e) = m
-                            .edit(&ctx_send, EditMessage::new().content(edit_content))
-                            .await
-                        {
-                            debug!("Discord: edit status message failed: {}", e);
-                        }
-                    }
-                } else {
-                    match channel_id.say(&ctx_send, &msg).await {
-                        Ok(message) if msg == CRITERIA_PROGRESS => {
-                            last_criteria_message = Some(message);
-                        }
-                        Err(e) => {
-                            debug!("Discord: status message failed: {}", e);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        });
-
-        // Show "Werner_Amvara is typing..." while processing. Fires immediately,
-        // then every 8s (indicator lasts ~10s server-side). Cancelled when reply is ready.
-        let typing_ctx = ctx.clone();
-        let typing_channel = new_message.channel_id;
-        let typing_cancel = tokio_util::sync::CancellationToken::new();
-        let typing_token = typing_cancel.clone();
-        let typing_task = tokio::spawn(async move {
-            loop {
-                let _ = typing_channel.broadcast_typing(&typing_ctx).await;
-                tokio::select! {
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(8)) => {}
-                    _ = typing_token.cancelled() => break,
-                }
-            }
-        });
-
-        let attachment_images_for_ollama = if attachment_images_base64.is_empty() {
-            None
-        } else {
-            Some(attachment_images_base64)
-        };
-        if let Some(ref imgs) = attachment_images_for_ollama {
-            info!(
-                "Discord: sending {} image attachment(s) to Ollama (user_id={}, channel_id={})",
-                imgs.len(),
-                author_id_u64,
-                channel_id_u64
-            );
-        }
-        info!(
-            "Discord: processing message (channel {}) — {}",
-            channel_id_u64,
-            crate::config::Config::version_display()
-        );
-        let (reply_text, attachment_paths) =
-            match crate::commands::ollama::answer_with_ollama_and_fetch(
-                crate::commands::ollama::OllamaRequest {
-                    question: question_for_ollama.clone(),
-                    status_tx: Some(status_tx),
-                    discord_reply_channel_id: Some(channel_id_u64),
-                    discord_user_id: Some(author_id_u64),
-                    discord_user_name: Some(display_name),
-                    model_override,
-                    options_override,
-                    skill_content,
-                    agent_override,
-                    allow_schedule: true,
-                    conversation_history,
-                    escalation,
-                    retry_on_verification_no: true,
-                    from_remote: true,
-                    attachment_images_base64: attachment_images_for_ollama,
-                    discord_is_dm: Some(is_dm),
-                    ..Default::default()
-                },
-            )
-            .await
-            {
-                Ok(r) => (r.text, r.attachment_paths),
-                Err(e) => {
-                    error!(
-                        "Discord: Failed to generate reply (channel {}): {}",
-                        channel_id_u64, e
-                    );
-                    // In having_fun channels, do not post technical errors or CLI hints; use a short user-friendly message only.
-                    let (reply_text, attachments) = if mode == ChannelMode::HavingFun {
-                        (
-                            "Something went wrong on my side — try again in a bit.".to_string(),
-                            Vec::new(),
-                        )
-                    } else {
-                        let err_lower = e.to_string().to_lowercase();
-                        let hint = if err_lower.contains("timed out") || err_lower.contains("timeout") {
-                            "Request timed out — Ollama may be busy; try again in a moment."
-                        } else {
-                            "Is Ollama configured?"
-                        };
-                        (
-                            format!("Sorry, I couldn't generate a reply: {}. ({})", e, hint),
-                            Vec::new(),
-                        )
-                    };
-                    (reply_text, attachments)
-                }
-            };
-
-        typing_cancel.cancel();
-        let _ = typing_task.await;
-
-        // Sender was moved into answer_with_ollama_and_fetch and is dropped when it returns, so status_rx gets None.
-        // Wait for the status task to finish so all status messages are sent before we send the final reply.
-        let _ = status_task.await;
-
-        // Optional agent judge: when enabled, evaluate run and log verdict to debug log (no user impact).
-        crate::commands::judge::run_judge_if_enabled(
-            &question_for_ollama,
-            &reply_text,
-            &attachment_paths,
-            None,
+        let debounce_ms = effective_discord_debounce_ms(&chan);
+        message_debounce::enqueue_or_run_router(
+            ctx,
+            new_message,
+            content,
+            attachment_images_base64,
+            mode,
+            debounce_ms,
         )
         .await;
-
-        // Log full reply if ≤500 chars (or always in -vv), else first 500 + ellipsis.
-        const RECV_LOG_MAX: usize = 500;
-        let reply = strip_leading_label(reply_text.trim());
-        let nchars = reply.chars().count();
-        let verbosity = crate::logging::VERBOSITY.load(Ordering::Relaxed);
-        if verbosity >= 2 || nchars <= RECV_LOG_MAX {
-            info!("Discord←Ollama: received ({} chars): {}", nchars, reply);
-        } else {
-            info!(
-                "Discord←Ollama: received ({} chars): {}",
-                nchars,
-                crate::logging::ellipse(&reply, RECV_LOG_MAX)
-            );
-        }
-
-        let chunks = split_message_for_discord(&reply);
-        for (i, chunk) in chunks.iter().enumerate() {
-            if verbosity >= 3 {
-                debug!(
-                    "Discord outbound (decoded) reply part {}/{}: {}",
-                    i + 1,
-                    chunks.len(),
-                    chunk
-                );
-            }
-            let mut say_result = new_message.channel_id.say(&ctx, chunk).await;
-            if say_result.is_err() {
-                if let Err(ref e) = say_result {
-                    let err_str = e.to_string();
-                    error!(
-                        "Discord: Failed to send reply (part {}/{}): {}",
-                        i + 1,
-                        chunks.len(),
-                        err_str
-                    );
-                    let lower = err_str.to_lowercase();
-                    if lower.contains("permission") || lower.contains("missing permissions") {
-                        info!(
-                            "Discord: missing permissions for channel {} — ensure bot has Send Messages and View Channel in this channel (and in server invite: bot scope with these permissions)",
-                            channel_id_u64
-                        );
-                    }
-                }
-                // One retry on transient/rate errors
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                say_result = new_message.channel_id.say(&ctx, chunk).await;
-            }
-            if let Err(e) = say_result {
-                let err_str = e.to_string();
-                let is_permission = err_str.to_lowercase().contains("permission");
-                let fallback = if is_permission {
-                    "Reply could not be sent to this channel (missing permissions). Check bot permissions for this channel."
-                } else {
-                    "Reply could not be sent to this channel. Check bot permissions or try again later."
-                };
-                if let Err(e2) = new_message.channel_id.say(&ctx, fallback).await {
-                    error!("Discord: could not send fallback message either: {}", e2);
-                } else {
-                    info!("Discord: sent fallback message to channel {} (reply send failed: {})", channel_id_u64, err_str);
-                }
-                break;
-            }
-            if chunks.len() > 1 && i < chunks.len() - 1 {
-                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-            }
-        }
-
-        // Send attachment(s) if any (e.g. BROWSER_SCREENSHOT); only paths under ~/.mac-stats/screenshots/.
-        // Always send the batch so screenshots reliably reach Discord (verbose per-ATTACH can be unreliable).
-        let allowed: Vec<_> = attachment_paths
-            .iter()
-            .filter(|p| allowed_attachment_path(p))
-            .cloned()
-            .collect();
-        if allowed.len() != attachment_paths.len() && !attachment_paths.is_empty() {
-            info!(
-                "Discord: {} of {} attachment(s) under screenshots dir (rest skipped)",
-                allowed.len(),
-                attachment_paths.len()
-            );
-        }
-        if !attachment_paths.is_empty() && allowed.is_empty() {
-            info!(
-                "Discord: had {} attachment path(s) but none allowed (must be under ~/.mac-stats/screenshots/)",
-                attachment_paths.len()
-            );
-        }
-        if !allowed.is_empty() {
-            info!(
-                "Discord: sending {} screenshot(s) to channel {}",
-                allowed.len(),
-                channel_id_u64
-            );
-            use serenity::builder::CreateAttachment;
-            use serenity::builder::CreateMessage;
-            let mut attachments = Vec::with_capacity(allowed.len());
-            for path in &allowed {
-                match CreateAttachment::path(path).await {
-                    Ok(att) => attachments.push(att),
-                    Err(e) => {
-                        error!(
-                            "Discord: failed to read attachment {}: {}",
-                            path.display(),
-                            e
-                        );
-                    }
-                }
-            }
-            if !attachments.is_empty() {
-                let builder = CreateMessage::new()
-                    .content("Screenshot(s) as requested:")
-                    .add_files(attachments);
-                let send_result = new_message.channel_id.send_message(&ctx, builder).await;
-                if let Err(ref e) = send_result {
-                    let err_str = e.to_string();
-                    error!(
-                        "Discord: Failed to send attachment(s) to channel {}: {}",
-                        channel_id_u64, err_str
-                    );
-                    let lower = err_str.to_lowercase();
-                    if lower.contains("permission") || lower.contains("missing permissions") {
-                        info!(
-                            "Discord: missing permissions for channel {} (attachments) — ensure bot has Send Messages and Attach Files in this channel",
-                            channel_id_u64
-                        );
-                    }
-                }
-                if let Err(_e) = send_result {
-                    let fallback = "Could not send attachment(s) to this channel (check bot permissions: Send Messages, Attach Files).";
-                    if let Err(e2) = new_message.channel_id.say(&ctx, fallback).await {
-                        error!("Discord: could not send fallback message for attachment failure: {}", e2);
-                    }
-                } else {
-                    info!(
-                        "Discord: sent {} attachment(s) to channel {}",
-                        allowed.len(),
-                        channel_id_u64
-                    );
-                }
-            } else {
-                error!(
-                    "Discord: all {} path(s) failed CreateAttachment::path",
-                    allowed.len()
-                );
-            }
-        }
-
-        // Short-term memory: add assistant reply (user was added when request received); persist when > 3 messages
-        crate::session_memory::add_message("discord", channel_id_u64, "assistant", &reply);
     }
 }
 
@@ -2326,6 +2385,7 @@ pub async fn run_discord_client(token: String) -> Result<(), String> {
 /// Disconnect from Discord on app shutdown so the user appears offline.
 /// Safe to call even if Discord was never started or already disconnected.
 pub fn disconnect_discord() {
+    message_debounce::discard_pending_batches_on_shutdown();
     let Some(manager) = DISCORD_SHARD_MANAGER.get() else {
         debug!("Discord: No shard manager (gateway was not started), skipping disconnect");
         return;

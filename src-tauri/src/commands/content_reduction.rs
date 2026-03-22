@@ -129,6 +129,61 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || (lower.contains("too long") && lower.contains("context"))
 }
 
+/// Check whether an Ollama error indicates message role/ordering conflict.
+fn is_role_ordering_error(lower: &str) -> bool {
+    (lower.contains("role") && (lower.contains("alternate") || lower.contains("ordering")))
+        || lower.contains("incorrect role")
+        || lower.contains("roles must alternate")
+        || lower.contains("expected role")
+        || (lower.contains("invalid") && lower.contains("role"))
+}
+
+/// Check whether an Ollama error indicates corrupted session / missing tool input.
+fn is_corrupted_session_error(lower: &str) -> bool {
+    (lower.contains("tool") && lower.contains("missing"))
+        || lower.contains("invalid message")
+        || lower.contains("malformed")
+        || (lower.contains("tool_calls") && lower.contains("expected"))
+}
+
+/// Rewrite a raw Ollama/pipeline error into a short, user-friendly message.
+///
+/// Maps known error categories to actionable text that suggests starting a
+/// new topic (matching the wording users already know from session reset).
+/// Returns `None` when the error does not match any known pattern, so callers
+/// can fall back to their existing formatting.
+pub(crate) fn sanitize_ollama_error_for_user(raw: &str) -> Option<String> {
+    let lower = raw.to_lowercase();
+
+    let friendly = if is_context_overflow_error(raw) {
+        Some(
+            "The conversation got too long for the model's context window. \
+             Try starting a new topic or using a model with a larger context."
+                .to_string(),
+        )
+    } else if is_role_ordering_error(&lower) {
+        Some(
+            "Message ordering conflict — please try again. \
+             If this keeps happening, start a new topic to reset the conversation."
+                .to_string(),
+        )
+    } else if is_corrupted_session_error(&lower) {
+        Some(
+            "The conversation history looks corrupted. \
+             Start a new topic to begin a fresh session."
+                .to_string(),
+        )
+    } else {
+        None
+    };
+
+    if friendly.is_some() {
+        tracing::debug!("Sanitized Ollama error for user — raw: {}", raw);
+    }
+
+    friendly
+}
+
 /// Truncate oversized tool-result messages in the conversation to `max_chars_per_result`.
 ///
 /// Only truncates assistant/user/system messages whose content exceeds `max_chars_per_result`
@@ -368,5 +423,54 @@ mod tests {
         assert_eq!(n, 2);
         assert!(msgs[1].content.contains("[truncated from 5000 to 1000"));
         assert!(msgs[3].content.contains("[truncated from 8000 to 1000"));
+    }
+
+    #[test]
+    fn sanitize_context_overflow_suggests_new_topic() {
+        let msg = sanitize_ollama_error_for_user("Ollama error: context overflow");
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        assert!(msg.contains("new topic"));
+        assert!(msg.contains("context window"));
+    }
+
+    #[test]
+    fn sanitize_prompt_too_long_suggests_new_topic() {
+        let msg = sanitize_ollama_error_for_user("Ollama error: prompt too long for context");
+        assert!(msg.is_some());
+        assert!(msg.unwrap().contains("new topic"));
+    }
+
+    #[test]
+    fn sanitize_role_ordering_error() {
+        let msg = sanitize_ollama_error_for_user("Ollama error: roles must alternate user/assistant");
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        assert!(msg.contains("ordering"));
+        assert!(msg.contains("new topic"));
+    }
+
+    #[test]
+    fn sanitize_incorrect_role_error() {
+        let msg = sanitize_ollama_error_for_user("incorrect role information in message");
+        assert!(msg.is_some());
+        assert!(msg.unwrap().contains("ordering"));
+    }
+
+    #[test]
+    fn sanitize_corrupted_session_tool_missing() {
+        let msg = sanitize_ollama_error_for_user("tool call input missing from history");
+        assert!(msg.is_some());
+        let msg = msg.unwrap();
+        assert!(msg.contains("corrupted"));
+        assert!(msg.contains("new topic"));
+    }
+
+    #[test]
+    fn sanitize_returns_none_for_unknown_errors() {
+        assert!(sanitize_ollama_error_for_user("connection refused").is_none());
+        assert!(sanitize_ollama_error_for_user("timeout").is_none());
+        assert!(sanitize_ollama_error_for_user("Ollama HTTP 503: service unavailable").is_none());
+        assert!(sanitize_ollama_error_for_user("Failed to send chat request").is_none());
     }
 }

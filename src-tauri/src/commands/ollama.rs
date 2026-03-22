@@ -819,10 +819,18 @@ pub fn answer_with_ollama_and_fetch(
                         )
                         .await?
                     } else {
-                        return Err(e);
+                        return Err(
+                            crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                                .unwrap_or(e),
+                        );
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    return Err(
+                        crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                            .unwrap_or(e),
+                    );
+                }
             };
             let content = response.message.content.clone();
             let n = content.chars().count();

@@ -401,7 +401,10 @@ pub(crate) async fn run_tool_loop(
                     info!(
                         "Agent router: context overflow but no oversized tool results to truncate — returning error"
                     );
-                    return Err(e);
+                    return Err(
+                        crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                            .unwrap_or(e),
+                    );
                 }
                 info!(
                     "Agent router: context overflow recovery — truncated {} tool result(s) to {} chars, retrying",
@@ -432,7 +435,12 @@ pub(crate) async fn run_tool_loop(
                     }
                 }
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                return Err(
+                    crate::commands::content_reduction::sanitize_ollama_error_for_user(&e)
+                        .unwrap_or(e),
+                );
+            }
         };
         response_content = follow_up.message.content.clone();
 
