@@ -191,12 +191,19 @@ fn collapse_whitespace(text: &str) -> String {
                 // whitespace, so Khmer-layout HTML can otherwise glue adjacent Latin tokens.
                 // Latin-1 inverted exclamation / question (U+00A1, U+00BF) and double angle quotes
                 // (U+00AB, U+00BB, Pi/Pf) are not Rust whitespace; Spanish / French typography in
-                // HTML can place them between Latin tokens without ASCII space. Greek question mark
+                // HTML can place them between Latin tokens without ASCII space. Section sign (U+00A7)
+                // and pilcrow (U+00B6, Po) are not Rust whitespace either; legal or editorial HTML
+                // often uses them between Latin tokens without ASCII space. Greek question mark
                 // (U+037E, Po; erotimatiko) is not Rust whitespace and is distinct from Greek ano
                 // teleia (U+0387) mapped with middle-dot punctuation. Arabic comma / semicolon /
                 // question / full stop (U+060C, U+061B, U+061F, U+06D4, Po) and Arabic percent /
                 // decimal / thousands separators (U+066A–U+066C, Po) are not Rust whitespace; RTL or
                 // bilingual numeric HTML can glue Latin tokens for `split_whitespace()`.
+                // Armenian exclamation / comma / question / abbreviation mark (U+055C–U+055F, Po) and
+                // full stop / hyphen (U+0589–U+058A, Po/Pd) are not Rust whitespace; bilingual or
+                // Unicode-sample HTML can glue Latin tokens. U+055A (ARMENIAN APOSTROPHE) and U+055B
+                // (EMPHASIS MARK, Po) are omitted—apostrophe- or stress-like marks can sit word-internally
+                // in Armenian (same spirit as omitting U+2019 for Latin contractions).
                 // Arabic number signs / ayah markers (U+0600–U+0605, U+06DD, U+08E2), Arabic
                 // Extended-A currency format marks (U+0890–U+0891, pound/piastre mark above), and
                 // Syriac abbreviation mark (U+070F) are Cf and not Rust whitespace; RTL scholarly
@@ -235,8 +242,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // ASCII space. Wavy dash (U+3030, Pd), ideographic telegraph line-feed separator
                 // (U+3037, So), part alternation mark (U+303D, Po), Katakana-Hiragana double hyphen
                 // (U+30A0, Pd), and fullwidth low line (U+FF3F, Pc) are not Rust whitespace either;
-                // mixed CJK / romanization HTML can do the same. Hebrew maqaf (U+05BE, Pd) and paseq (U+05C0, Po) are not Rust
-                // whitespace. Tibetan mark intersyllabic tsheg (U+0F0B, Po) and Ethiopic full stop
+                // mixed CJK / romanization HTML can do the same. Hebrew maqaf (U+05BE, Pd), paseq (U+05C0, Po), and sof pasuq
+                // (U+05C3, Po; sentence end like a colon) are not Rust whitespace. Georgian paragraph separator (U+10FB, Po) is
+                // not Rust whitespace; mixed Latin–Georgian or Unicode-sample HTML can glue tokens without ASCII space. Tibetan mark intersyllabic tsheg (U+0F0B, Po) and Ethiopic full stop
                 // (U+1362, Po) are not Rust whitespace; mixed-script HTML can glue Latin tokens.
                 // Unicode dash punctuation (U+2010–U+2015, Pd)—hyphen, non-breaking hyphen, figure
                 // dash, en dash, em dash, horizontal bar—are not Rust whitespace; typographic HTML or
@@ -339,16 +347,23 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{FF3F}'
                 | '\u{05BE}'
                 | '\u{05C0}'
+                | '\u{05C3}'
+                | '\u{10FB}'
                 | '\u{00A1}'
                 | '\u{00BF}'
                 | '\u{00AB}'
                 | '\u{00BB}'
+                | '\u{00A7}'
+                | '\u{00B6}'
                 | '\u{037E}'
                 | '\u{060C}'
                 | '\u{061B}'
                 | '\u{061F}'
                 | '\u{06D4}'
                 | '\u{066A}'..='\u{066C}'
+                | '\u{055C}'..='\u{055F}'
+                | '\u{0589}'
+                | '\u{058A}'
                 | '\u{0F0B}'
                 | '\u{1362}'
                 | '\u{2010}'..='\u{2015}'
@@ -708,6 +723,43 @@ mod tests {
             assert!(
                 !cleaned.contains(sep),
                 "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn latin1_section_sign_and_pilcrow_separate_words() {
+        // U+00A7 SECTION SIGN, U+00B6 PILCROW SIGN (Po); not Rust whitespace—legal or editorial HTML
+        // can place them between Latin tokens without ASCII space.
+        for sep in ['\u{00A7}', '\u{00B6}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn armenian_script_punctuation_separates_words() {
+        // U+055C–U+055F (exclamation, comma, question, abbreviation mark; Po) and U+0589 / U+058A
+        // (full stop, hyphen; Po/Pd)—not Rust whitespace. U+055A apostrophe and U+055B emphasis
+        // stay unmapped (word-internal risk, like U+2019).
+        for sep in ['\u{055C}', '\u{055D}', '\u{055E}', '\u{055F}', '\u{0589}', '\u{058A}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
             );
         }
     }
@@ -1135,6 +1187,27 @@ mod tests {
         // ALTERNATION MARK, U+30A0 KATAKANA-HIRAGANA DOUBLE HYPHEN, U+FF3F FULLWIDTH LOW LINE—not
         // Rust whitespace; CJK / romanization HTML can glue Latin tokens without ASCII space.
         for sep in ['\u{3030}', '\u{3037}', '\u{303D}', '\u{30A0}', '\u{FF3F}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn hebrew_sof_pasuq_georgian_paragraph_separator_separate_words() {
+        // U+05C3 (Hebrew sof pasuq, Po) and U+10FB (Georgian paragraph separator, Po); not Rust
+        // whitespace—RTL or mixed-script HTML can sit Latin tokens on either side without ASCII space.
+        for sep in ['\u{05C3}', '\u{10FB}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
