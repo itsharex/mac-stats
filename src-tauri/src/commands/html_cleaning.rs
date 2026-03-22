@@ -357,6 +357,12 @@ fn collapse_whitespace(text: &str) -> String {
                 // Currency Symbols U+20A0–U+20BF (all Sc) are not Rust whitespace; multilingual
                 // price copy or Unicode-sample HTML can place euro, rupee, bitcoin, etc. between
                 // Latin tokens without ASCII space. U+20C0–U+20CF are unassigned and stay unmapped.
+                // Letterlike Symbols U+2100–U+214F: only So/Sm subranges (account-of, degree signs,
+                // numero, prescription take, trade mark, sans-serif math symbols, per sign, etc.);
+                // not Rust whitespace. Lu/Ll/Lo mathematical letters (e.g. U+2102, U+210E–U+2113,
+                // U+2115, U+2119–U+2124, U+2126, U+212A–U+212D, U+212F–U+2134, U+2135–U+2138,
+                // U+2139, U+213C–U+213F, U+2145–U+2149, U+214E) stay unmapped—word-internal risk.
+                // U+20D0–U+20FF combining marks for symbols stay unmapped—combining / enclosing risk.
                 // Number Forms U+2150–U+2182 and U+2185–U+218B (vulgar fractions, Roman
                 // numerals, turned digit two/three; all No / Nl / So) are not Rust whitespace;
                 // typography or Unicode-sample HTML can place ⅓, Ⅷ, vulgar fraction zero thirds
@@ -464,6 +470,22 @@ fn collapse_whitespace(text: &str) -> String {
                 // can sit between Latin tokens without ASCII space. Enclosed Alphanumerics (U+2460–U+24FF: circled
                 // and parenthesized digits, digit full stops, enclosed Latin letters, etc.; No / So) are not Rust
                 // whitespace; Unicode-sample or list-style HTML can place them between Latin tokens without ASCII space.
+                // Enclosed Alphanumeric Supplement U+1F100–U+1F1AD and U+1F1E6–U+1F1FF (parenthesized / circled /
+                // squared Latin and digits, regional indicators, etc.; No / So as assigned) are not Rust whitespace;
+                // emoji-era labels or Unicode-sample HTML can place them between Latin tokens without ASCII space.
+                // U+1F1AE–U+1F1E5 are unassigned and stay unmapped.
+                // Mahjong Tiles U+1F000–U+1F02F, Domino Tiles U+1F030–U+1F093, and Playing Cards U+1F0A0–U+1F0FF (all
+                // So as assigned) are not Rust whitespace; game or Unicode-sample HTML can place tile / suit glyphs
+                // between Latin tokens without ASCII space. U+1F094–U+1F09F are reserved—excluded.
+                // Enclosed Ideographic Supplement: assigned subranges U+1F200–U+1F202, U+1F210–U+1F23B, U+1F240–U+1F248,
+                // U+1F250–U+1F251, U+1F260–U+1F265 (squared katakana / CJK, tortoise-shell bracketed ideographs, circled
+                // advantage/accept, rounded fu/lu/shou/xi/shuangxi/cai; all So) are not Rust whitespace; Japanese mobile
+                // carrier or Unicode-sample HTML can place them between Latin tokens without ASCII space. Gaps
+                // U+1F203–U+1F20F, U+1F23C–U+1F23F, U+1F249–U+1F24F, U+1F252–U+1F25F, U+1F266–U+1F2FF unassigned—excluded.
+                // Miscellaneous Symbols and Pictographs (U+1F300–U+1F5FF), Emoticons (U+1F600–U+1F64F), and ornamental
+                // dingbat leaf pointers U+1F650–U+1F67F (mostly So / emoji presentation); not Rust whitespace. Emoji or
+                // Unicode-sample HTML can place cyclones, smileys, etc. between Latin tokens without ASCII space. The
+                // unassigned gap U+1F266–U+1F2FF before U+1F300 stays unmapped.
                 // Box Drawing (U+2500–U+257F), Block Elements (U+2580–U+259F), and Geometric Shapes (U+25A0–U+25FF;
                 // mostly So) are not Rust whitespace; ASCII-art tables, UI mockups, or Unicode-sample HTML can place
                 // light horizontal / shaded blocks / filled squares between Latin tokens without ASCII space.
@@ -674,6 +696,20 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{00A7}'
                 | '\u{00B6}'
                 | '\u{20A0}'..='\u{20BF}'
+                | '\u{2100}'..='\u{2101}'
+                | '\u{2103}'..='\u{2106}'
+                | '\u{2108}'..='\u{2109}'
+                | '\u{2114}'
+                | '\u{2116}'..='\u{2118}'
+                | '\u{211E}'..='\u{2123}'
+                | '\u{2125}'
+                | '\u{2127}'
+                | '\u{2129}'
+                | '\u{212E}'
+                | '\u{213A}'..='\u{213B}'
+                | '\u{2140}'..='\u{2144}'
+                | '\u{214A}'..='\u{214D}'
+                | '\u{214F}'
                 | '\u{2150}'..='\u{2182}'
                 | '\u{2185}'..='\u{218B}'
                 | '\u{2190}'..='\u{21FF}'
@@ -798,6 +834,17 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1361}'
                 | '\u{2440}'..='\u{245F}'
                 | '\u{2460}'..='\u{24FF}'
+                | '\u{1F000}'..='\u{1F02F}'
+                | '\u{1F030}'..='\u{1F093}'
+                | '\u{1F0A0}'..='\u{1F0FF}'
+                | '\u{1F100}'..='\u{1F1AD}'
+                | '\u{1F1E6}'..='\u{1F1FF}'
+                | '\u{1F200}'..='\u{1F202}'
+                | '\u{1F210}'..='\u{1F23B}'
+                | '\u{1F240}'..='\u{1F248}'
+                | '\u{1F250}'..='\u{1F251}'
+                | '\u{1F260}'..='\u{1F265}'
+                | '\u{1F300}'..='\u{1F67F}'
                 | '\u{2500}'..='\u{25FF}'
                 | '\u{2600}'..='\u{26FF}'
                 | '\u{2700}'..='\u{27BF}'
@@ -1274,7 +1321,10 @@ mod tests {
     fn wancho_comma_full_stop_and_nyiakeng_sentence_punctuation_separate_words() {
         // Wancho U+1E2FE–U+1E2FF (COMMA, FULL STOP; Po)—not Rust whitespace.
         // Nyiakeng Puachue Hmong U+16FE2–U+16FE3 (EXCLAMATION MARK, QUESTION MARK; Po)—not Rust whitespace.
-        for cp in [0x16FE2u32, 0x16FE3].into_iter().chain(0x1E2FEu32..=0x1E2FF) {
+        for cp in [0x16FE2u32, 0x16FE3]
+            .into_iter()
+            .chain(0x1E2FEu32..=0x1E2FF)
+        {
             let sep = char::from_u32(cp).unwrap();
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -1355,6 +1405,68 @@ mod tests {
     fn number_forms_reversed_roman_c_and_reversed_c_letter_stay_unmapped() {
         // U+2183 / U+2184 are Lu/Ll—letter-like; must not force a word break like vulgar fractions.
         for cp in [0x2183u32, 0x2184] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn letterlike_symbol_subranges_separate_words() {
+        // Letterlike Symbols: So/Sm only (FEAT-D147); not Rust whitespace.
+        let runs: &[(u32, u32)] = &[
+            (0x2100, 0x2101),
+            (0x2103, 0x2106),
+            (0x2108, 0x2109),
+            (0x2114, 0x2114),
+            (0x2116, 0x2118),
+            (0x211E, 0x2123),
+            (0x2125, 0x2125),
+            (0x2127, 0x2127),
+            (0x2129, 0x2129),
+            (0x212E, 0x212E),
+            (0x213A, 0x213B),
+            (0x2140, 0x2144),
+            (0x214A, 0x214D),
+            (0x214F, 0x214F),
+        ];
+        for &(a, b) in runs {
+            for cp in a..=b {
+                let sep = char::from_u32(cp).expect("valid scalar");
+                let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+                let cleaned = clean_html(&html);
+                assert!(
+                    cleaned.contains("hello world"),
+                    "expected U+{:04X} normalized before collapse, got {:?}",
+                    cp,
+                    cleaned
+                );
+                assert!(
+                    !cleaned.contains(sep),
+                    "cleaned output still contains U+{:04X}",
+                    cp
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn letterlike_mathematical_letters_stay_unmapped() {
+        // Lu/Ll/Lo in Letterlike Symbols—must not split Latin tokens like mapped So/Sm.
+        for cp in [
+            0x2102u32, // DOUBLE-STRUCK CAPITAL C (Lu)
+            0x210E,    // PLANCK CONSTANT (Ll)
+            0x2115,    // DOUBLE-STRUCK CAPITAL N (Lu)
+            0x2126,    // OHM SIGN (Lu)
+            0x2135,    // ALEF SYMBOL (Lo)
+            0x2146,    // DOUBLE-STRUCK ITALIC SMALL D (Ll)
+        ] {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -1460,7 +1572,9 @@ mod tests {
         // U+055C–U+055F (exclamation, comma, question, abbreviation mark; Po) and U+0589 / U+058A
         // (full stop, hyphen; Po/Pd)—not Rust whitespace. U+055A apostrophe and U+055B emphasis
         // stay unmapped (word-internal risk, like U+2019).
-        for sep in ['\u{055C}', '\u{055D}', '\u{055E}', '\u{055F}', '\u{0589}', '\u{058A}'] {
+        for sep in [
+            '\u{055C}', '\u{055D}', '\u{055E}', '\u{055F}', '\u{0589}', '\u{058A}',
+        ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
@@ -1484,19 +1598,8 @@ mod tests {
         // U+066A–U+066D (Arabic percent, decimal sep, thousands sep, five pointed star): Po / Pi / Pf; not Rust
         // whitespace—mixed European, Greek, or Arabic/Latin HTML can glue tokens without ASCII space.
         for sep in [
-            '\u{00A1}',
-            '\u{00BF}',
-            '\u{00AB}',
-            '\u{00BB}',
-            '\u{037E}',
-            '\u{060C}',
-            '\u{061B}',
-            '\u{061F}',
-            '\u{06D4}',
-            '\u{066A}',
-            '\u{066B}',
-            '\u{066C}',
-            '\u{066D}',
+            '\u{00A1}', '\u{00BF}', '\u{00AB}', '\u{00BB}', '\u{037E}', '\u{060C}', '\u{061B}',
+            '\u{061F}', '\u{06D4}', '\u{066A}', '\u{066B}', '\u{066C}', '\u{066D}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -1749,7 +1852,10 @@ mod tests {
     #[test]
     fn arabic_biblical_end_of_verse_signwriting_and_ol_onal_punctuation_separate_words() {
         // Arabic Extended-C U+10ED0 END OF VERSE (Po). SignWriting U+1DA87–U+1DA8B (Po). Ol Onal U+1E5FF (Po).
-        let mut seps: Vec<char> = vec![char::from_u32(0x10ED0).unwrap(), char::from_u32(0x1E5FF).unwrap()];
+        let mut seps: Vec<char> = vec![
+            char::from_u32(0x10ED0).unwrap(),
+            char::from_u32(0x1E5FF).unwrap(),
+        ];
         seps.extend('\u{1DA87}'..='\u{1DA8B}');
         for sep in seps {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -1940,12 +2046,7 @@ mod tests {
         // DASH, U+2015 HORIZONTAL BAR (all Pd)—not Rust whitespace. Em/en dashes in body copy can
         // sit between Latin tokens without ASCII space.
         for sep in [
-            '\u{2010}',
-            '\u{2011}',
-            '\u{2012}',
-            '\u{2013}',
-            '\u{2014}',
-            '\u{2015}',
+            '\u{2010}', '\u{2011}', '\u{2012}', '\u{2013}', '\u{2014}', '\u{2015}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2064,23 +2165,9 @@ mod tests {
         // compatibility punctuation): Po/Ps/Pe/Pc—not Rust whitespace. Mixed CJK / Latin HTML
         // or vertical-layout compatibility text can sit between Latin tokens without ASCII space.
         for sep in [
-            '\u{3001}',
-            '\u{3002}',
-            '\u{FF0C}',
-            '\u{FF1A}',
-            '\u{FF1B}',
-            '\u{FF01}',
-            '\u{FF1F}',
-            '\u{FE10}',
-            '\u{FE11}',
-            '\u{FE12}',
-            '\u{FE13}',
-            '\u{FE14}',
-            '\u{FE15}',
-            '\u{FE16}',
-            '\u{FE17}',
-            '\u{FE18}',
-            '\u{FE19}',
+            '\u{3001}', '\u{3002}', '\u{FF0C}', '\u{FF1A}', '\u{FF1B}', '\u{FF01}', '\u{FF1F}',
+            '\u{FE10}', '\u{FE11}', '\u{FE12}', '\u{FE13}', '\u{FE14}', '\u{FE15}', '\u{FE16}',
+            '\u{FE17}', '\u{FE18}', '\u{FE19}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2107,26 +2194,9 @@ mod tests {
         // typography HTML can glue Latin tokens without ASCII space. U+FF07 apostrophe, U+FF5E tilde,
         // U+FF40 grave intentionally omitted (see `collapse_whitespace` comment).
         for sep in [
-            '\u{FF03}',
-            '\u{FF04}',
-            '\u{FF05}',
-            '\u{FF06}',
-            '\u{FF08}',
-            '\u{FF09}',
-            '\u{FF0A}',
-            '\u{FF0B}',
-            '\u{FF0D}',
-            '\u{FF0E}',
-            '\u{FF1C}',
-            '\u{FF1D}',
-            '\u{FF1E}',
-            '\u{FF20}',
-            '\u{FF3B}',
-            '\u{FF3C}',
-            '\u{FF3D}',
-            '\u{FF5B}',
-            '\u{FF5C}',
-            '\u{FF5D}',
+            '\u{FF03}', '\u{FF04}', '\u{FF05}', '\u{FF06}', '\u{FF08}', '\u{FF09}', '\u{FF0A}',
+            '\u{FF0B}', '\u{FF0D}', '\u{FF0E}', '\u{FF1C}', '\u{FF1D}', '\u{FF1E}', '\u{FF20}',
+            '\u{FF3B}', '\u{FF3C}', '\u{FF3D}', '\u{FF5B}', '\u{FF5C}', '\u{FF5D}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2152,18 +2222,8 @@ mod tests {
         // pound / not (Sc/Sm), U+FFE4 broken bar (So), U+FFE5–U+FFE6 yen / won (Sc)—not Rust
         // whitespace. U+FFE3 FULLWIDTH MACRON (Sk) intentionally omitted (overline / word-internal risk).
         for sep in [
-            '\u{FF5F}',
-            '\u{FF60}',
-            '\u{FF61}',
-            '\u{FF62}',
-            '\u{FF63}',
-            '\u{FF64}',
-            '\u{FFE0}',
-            '\u{FFE1}',
-            '\u{FFE2}',
-            '\u{FFE4}',
-            '\u{FFE5}',
-            '\u{FFE6}',
+            '\u{FF5F}', '\u{FF60}', '\u{FF61}', '\u{FF62}', '\u{FF63}', '\u{FF64}', '\u{FFE0}',
+            '\u{FFE1}', '\u{FFE2}', '\u{FFE4}', '\u{FFE5}', '\u{FFE6}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2188,7 +2248,8 @@ mod tests {
         // not Rust whitespace; U+FFE3 FULLWIDTH MACRON (Sk) stays unmapped (between U+FFE2 and U+FFE4
         // in the block, not in this arm). Completes Halfwidth and Fullwidth Forms through U+FFEF.
         for sep in [
-            '\u{FFE8}', '\u{FFE9}', '\u{FFEA}', '\u{FFEB}', '\u{FFEC}', '\u{FFED}', '\u{FFEE}', '\u{FFEF}',
+            '\u{FFE8}', '\u{FFE9}', '\u{FFEA}', '\u{FFEB}', '\u{FFEC}', '\u{FFED}', '\u{FFEE}',
+            '\u{FFEF}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2330,13 +2391,7 @@ mod tests {
         // U+060B AFGHANI SIGN (Sc), U+060D DATE SEPARATOR (Po), U+061E TRIPLE DOT PUNCTUATION (Po),
         // U+066D FIVE POINTED STAR (Po). None are Rust whitespace.
         for sep in [
-            '\u{2D70}',
-            '\u{0609}',
-            '\u{060A}',
-            '\u{060B}',
-            '\u{060D}',
-            '\u{061E}',
-            '\u{066D}',
+            '\u{2D70}', '\u{0609}', '\u{060A}', '\u{060B}', '\u{060D}', '\u{061E}', '\u{066D}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2449,7 +2504,10 @@ mod tests {
         // Thai: U+0E2F PAIYANNOI, U+0E4F FONGMAN, U+0E5A ANGKHANKHU, U+0E5B KHOMUT (Po). Lao: U+0EAF ELLIPSIS
         // (Po). Myanmar: U+104A LITTLE SECTION, U+104B SECTION (Po); U+104C–U+104F locative / exclamation /
         // completed / aforementioned (So). None are Rust whitespace.
-        for cp in [0x0E2Fu32, 0x0E4F, 0x0E5A, 0x0E5B, 0x0EAF].into_iter().chain(0x104A..=0x104F) {
+        for cp in [0x0E2Fu32, 0x0E4F, 0x0E5A, 0x0E5B, 0x0EAF]
+            .into_iter()
+            .chain(0x104A..=0x104F)
+        {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2753,12 +2811,7 @@ mod tests {
         // U+0DF4 SINHALA PUNCTUATION KUNDDALIYA (Po). Limbu U+1940 SIGN TOKMA, U+1944 EXCLAMATION MARK, U+1945 QUESTION MARK (Po).
         // Meetei Mayek U+AAF0 CHEIKHEI, U+AAF1 AHANG KHUDA (Po). None are Rust whitespace.
         for sep in [
-            '\u{0DF4}',
-            '\u{1940}',
-            '\u{1944}',
-            '\u{1945}',
-            '\u{AAF0}',
-            '\u{AAF1}',
+            '\u{0DF4}', '\u{1940}', '\u{1944}', '\u{1945}', '\u{AAF0}', '\u{AAF1}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -2889,6 +2942,151 @@ mod tests {
         // U+2460–U+24FF: circled / parenthesized digits, digit full stops, enclosed Latin, etc. (No / So);
         // not Rust whitespace; Unicode lists or samples can glue Latin tokens without ASCII space.
         for cp in 0x2460u32..=0x24FF {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn mahjong_domino_and_playing_cards_separate_words() {
+        // U+1F000–U+1F02F Mahjong, U+1F030–U+1F093 Domino, U+1F0A0–U+1F0FF Playing Cards (all So); not Rust whitespace.
+        // U+1F094–U+1F09F reserved—excluded.
+        let cps = (0x1F000u32..=0x1F02F)
+            .chain(0x1F030..=0x1F093)
+            .chain(0x1F0A0..=0x1F0FF);
+        for cp in cps {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn mahjong_domino_playing_cards_reserved_gap_stays_unmapped() {
+        // U+1F094–U+1F09F between Domino and Playing Cards blocks are reserved.
+        for cp in [0x1F094u32, 0x1F098, 0x1F09F] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn enclosed_alphanumeric_supplement_assigned_separate_words() {
+        // U+1F100–U+1F1AD and U+1F1E6–U+1F1FF: enclosed Latin/digits and regional indicators (No / So); not Rust
+        // whitespace. U+1F1AE–U+1F1E5 unassigned—excluded from implementation.
+        let cps = (0x1F100u32..=0x1F1AD).chain(0x1F1E6..=0x1F1FF);
+        for cp in cps {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn enclosed_alphanumeric_supplement_unassigned_gap_stays_unmapped() {
+        // U+1F1AE–U+1F1E5 are unassigned; must not be forced to ASCII space like assigned supplement scalars.
+        for cp in [0x1F1AEu32, 0x1F1B0, 0x1F1E5] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn enclosed_ideographic_supplement_assigned_separate_words() {
+        // U+1F200–U+1F202, U+1F210–U+1F23B, U+1F240–U+1F248, U+1F250–U+1F251, U+1F260–U+1F265: squared / bracketed /
+        // circled / rounded CJK symbols (all So); not Rust whitespace. Inter-range gaps unassigned—excluded.
+        let cps = (0x1F200u32..=0x1F202)
+            .chain(0x1F210..=0x1F23B)
+            .chain(0x1F240..=0x1F248)
+            .chain(0x1F250..=0x1F251)
+            .chain(0x1F260..=0x1F265);
+        for cp in cps {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn enclosed_ideographic_supplement_unassigned_gaps_stay_unmapped() {
+        // U+1F203–U+1F20F, U+1F23C–U+1F23F, U+1F249–U+1F24F, U+1F252–U+1F25F, U+1F266–U+1F2FF unassigned.
+        for cp in [0x1F203u32, 0x1F20A, 0x1F23C, 0x1F249, 0x1F252, 0x1F266, 0x1F2FF] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn miscellaneous_symbols_pictographs_and_emoticons_u1f300_through_u1f67f_separate_words() {
+        // U+1F300–U+1F5FF Miscellaneous Symbols and Pictographs, U+1F600–U+1F64F Emoticons, U+1F650–U+1F67F
+        // ornamental dingbats (mostly So); not Rust whitespace.
+        for cp in 0x1F300u32..=0x1F67F {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);

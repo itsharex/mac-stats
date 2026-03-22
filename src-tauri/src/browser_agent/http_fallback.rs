@@ -111,7 +111,10 @@ fn enclosing_form_index(el: ElementRef<'_>, form_elements: &[ElementRef<'_>]) ->
 }
 
 /// Parse HTML into interactables, per-form metadata, and body text.
-fn parse_html(html: &str, base_url: &str) -> Result<(Vec<HttpInteractable>, Vec<FormSpec>, String), String> {
+fn parse_html(
+    html: &str,
+    base_url: &str,
+) -> Result<(Vec<HttpInteractable>, Vec<FormSpec>, String), String> {
     let document = Html::parse_document(html);
     let mut forms: Vec<FormSpec> = vec![FormSpec {
         action_url: base_url.to_string(),
@@ -193,8 +196,8 @@ fn parse_html(html: &str, base_url: &str) -> Result<(Vec<HttpInteractable>, Vec<
         }
     }
 
-    let input_sel =
-        Selector::parse("input, textarea, button").map_err(|e| format!("controls selector: {}", e))?;
+    let input_sel = Selector::parse("input, textarea, button")
+        .map_err(|e| format!("controls selector: {}", e))?;
     for el in document.select(&input_sel) {
         let tag = el.value().name().to_lowercase();
         let input_type = if tag == "input" {
@@ -397,8 +400,8 @@ fn apply_form_submission(spec: &FormSpec, pairs: &[(String, String)]) -> Result<
         );
         fetch_page_post_form_urlencoded(&spec.action_url, pairs)?
     } else {
-        let url_parsed = Url::parse(&spec.action_url)
-            .map_err(|e| format!("URL parse for form GET: {}", e))?;
+        let url_parsed =
+            Url::parse(&spec.action_url).map_err(|e| format!("URL parse for form GET: {}", e))?;
         let mut url_with_params = url_parsed;
         for (k, v) in pairs {
             url_with_params.query_pairs_mut().append_pair(k, v);
@@ -596,12 +599,8 @@ mod tests {
   <input type="password" name="pass" value=""/>
   <input type="submit" name="go" value="Sign in"/>
 </form></body></html>"#;
-        let (interactables, forms) =
-            parse_html_for_test(html, "https://example.com/app/page");
-        let submit = interactables
-            .iter()
-            .find(|i| i.is_submit)
-            .expect("submit");
+        let (interactables, forms) = parse_html_for_test(html, "https://example.com/app/page");
+        let submit = interactables.iter().find(|i| i.is_submit).expect("submit");
         assert!(forms[submit.form_id].method_is_post);
         assert_eq!(
             forms[submit.form_id].action_url,
@@ -666,7 +665,10 @@ mod tests {
 <button type="submit">Go</button>
 </body></html>"#;
         let (interactables, forms) = parse_html_for_test(html, "https://example.com/page");
-        let inp = interactables.iter().find(|i| i.name.as_deref() == Some("orphan")).unwrap();
+        let inp = interactables
+            .iter()
+            .find(|i| i.name.as_deref() == Some("orphan"))
+            .unwrap();
         assert_eq!(inp.form_id, 0);
         assert_eq!(forms[0].action_url, "https://example.com/page");
         assert!(!forms[0].method_is_post);

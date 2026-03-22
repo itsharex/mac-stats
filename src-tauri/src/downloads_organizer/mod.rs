@@ -137,22 +137,15 @@ pub fn parse_rules_markdown(content: &str) -> Result<ParsedRules, String> {
                 "destination" => {
                     let d = v.trim().trim_matches('/').to_string();
                     if d.is_empty() {
-                        return Err(format!(
-                            "line ~{}: destination cannot be empty",
-                            line_hint
-                        ));
+                        return Err(format!("line ~{}: destination cannot be empty", line_hint));
                     }
                     destination = Some(d);
                 }
                 _ => {}
             }
         }
-        let destination = destination.ok_or_else(|| {
-            format!(
-                "line ~{}: Rule block missing destination",
-                line_hint
-            )
-        })?;
+        let destination = destination
+            .ok_or_else(|| format!("line ~{}: Rule block missing destination", line_hint))?;
         if exts.is_empty() && glob.is_none() {
             return Err(format!(
                 "line ~{}: Rule must have match_extensions or match_glob",
@@ -279,7 +272,10 @@ pub fn unique_destination(root: &Path, rel_dir: &str, file_name: &str) -> PathBu
         return candidate;
     }
     let path = Path::new(file_name);
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(file_name);
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -361,10 +357,7 @@ pub fn apply_moves(plan: &[PlannedMove], dry_run: bool) -> RunSummary {
         }
         match fs::rename(&m.src, &m.dest) {
             Ok(()) => {
-                debug!(
-                    "Downloads organizer: moved {:?} -> {:?}",
-                    m.src, m.dest
-                );
+                debug!("Downloads organizer: moved {:?} -> {:?}", m.src, m.dest);
                 moved += 1;
             }
             Err(e) if e.kind() == ErrorKind::CrossesDevices => {
@@ -388,11 +381,7 @@ pub fn apply_moves(plan: &[PlannedMove], dry_run: bool) -> RunSummary {
         }
     }
 
-    let moved = if dry_run {
-        planned.len() as u32
-    } else {
-        moved
-    };
+    let moved = if dry_run { planned.len() as u32 } else { moved };
     RunSummary {
         dry_run,
         moved,
@@ -535,7 +524,10 @@ pub fn run_organizer_pass() {
     let rules_content = match fs::read_to_string(&rules_path) {
         Ok(s) => s,
         Err(e) => {
-            warn!("Downloads organizer: cannot read rules {:?}: {}", rules_path, e);
+            warn!(
+                "Downloads organizer: cannot read rules {:?}: {}",
+                rules_path, e
+            );
             state.rules_error = Some(format!("read rules: {}", e));
             state.last_run_utc = Some(Utc::now());
             save_state(&state);
@@ -651,10 +643,7 @@ mod tests {
 - destination: B
 "#;
         let p = parse_rules_markdown(md).unwrap();
-        assert_eq!(
-            first_matching_destination(&p, "x.txt"),
-            Some("A")
-        );
+        assert_eq!(first_matching_destination(&p, "x.txt"), Some("A"));
     }
 
     #[test]
@@ -681,7 +670,9 @@ mod tests {
         let dests: Vec<_> = plan.iter().map(|m| m.dest.clone()).collect();
         assert!(dests.iter().any(|p| p.ends_with("Img/a.png")));
         assert!(dests.iter().any(|p| p.ends_with("Unsorted/b.nope")));
-        assert!(!dests.iter().any(|p| p.to_string_lossy().contains("crdownload")));
+        assert!(!dests
+            .iter()
+            .any(|p| p.to_string_lossy().contains("crdownload")));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

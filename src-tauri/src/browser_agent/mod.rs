@@ -837,8 +837,8 @@ fn navigation_error_class(error_text: &str) -> String {
 
 /// LLM-facing navigation error: trim, cap length, redact obvious local path segments.
 fn sanitize_navigation_error_for_llm(error_text: &str) -> String {
-    let re_pathy = Regex::new(r"(?i)(/Users/[^\s]+|/home/[^\s]+|file://[^\s]+)")
-        .expect("static regex");
+    let re_pathy =
+        Regex::new(r"(?i)(/Users/[^\s]+|/home/[^\s]+|file://[^\s]+)").expect("static regex");
     let mut s = error_text.trim().to_string();
     s = re_pathy.replace_all(&s, "[path]").to_string();
     const MAX: usize = 400;
@@ -875,16 +875,16 @@ fn format_navigation_failed_for_tool(requested_url: &str, chrome_detail: &str) -
 
 fn navigate_failed_detail_from_display(err_msg: &str) -> String {
     const PREFIX: &str = "Navigate failed: ";
-    err_msg
-        .strip_prefix(PREFIX)
-        .unwrap_or(err_msg)
-        .to_string()
+    err_msg.strip_prefix(PREFIX).unwrap_or(err_msg).to_string()
 }
 
 /// After `navigate_to` returns Ok, Chrome may still show an error document without `errorText` on the navigate response.
 fn post_navigate_load_failure_message(requested_url: &str, final_url: &str) -> Option<String> {
     if is_chrome_internal_error_document_url(final_url) {
-        log_navigation_cdp_failure(requested_url, "chrome-error document (no errorText on navigate)");
+        log_navigation_cdp_failure(
+            requested_url,
+            "chrome-error document (no errorText on navigate)",
+        );
         return Some(format_navigation_failed_for_tool(
             requested_url,
             "internal error page (chrome-error://); the network request did not succeed",
@@ -1937,7 +1937,9 @@ mod tests {
 
     #[test]
     fn chrome_error_url_detected_case_insensitive() {
-        assert!(is_chrome_internal_error_document_url("chrome-error://chromewebdata/"));
+        assert!(is_chrome_internal_error_document_url(
+            "chrome-error://chromewebdata/"
+        ));
     }
 
     #[test]

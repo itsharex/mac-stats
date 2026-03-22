@@ -989,10 +989,7 @@ impl Config {
         let config_path = Self::config_file_path();
         if let Ok(content) = std::fs::read_to_string(&config_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(v) = json
-                    .get("downloadsOrganizerPath")
-                    .and_then(|v| v.as_str())
-                {
+                if let Some(v) = json.get("downloadsOrganizerPath").and_then(|v| v.as_str()) {
                     if !v.trim().is_empty() {
                         return v.to_string();
                     }

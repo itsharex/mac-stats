@@ -272,7 +272,8 @@ pub fn fetch_page_post_form_urlencoded(
 ) -> Result<String, String> {
     let raw = url.trim();
     let url_str = extract_first_url(raw).ok_or_else(|| {
-        "Invalid URL for POST: no http:// or https:// URL found. Provide a single URL only.".to_string()
+        "Invalid URL for POST: no http:// or https:// URL found. Provide a single URL only."
+            .to_string()
     })?;
     let parsed = validate_fetch_url(&url_str)?;
     let allowed_hosts = crate::config::Config::ssrf_allowed_hosts();
@@ -319,7 +320,10 @@ pub fn fetch_page_post_form_urlencoded(
     if !status.is_success() {
         let code = status.as_u16();
         let reason = status.canonical_reason().unwrap_or("");
-        warn!("Fetch page POST failed: {} {} for URL {}", code, reason, url);
+        warn!(
+            "Fetch page POST failed: {} {} for URL {}",
+            code, reason, url
+        );
         return Err(format!("HTTP {}: {}", code, reason));
     }
 
