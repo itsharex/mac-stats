@@ -13,6 +13,29 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::{debug, info, warn};
 
+/// True if shared `soul.md` exists and contains non-whitespace text.
+fn shared_soul_file_nonempty() -> bool {
+    let soul_path = Config::soul_file_path();
+    std::fs::read_to_string(&soul_path)
+        .ok()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn log_shared_soul_presence() {
+    let soul_path = Config::soul_file_path();
+    let soul_ok = shared_soul_file_nonempty();
+    info!(
+        "Agents: shared soul {:?}: {}",
+        soul_path,
+        if soul_ok {
+            "present"
+        } else {
+            "missing (will write default on first use)"
+        }
+    );
+}
+
 /// Per-agent config from agent.json. Name is required; others optional.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -63,6 +86,7 @@ pub fn load_agents() -> Vec<Agent> {
     let dir = Config::agents_dir();
     if !dir.is_dir() {
         info!("Agents: directory missing, path={:?}", dir);
+        log_shared_soul_presence();
         return Vec::new();
     }
 
@@ -101,6 +125,7 @@ pub fn load_agents() -> Vec<Agent> {
 
     if agents.is_empty() {
         info!("Agents: no enabled agents in {:?}", dir);
+        log_shared_soul_presence();
     } else {
         let list: String = agents
             .iter()
@@ -108,20 +133,7 @@ pub fn load_agents() -> Vec<Agent> {
             .collect::<Vec<_>>()
             .join(", ");
         info!("Agents: loaded {} from {:?}: {}", agents.len(), dir, list);
-        let soul_path = Config::soul_file_path();
-        let soul_exists = std::fs::read_to_string(&soul_path)
-            .ok()
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false);
-        info!(
-            "Agents: shared soul {:?}: {}",
-            soul_path,
-            if soul_exists {
-                "present"
-            } else {
-                "missing (will write default on first use)"
-            }
-        );
+        log_shared_soul_presence();
     }
 
     // Auto-resolve model assignments from cached catalog (if available)
@@ -423,6 +435,73 @@ pub fn resolve_agent_models(agents: &mut [Agent], catalog: &crate::ollama::model
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
+    use std::sync::Mutex;
+
+    /// Tests override `HOME` for `Config::agents_dir()`; serialize so env does not race.
+    static HOME_FOR_AGENTS_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct HomeOverride {
+        previous: Option<String>,
+    }
+
+    impl HomeOverride {
+        fn set(home: &Path) -> Self {
+            let previous = std::env::var("HOME").ok();
+            std::env::set_var("HOME", home.as_os_str());
+            Self { previous }
+        }
+    }
+
+    impl Drop for HomeOverride {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+    }
+
+    #[test]
+    fn shared_soul_file_nonempty_true_when_file_has_text() {
+        let _guard = HOME_FOR_AGENTS_TEST_LOCK.lock().expect("home test lock");
+        let base = std::env::temp_dir().join(format!(
+            "mac-stats-soul-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join(".mac-stats/agents")).unwrap();
+        let _home = HomeOverride::set(&base);
+        std::fs::write(Config::soul_file_path(), "be kind\n").unwrap();
+        assert!(shared_soul_file_nonempty());
+    }
+
+    #[test]
+    fn shared_soul_file_nonempty_false_when_empty_or_whitespace() {
+        let _guard = HOME_FOR_AGENTS_TEST_LOCK.lock().expect("home test lock");
+        let base = std::env::temp_dir().join(format!(
+            "mac-stats-soul-empty-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join(".mac-stats/agents")).unwrap();
+        let _home = HomeOverride::set(&base);
+        std::fs::write(Config::soul_file_path(), "   \n\t").unwrap();
+        assert!(!shared_soul_file_nonempty());
+    }
+
+    #[test]
+    fn shared_soul_file_nonempty_false_when_missing() {
+        let _guard = HOME_FOR_AGENTS_TEST_LOCK.lock().expect("home test lock");
+        let base = std::env::temp_dir().join(format!(
+            "mac-stats-soul-missing-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join(".mac-stats/agents")).unwrap();
+        let _home = HomeOverride::set(&base);
+        assert!(!shared_soul_file_nonempty());
+    }
 
     #[test]
     fn build_combined_prompt_order() {

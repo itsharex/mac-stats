@@ -4,11 +4,43 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/raro42/mac-stats?include_prereleases&style=flat-square)](https://github.com/raro42/mac-stats/releases/latest)
 
-A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, and MCP—all on your Mac. No cloud, no telemetry. Lives in your menu bar—CPU, GPU, RAM, disk at a glance. Real-time, minimal, there when you look. Built with Rust and Tauri.
+Rust + Tauri menu-bar app for **macOS** (Apple Silicon–first): **live system metrics** and a **serious local Ollama agent** in one place—tools, Discord, tasks, scheduler, and MCP—without shipping your data to a vendor backend.
 
 <img src="screens/data-poster.png" alt="mac-stats Data Poster theme" width="500">
 
-📋 [Changelog](CHANGELOG.md) · 📸 [Screenshots & themes](screens/README.md)
+📋 [Changelog](CHANGELOG.md) · 🗺️ [AI roadmap (tasks & tools)](docs/006_roadmap_ai_tasks.md) · 📸 [Screenshots & themes](screens/README.md)
+
+---
+
+## What mac-stats ships with
+
+### Menu bar & glass UI
+
+- **CPU, GPU, RAM, and disk** in the menu bar; open the window for **temperature**, **CPU frequency** (IOReport where available), **battery**, and a **process list** with top consumers.
+- **Nine themes**, collapsible sections, and a dashboard for **monitors**, **Ollama**, and more—designed to feel native on macOS.
+- **Low overhead** in normal use: on the order of **~0.5% CPU** with the window closed, **under ~1%** with the CPU window open.
+
+### Local AI agent (Ollama) with a deep toolbelt
+
+- **Chat in the app** or **via Discord** using the same engine: multi-step **tool loop**, sub-agents (**`AGENT:`**), **skills**, **memory** (`memory.md`, **MEMORY_APPEND**), and **session compaction** so long threads stay usable.
+- **Web & research:** **`FETCH_URL`** (server-side fetch, **SSRF-hardened**, HTML cleaned before the model sees it), **`BRAVE_SEARCH`**, **`PERPLEXITY_SEARCH`** (optional API keys).
+- **Browser automation (CDP):** navigate, click, scroll, extract, and **`BROWSER_SCREENSHOT`** → PNG under `~/.mac-stats/screenshots/` (handy for Discord attachments).
+- **Automation & coding helpers:** **`RUN_CMD`** (allowlisted), **`RUN_JS`**, **`PYTHON_SCRIPT`** under `~/.mac-stats/scripts/`, **`CURSOR_AGENT`** when the Cursor CLI is on `PATH`.
+- **Integrations:** **`DISCORD_API`**, **`MASTODON_POST`**, **Redmine** helpers, optional **plugins**—plus **any MCP server** (stdio or HTTP/SSE), e.g. [Ori Mnemos](docs/038_ori_mnemos_mcp.md).
+- **Smarter routing:** deterministic **pre-routing** for common intents (fetch URL, search, Discord API, schedules, tasks) so simple asks don’t pay an extra planning hop; **context-overflow auto-recovery** trims oversized tool results and retries instead of failing the whole run.
+- **Quality-of-life:** **completion verification** (did we meet the ask?), **escalation / “try harder”** phrases you can edit, **loop guards** against tool thrash, and user-facing **Ollama error sanitization**.
+
+### Discord, tasks, scheduler, monitoring
+
+- **Discord bot** — @mentions, DMs, per-channel modes (**mention_only**, **all_messages**, **having_fun**), optional **draft messages** that update while tools run, **debouncing** for rapid messages, **429** handling with backoff.
+- **Tasks** — markdown task files under `~/.mac-stats/task/` (**TASK_CREATE**, **TASK_LIST**, **TASK_STATUS**, assignees, append/show).
+- **Scheduler** — cron or one-shot jobs in `schedules.json`; Ollama-powered runs with optional Discord replies and a **per-task wall-clock timeout**.
+- **Monitors & alerts** — website checks, social (e.g. Mastodon mentions), rules and channels (Telegram, Slack, Mastodon, …); background **due checks** with stats persisted to disk.
+
+### Privacy & operations
+
+- **Models and inference stay on your Mac** (Ollama). Config, agents, sessions, tasks, and logs live under **`~/.mac-stats/`**. Optional network features only run when you configure them.
+- **Structured logging** via `tracing`; tune console noise with **`MAC_STATS_LOG`** ([subsystem filter](docs/039_mac_stats_log_subsystems.md)). Tail **`~/.mac-stats/debug.log`** when debugging.
 
 ---
 
@@ -26,25 +58,14 @@ Or one-liner: `curl -fsSL https://raw.githubusercontent.com/raro42/mac-stats/ref
 
 ---
 
-## At a glance
+## All local (quick reminder)
 
-- **Menu bar** — CPU, GPU, RAM, disk at a glance; click to open the details window.
-- **AI chat** — Ollama in the app or via Discord; FETCH_URL, BRAVE_SEARCH, PERPLEXITY_SEARCH, RUN_CMD, code execution, MCP.
-- **Discord bot** — Optional; @mentions, DMs, having_fun mode (let your Mac chat with other bots when bored—yes, it gets weird); full Ollama + tools.
-- **Tasks & scheduler** — Task files under `~/.mac-stats/task/`; cron or one-shot; optional Discord reply.
-- **All local** — Models and data on your Mac; no cloud backend; works offline.
-- **Low CPU** — ~0.5% with window closed, &lt;1% with CPU window open.
+- **AI** — Ollama on your Mac; models and inference stay on-device unless you point at a remote endpoint yourself.
+- **Your data** — Config, memory, sessions, and tasks in `~/.mac-stats`. Secrets in `~/.mac-stats/.config.env` or Keychain.
+- **Optional network** — Discord, Mastodon, FETCH_URL, Brave Search, Perplexity, website checks—only when you configure and use them.
+- **Metrics** — Read from your machine (temperature, frequency, process list) when the window is open; menu bar stays light when it’s closed.
 
----
-
-## All local
-
-- **AI** — Ollama on your Mac; models and inference stay on-device.
-- **Your data** — Config, memory, sessions, and tasks in `~/.mac-stats`. Nothing sent to a vendor. Secrets in `~/.mac-stats/.config.env` or Keychain.
-- **Optional network** — Discord, Mastodon, FETCH_URL, Brave Search, Perplexity (web search), website checks only when you use them.
-- **Metrics** — Read from your machine when you open the window (temperature, frequency, process list).
-
-No subscription. No lock-in. Works offline for chat and monitoring. All you need is a nice pet from [Ollama](https://ollama.com)—the kind that runs on your Mac and never asks for a subscription.
+No subscription. No lock-in. Works offline for chat and core monitoring. Grab a model from [Ollama](https://ollama.com) and you’re running locally.
 
 ---
 

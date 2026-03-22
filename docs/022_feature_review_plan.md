@@ -56,10 +56,10 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - `discord/mod.rs`: Before each Ollama call, loads session history and passes it as `conversation_history`.
 
 **Review checklist:**
-- [ ] Verify `get_messages()` returns messages **before** the current user message is added (ordering matters).
-- [ ] Verify `load_messages_from_latest_session_file()` correctly parses `## User` / `## Assistant` blocks — test with a real session file (edge cases: empty blocks, blocks with `## ` in content).
-- [ ] Confirm the filename format change (`session-{id}-{ts}-{topic}` vs old `session-{topic}-{id}-{ts}`) doesn't break loading of pre-existing session files.
-- [ ] Check the 20-message cap is applied consistently (both in `get_messages` consumer and in `answer_with_ollama_and_fetch`).
+- [x] Verify `get_messages()` returns messages **before** the current user message is added (ordering matters). — `get_messages_before_add_user_excludes_current_turn` in `session_memory.rs`.
+- [x] Verify `load_messages_from_latest_session_file()` correctly parses `## User` / `## Assistant` blocks — test with a real session file (edge cases: empty blocks, blocks with `## ` in content). — Line-oriented parser + tests in `session_memory.rs` (e.g. headings-in-body, FEAT-D7).
+- [x] Confirm the filename format change (`session-{id}-{ts}-{topic}` vs old `session-{topic}-{id}-{ts}`) doesn't break loading of pre-existing session files. — `MAC_STATS_SESSION_DIR` tests in `session_memory.rs` / `config/mod.rs` (FEAT-D14).
+- [x] Check the 20-message cap is applied consistently (both in `get_messages` consumer and in `answer_with_ollama_and_fetch`). — `CONVERSATION_HISTORY_CAP` + `cap_tail_chronological` tests in `session_history.rs`; Discord uses same cap (FEAT-D19).
 - [ ] Manual test: send 3-4 messages to the Discord bot, verify it references earlier messages correctly (e.g. "what did I just say?").
 - [ ] Manual test: restart app, send a message — verify it resumes from the latest session file.
 
@@ -70,10 +70,11 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - All callers updated: scheduler and task runner pass `None`; Discord passes session memory.
 
 **Review checklist:**
-- [ ] Verify the `rev().take(20).rev()` pattern correctly keeps the **last** 20 messages in chronological order.
-- [ ] Confirm history messages are placed **after** the system prompt and **before** the current question in the Ollama messages array.
-- [ ] Verify that adding history doesn't exceed model context window (the existing context-window-aware truncation should handle this, but test with a model with small `num_ctx`).
-- [ ] Confirm scheduler (`None`) and task runner (`None`) are unaffected — no regressions.
+- [x] Verify the `rev().take(20).rev()` pattern correctly keeps the **last** 20 messages in chronological order. — `cap_tail_keeps_last_n_in_chronological_order` in `session_history.rs` (drives length from `CONVERSATION_HISTORY_CAP`).
+- [x] Confirm history messages are placed **after** the system prompt and **before** the current question in the Ollama messages array. — `execution_stack_order_system_history_user` / `build_execution_message_stack` in `session_history.rs` (022 §F2).
+- [x] Context-window overflow handling (automated): `is_context_overflow_error` + `sanitize_ollama_error_for_user` map common Ollama error strings to the same user-facing “new topic / larger context” message; unit tests in `content_reduction.rs` (FEAT-D28). Router also truncates oversized tool results on overflow when enabled (`context_overflow_truncate_enabled`).
+- [ ] Manual: with a model configured to a small `num_ctx`, send a long thread and confirm truncation/retry or friendly overflow text (complements automated tests above).
+- [x] Confirm scheduler (`None`) and task runner (`None`) are unaffected — no regressions. — Call sites pass `None` for `conversation_history` (scheduler / task runner); no automated integration test.
 
 ### F3: Unified soul path (`~/.mac-stats/agents/soul.md`)
 
@@ -84,11 +85,11 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - Both agents (as fallback) and the router (non-agent chat) use the same path and method.
 
 **Review checklist:**
-- [ ] Confirm an agent with its own `soul.md` does NOT also get the shared soul (no double soul).
-- [ ] Confirm an agent without `soul.md` gets the shared `agents/soul.md` content.
-- [ ] Confirm the router (non-agent chat) uses `agents/soul.md` for personality.
-- [ ] Confirm `load_agents()` info log correctly reports shared soul presence.
-- [ ] If user had a customized `~/.mac-stats/agent/soul.md`, they need to move it to `~/.mac-stats/agents/soul.md` (document in changelog).
+- [x] Confirm an agent with its own `soul.md` does NOT also get the shared soul (no double soul). — `agent_soul_or_shared` tests in `agents/mod.rs` (FEAT-D15).
+- [x] Confirm an agent without `soul.md` gets the shared `agents/soul.md` content. — same.
+- [x] Confirm the router (non-agent chat) uses `agents/soul.md` for personality. — `Config::load_soul_content` + `format_router_soul_block` / router path in `ollama.rs` (FEAT-D13).
+- [x] Confirm `load_agents()` info log correctly reports shared soul presence. — `log_shared_soul_presence()` on every exit path that finishes a directory scan (including missing dir and zero enabled agents); `shared_soul_file_nonempty` tests in `agents/mod.rs` (FEAT-D27).
+- [x] If user had a customized `~/.mac-stats/agent/soul.md`, they need to move it to `~/.mac-stats/agents/soul.md` (document in changelog). — Documented in this file §4 and historical `CHANGELOG.md` / release notes for the unified path.
 
 ### F4: Router soul injection
 
@@ -96,9 +97,9 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - In `answer_with_ollama_and_fetch`, when no `skill_content` or agent override is active, the router now prepends `~/.mac-stats/agents/soul.md` content to system prompts, giving Ollama personality in "plain" chat (Discord without agent override, scheduler free-text tasks).
 
 **Review checklist:**
-- [ ] Verify `load_soul_content()` is called (reads from `~/.mac-stats/agents/soul.md`).
-- [ ] Verify that when `skill_content` is Some, the soul is NOT prepended (avoids double system prompt).
-- [ ] Verify that when `agent_override` is Some, the agent's own combined prompt is used and the router soul is skipped.
+- [x] Verify `load_soul_content()` is called (reads from `~/.mac-stats/agents/soul.md`). — Covered by `format_router_soul_block` tests and call sites in `ollama_memory.rs` / `ollama.rs` (FEAT-D13).
+- [x] Verify that when `skill_content` is Some, the soul is NOT prepended (avoids double system prompt). — Unit tests in `commands/ollama_memory.rs` (skill branch → empty soul block).
+- [x] Verify that when `agent_override` is Some, the agent's own combined prompt is used and the router soul is skipped. — Same module tests + agent execution path uses `combined_prompt`.
 
 ### F5: TASK_CREATE deduplication
 
@@ -118,7 +119,7 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - Also: "If a task with that topic and id already exists, use TASK_APPEND or TASK_STATUS instead."
 
 **Review checklist:**
-- [ ] Read the full prompt text in context — confirm it doesn't create contradictory instructions.
+- [x] Read the full prompt text in context — confirm it doesn't create contradictory instructions. — TASK paragraph contract tests in `commands/agent_descriptions.rs` (`format_task_agent_description`, FEAT-D10).
 - [ ] Manual test: ask Discord "have the agents chat" — verify the model outputs `AGENT: orchestrator` instead of just `TASK_CREATE`.
 
 ### F7: Logging improvements
@@ -129,9 +130,9 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - Discord API: fixed char-count vs byte-count mismatch (`.chars().count()` instead of `.len()`).
 
 **Review checklist:**
-- [ ] Verify `ellipse()` handles edge cases: empty string, string shorter than `max_len`, string exactly `max_len`, very small `max_len` (< 3).
-- [ ] Confirm the `VERBOSITY` atomic is the same one set by CLI `-v`/`-vv`/`-vvv` flags and the new `set_chat_verbosity`.
-- [ ] Verify `browser.rs` truncation change: old code appended `[truncated]`; new code uses `ellipse()` which shows `...`. This changes the semantics for FETCH_URL content passed to Ollama — confirm the model still understands the page was cut.
+- [x] Verify `ellipse()` handles edge cases: empty string, string shorter than `max_len`, string exactly `max_len`, very small `max_len` (< 3). — `logging/mod.rs` tests (`ellipse_empty_string`, `ellipse_short_string_unchanged`, `ellipse_exact_max_len_unchanged`, `ellipse_max_len_*_clamped`, `ellipse_result_length_within_max`).
+- [x] Confirm the `VERBOSITY` atomic is the same one set by CLI `-v`/`-vv`/`-vvv` flags and the new `set_chat_verbosity`. — `commands/logging.rs` tests (FEAT-D11) + CLI sets `logging::VERBOSITY` at startup.
+- [ ] Verify `browser.rs` truncation change: old code appended `[truncated]`; new code uses `ellipse()` which shows `...`. This changes the semantics for FETCH_URL content passed to Ollama — confirm the model still understands the page was cut. — Oversized FETCH_URL bodies also append ` [content truncated]` (`browser.rs`, CHANGELOG).
 
 ### F8: Chat reserved words
 
@@ -142,10 +143,10 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - New Tauri commands registered in `lib.rs`.
 
 **Review checklist:**
-- [ ] Verify reserved words are NOT added to conversation history (the `return` before `addToHistory` is correct).
-- [ ] Verify `set_chat_verbosity` updates the same `VERBOSITY` atomic used by logging macros.
+- [x] Verify reserved words are NOT added to conversation history (the `return` before `addToHistory` is correct). — `sendChatMessage` handles `--cpu` / `-v*` before `addChatMessage` / `addToHistory` (`src/ollama.js`, FEAT-D16); run `scripts/sync-dist.sh` for `dist/`.
+- [x] Verify `set_chat_verbosity` updates the same `VERBOSITY` atomic used by logging macros. — `commands/logging.rs` tests (FEAT-D11).
 - [ ] Verify `toggle_cpu_window` works from the CPU window chat (meta: toggling from within the window you're in — should it close itself? Is that the desired UX?).
-- [ ] Check that `src/ollama.js` changes are synced to `src-tauri/dist/ollama.js` before testing.
+- [x] Check that `src/ollama.js` changes are synced to `src-tauri/dist/ollama.js` before testing. — `scripts/sync-dist.sh`; AGENTS.md documents sync.
 
 ### F9: Toggle CPU window refactor
 
@@ -165,10 +166,10 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 - Uses `try_lock()` to avoid blocking.
 
 **Review checklist:**
-- [ ] Verify this function is actually called somewhere (it's defined but the caller is not visible in the diff — check `lib.rs` for a background thread or timer).
-- [ ] Confirm `try_lock()` usage is safe: if the lock is busy, checks are skipped entirely (acceptable for a background thread).
-- [ ] Verify that `check_monitor()` saves stats to disk after each check (existing behaviour — confirm not regressed).
-- [ ] Edge case: monitors with `check_interval_secs = 0` — would this run every cycle? Confirm there's a minimum.
+- [x] Verify this function is actually called somewhere (it's defined but the caller is not visible in the diff — check `lib.rs` for a background thread or timer). — `lib.rs` 30s loop; contract test `lib_rs_invokes_run_due_monitor_checks_in_background_loop` in `commands/monitors.rs` (FEAT-D26).
+- [x] Confirm `try_lock()` usage is safe: if the lock is busy, checks are skipped entirely (acceptable for a background thread). — Early return + debug log in `run_due_monitor_checks` when config/stats locks are busy.
+- [x] Verify that `check_monitor()` saves stats to disk after each check (existing behaviour — confirm not regressed). — `save_monitors()` after stats update (FEAT-E1).
+- [x] Edge case: monitors with `check_interval_secs = 0` — would this run every cycle? Confirm there's a minimum. — `clamp_monitor_check_interval_secs` + `is_monitor_due_for_background` tests (FEAT-D6 / FEAT-D18).
 
 ## 4. Integration review
 
@@ -177,9 +178,9 @@ The diff on top of the last commit (844c4bc) contains **10 distinct features/imp
 | **Compilation** | `cargo check` passes (confirmed). Run `cargo clippy` for lint warnings. |
 | **Frontend sync** | `src/ollama.js` has changes — must be synced to `src-tauri/dist/ollama.js`. Run `scripts/sync-dist.sh` or manually copy. |
 | **New Tauri commands** | `toggle_cpu_window` and `set_chat_verbosity` must be in `tauri::generate_handler![]` in `lib.rs`. |
-| **Session file compat** | Old session files use `session-memory-{topic}-{id}-{ts}.md`; new code creates `session-memory-{id}-{ts}-{topic}.md`. The `load_messages_from_latest_session_file` searches by `session-memory-{id}-` prefix — old files won't match. Decide: delete old files or add backward compat. |
+| **Session file compat** | New layout `session-memory-{id}-{ts}-{topic}.md` and legacy `session-memory-{topic}-{id}-{ts}.md` are both matched when resuming by session id (`session_memory.rs` / FEAT-D1, FEAT-D14 tests). |
 | **Soul path** | Unified to `~/.mac-stats/agents/soul.md`. Users with a customized `~/.mac-stats/agent/soul.md` need to move it. |
-| **`run_due_monitor_checks` caller** | Verify it's wired to a background thread. If not, it's dead code. |
+| **`run_due_monitor_checks` caller** | Wired: `lib.rs` background thread, 30s interval. Contract test `lib_rs_invokes_run_due_monitor_checks_in_background_loop` in `commands/monitors.rs` (FEAT-D26). |
 
 ## 5. Manual testing plan
 

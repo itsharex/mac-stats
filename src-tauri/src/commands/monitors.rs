@@ -716,4 +716,14 @@ mod monitor_interval_tests {
         let last = Utc.with_ymd_and_hms(2026, 3, 22, 12, 0, 0).unwrap();
         assert!(!is_monitor_due_for_background(now, Some(last), Some(0)));
     }
+
+    /// docs/022_feature_review_plan.md §F10: guard against removing the background wake loop.
+    #[test]
+    fn lib_rs_invokes_run_due_monitor_checks_in_background_loop() {
+        let lib_rs = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        assert!(
+            lib_rs.contains("run_due_monitor_checks()"),
+            "lib.rs should call run_due_monitor_checks from the 30s monitor thread"
+        );
+    }
 }

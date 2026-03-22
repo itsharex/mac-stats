@@ -2,7 +2,9 @@
 
 ## Global Context
 
-A local AI agent for macOS: Ollama chat, Discord bot, task runner, scheduler, and MCP—all on your Mac. No cloud, no telemetry. Lives in your menu bar—CPU, GPU, RAM, disk at a glance. Real-time, minimal, there when you look. Built with Rust and Tauri.
+**Product overview:** see the repository root **[README.md](../README.md)** (“What mac-stats ships with”) for the full feature story.
+
+This tree is the **deep docs** index: install recap, tool-agent tables, optimization notes, Discord/MCP guides, and task backlogs.
 
 ## Install
 

@@ -1,4 +1,6 @@
-# mac-stats
+# mac-stats — AI tasks roadmap
+
+For the **full product overview** (what ships today), see the root **[README.md](../README.md)**. This doc tracks **tool agents** and **future channel** ideas.
 
 ## Overview
 

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Context overflow user messaging tests (022 §F2)** — `sanitize_ollama_error_for_user` unit tests for additional Ollama-style strings (`maximum context length … tokens`, `context length exceeded`, `exceeds the model's context window`) alongside existing overflow cases. No runtime behaviour change. (`commands/content_reduction.rs`; FEAT-D28.)
+- **`run_due_monitor_checks` lib.rs wiring test (022 §F10)** — `lib_rs_invokes_run_due_monitor_checks_in_background_loop` in `commands/monitors.rs` fails if the 30s background monitor loop stops calling `run_due_monitor_checks()`. (`commands/monitors.rs`; FEAT-D26.)
 - **`prepare_conversation_history` integration tests (022 §F1)** — Below `COMPACTION_THRESHOLD`, a new topic clears prior turns; the normal path runs `annotate_discord_401` so assistant text that matches the Discord-401 confusion heuristic gets the FETCH_URL vs `DISCORD_API` system correction appended. (`commands/session_history.rs`; FEAT-D24.)
 - **022 §F1 / §F7 contract tests** — `cap_tail_keeps_last_n_in_chronological_order` now drives length and expected tail from `CONVERSATION_HISTORY_CAP` (router + Discord share the same cap). `ellipse_max_len_two_clamped` asserts `max_len` below `sep_len + 1` clamps for long strings. No runtime behaviour change. (`commands/session_history.rs`, `logging/mod.rs`; FEAT-D23.)
 - **`shorten_file_path_internal` unit tests (022 §F7)** — Five tests lock debug-log location shortening: `src-tauri/src/…` and `src/…` prefix strip, fallback to the last `src/` segment for absolute-ish paths, passthrough when no match, empty input. Same helper used by `debug!` / `debug1!` macros via `file!()`. No runtime behaviour change. (`logging/legacy.rs`; FEAT-D22.)
@@ -24,11 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TASK_CREATE deduplication tests** — `test_slug_deterministic` and `create_task_duplicate_topic_id_errors_with_task_append_hint` in `task/mod.rs` document 022 §3 F5 (slug stability, duplicate topic+id error mentions `TASK_APPEND` / alternate id). (`task/mod.rs`)
 
 ### Changed
+- **`load_agents` shared-soul log (022 §F3)** — `info!` line for shared `soul.md` presence now runs whenever `load_agents` finishes a scan: agents dir missing, no enabled agents, or successful load (previously only when at least one agent was enabled). Pure helper `shared_soul_file_nonempty()` + `log_shared_soul_presence()`; three HOME-override unit tests. (`agents/mod.rs`; FEAT-D27.)
 - **CPU window chat: reserved words (022 §F8)** — `--cpu` and `-v`/`-vv`/`-vvv` are handled before any user chat bubble is added, so meta-commands stay out of the visible transcript as well as conversation history. Input is cleared immediately; only the assistant status line is shown. (`src/ollama.js`, synced to `src-tauri/dist/ollama.js`; FEAT-D16.)
 - **Agent-router execution messages (022 §F2)** — Both execution paths in `answer_with_ollama_and_fetch` now use `build_execution_message_stack()` (`session_history.rs`) for system → history → current user; two unit tests lock the ordering contract. No change to wire format or model payloads. (`commands/session_history.rs`, `commands/ollama.rs`)
 - **TASK agent paragraph helper** — **TASK** block in `build_agent_descriptions` moved to `format_task_agent_description()` for unit testing; wording unchanged. (`commands/agent_descriptions.rs`)
 
 ### Documentation
+- **README product overview** — New **What mac-stats ships with** section up front (menu bar metrics, Ollama toolbelt, Discord/tasks/scheduler/monitors, privacy/ops); trimmed duplicate “At a glance” bullets; cross-link to `docs/006_roadmap_ai_tasks.md`. **`docs/README.md`** Global Context now defers to root README; **`docs/006_roadmap_ai_tasks.md`** title clarifies roadmap vs product overview.
+- **022 feature review checklist** — Per-section review items in `docs/022_feature_review_plan.md` marked complete where automated tests or code paths already cover them (F1–F4, F6, F7, F8, F10); integration table updated for session file compat and `run_due_monitor_checks` caller. Manual Discord/smoke rows unchanged. (FEAT-D26.)
 - **Autoresearch snapshot plotter** — `scripts/plot_autoresearch_snapshot.py` reads mac-stats-reviewer Track A `results.tsv` and writes PNG/SVG (optional `state.json` subtitle). Generate outputs locally when needed; large samples are not kept in-tree.
 - **022 review & FEATURE-CODER backlog** — F5 checklist items marked complete with test pointers; new FEAT-D9–D11 rows in the coder backlog. (`docs/022_feature_review_plan.md`, `006-feature-coder/FEATURE-CODER.md`)
 

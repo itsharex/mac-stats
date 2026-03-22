@@ -441,6 +441,30 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_maximum_context_length_tokens() {
+        let msg = sanitize_ollama_error_for_user("maximum context length is 2048 tokens");
+        assert!(msg.is_some());
+        assert!(msg.unwrap().contains("context window"));
+    }
+
+    #[test]
+    fn sanitize_context_length_exceeded_phrase() {
+        let msg = sanitize_ollama_error_for_user("context length exceeded");
+        assert!(msg.is_some());
+        assert!(msg.unwrap().contains("new topic"));
+    }
+
+    #[test]
+    fn sanitize_exceeds_models_context_window_phrase() {
+        let msg = sanitize_ollama_error_for_user("input exceeds the model's context window");
+        let text = msg.expect("overflow phrase should sanitize");
+        assert!(
+            text.contains("context window") && text.contains("new topic"),
+            "unexpected: {text}"
+        );
+    }
+
+    #[test]
     fn sanitize_role_ordering_error() {
         let msg =
             sanitize_ollama_error_for_user("Ollama error: roles must alternate user/assistant");
