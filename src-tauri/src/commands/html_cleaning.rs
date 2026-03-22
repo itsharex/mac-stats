@@ -203,6 +203,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // per ten thousand (U+0609, U+060A, Po), Afghani sign (U+060B, Sc), date separator (U+060D, Po),
                 // and triple-dot punctuation (U+061E, Po) are not Rust whitespace either; RTL financial or
                 // editorial HTML can glue Latin tokens without ASCII space.
+                // Arabic Presentation Forms-A: ornate left / right parentheses (U+FD3E, U+FD3F, Pe/Ps), RIAL
+                // SIGN (U+FDFC, Sc), and ARABIC LIGATURE BISMILLAH AR-RAHMAN AR-RAHEEM (U+FDFD, So) are not Rust
+                // whitespace; Persian / Arabic typography or Unicode-sample HTML can place them between Latin tokens
+                // without ASCII space. Quranic annotation dot symbols U+FBB2–U+FBC1 (Sk) stay unmapped—modifier-like,
+                // word-internal risk (same spirit as omitting many combining marks).
                 // Armenian exclamation / comma / question / abbreviation mark (U+055C–U+055F, Po) and
                 // full stop / hyphen (U+0589–U+058A, Po/Pd) are not Rust whitespace; bilingual or
                 // Unicode-sample HTML can glue Latin tokens. U+055A (ARMENIAN APOSTROPHE) and U+055B
@@ -293,7 +298,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // iteration marks U+3005 / U+303B (Lm), ideographic zero U+3007 and Hangzhou numerals
                 // U+3021–U+3029 / U+3038–U+303A (Nl), and ideographic tone marks U+302A–U+302F (Mn/Mc).
                 // Vertical Forms compatibility punctuation (U+FE10–U+FE19, Po/Ps/Pe/Pc) is not
-                // Rust whitespace. Small Form Variants (U+FE50–U+FE52, U+FE54–U+FE66, U+FE68–U+FE6B;
+                // Rust whitespace. CJK Compatibility Forms U+FE30–U+FE4F (vertical presentation for
+                // two-dot leader / dashes / underscores / brackets / sesame dots / dashed–wavy overlines
+                // and low lines; Po / Pd / Ps / Pe / Pc as assigned) are not Rust whitespace; vertical
+                // CJK-layout or compatibility HTML can glue Latin tokens without ASCII space. Combining
+                // Half Marks U+FE20–U+FE2F (Mn) stay unmapped—word-internal combining risk. Small Form Variants (U+FE50–U+FE52, U+FE54–U+FE66, U+FE68–U+FE6B;
                 // Po / Pd / Ps / Pe / Sm / Sc as assigned—skips unassigned U+FE53, U+FE67, U+FE6C–U+FE6F)
                 // are not Rust whitespace; compatibility typography HTML can glue Latin tokens without
                 // ASCII space. Wavy dash (U+3030, Pd), ideographic telegraph line-feed separator
@@ -427,9 +436,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // or Unicode-sample HTML can glue Latin tokens for `split_whitespace()`. Ogham feather
                 // mark and reversed feather mark (U+169B, U+169C, Ps/Pe) are not Rust whitespace;
                 // epigraphic Ogham–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
-                // Duployan CHINOOK FULL STOP (U+1BC9F, Po) is visible sentence punctuation, not Rust
-                // whitespace; shorthand HTML can glue Latin tokens (U+1BC9D–U+1BC9E Mn and U+1BCA0–U+1BCA3
-                // Cf are mapped separately). Tifinagh separator mark (U+2D70, Po) is not Rust whitespace;
+                // Duployan SIGN O WITH CROSS (U+1BC9C, So) is not Rust whitespace; shorthand or Unicode-
+                // sample HTML can glue Latin tokens without ASCII space. Unassigned U+1BC9A–U+1BC9B (Cn) stay
+                // unmapped. CHINOOK FULL STOP (U+1BC9F, Po) is visible sentence punctuation (U+1BC9D–U+1BC9E Mn
+                // and U+1BCA0–U+1BCA3 Cf are mapped separately). Tifinagh separator mark (U+2D70, Po) is not Rust whitespace;
                 // Berber / Unicode-sample HTML can glue Latin tokens without ASCII space. Aegean word
                 // separator line / dot / check mark (U+10100–U+10102, Po) and Phoenician word separator (U+1091F,
                 // Po) are not Rust whitespace; scholarly or mixed-script HTML can place them between
@@ -473,6 +483,12 @@ fn collapse_whitespace(text: &str) -> String {
                 // can place it between Latin tokens without ASCII space.
                 // Indic Siyaq placeholder (U+1ECAC, So) and rupee mark (U+1ECB0, Sc) are not Rust whitespace;
                 // Indo-Persian financial notation or Unicode-sample HTML can glue Latin tokens for `split_whitespace()`.
+                // Ottoman Siyaq Numbers: MARRATAN (U+1ED2E, So) is not Rust whitespace; Ottoman–Latin or Unicode-sample
+                // HTML can place it between Latin tokens without ASCII space. All other assigned scalars in the block are
+                // No (U+1ED01–U+1ED2D, U+1ED2F–U+1ED3D)—numeric / word-internal risk, excluded. Gap U+1ED3E+ (Cn) excluded.
+                // Arabic Mathematical Alphabetic Symbols: operator MEEM WITH HAH WITH TATWEEL (U+1EEF0, Sm) and
+                // HAH WITH DAL (U+1EEF1, Sm) are not Rust whitespace; MathML- or Unicode-sample HTML can place them
+                // between Latin tokens without ASCII space. The rest of U+1EE00–U+1EEFF is Lo or unassigned (Cn)—excluded.
                 // Vithkuqi comma through question mark (U+1057B–U+1057F, Po) are not Rust whitespace; Albanian Vithkuqi
                 // or Unicode-sample HTML can place them between Latin tokens without ASCII space. U+10570–U+1057A (Lo)
                 // stay unmapped—letters, word-internal risk.
@@ -612,7 +628,8 @@ fn collapse_whitespace(text: &str) -> String {
                 // etc.—mostly Sm) and Supplemental Arrows-A (U+27F0–U+27FF; long arrows, mostly Sm) are not Rust
                 // whitespace; MathML, LaTeX-to-HTML, or Unicode-sample pages can place them between Latin tokens without
                 // ASCII space.
-                // Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn), CHINOOK FULL
+                // Duployan SIGN O WITH CROSS (U+1BC9C, So) is not Rust whitespace; mapped like other visible So
+                // shorthand symbols. Thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn), CHINOOK FULL
                 // STOP (U+1BC9F, Po), and shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust
                 // whitespace (Mn/Cf mapped with other controls; U+1BC9F mapped as visible Po).
                 // Kaithi number signs (U+110BD, U+110CD, Cf) are not Rust whitespace; Indic numeral
@@ -808,6 +825,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{FFE6}'
                 | '\u{FFE8}'..='\u{FFEF}'
                 | '\u{FE10}'..='\u{FE19}'
+                | '\u{FE30}'..='\u{FE4F}'
                 | '\u{FE50}'..='\u{FE52}'
                 | '\u{FE54}'..='\u{FE66}'
                 | '\u{FE68}'..='\u{FE6B}'
@@ -858,6 +876,10 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{061F}'
                 | '\u{06D4}'
                 | '\u{066A}'..='\u{066D}'
+                | '\u{FD3E}'
+                | '\u{FD3F}'
+                | '\u{FDFC}'
+                | '\u{FDFD}'
                 | '\u{055C}'..='\u{055F}'
                 | '\u{0589}'
                 | '\u{058A}'
@@ -957,6 +979,9 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1E5FF}'
                 | '\u{1ECAC}'
                 | '\u{1ECB0}'
+                | '\u{1ED2E}'
+                | '\u{1EEF0}'
+                | '\u{1EEF1}'
                 | '\u{10FF5}'
                 | '\u{10D29}'..='\u{10D2D}'
                 | '\u{10D6E}'
@@ -1056,6 +1081,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2CF9}'..='\u{2CFC}'
                 | '\u{2CFE}'..='\u{2CFF}'
                 | '\u{2D70}'
+                | '\u{1BC9C}'
                 | '\u{1BC9D}'..='\u{1BC9E}'
                 | '\u{1BC9F}'
                 | '\u{1BCA0}'..='\u{1BCA3}'
@@ -2404,6 +2430,44 @@ mod tests {
     }
 
     #[test]
+    fn cjk_compatibility_forms_fe30_through_fe4f_separate_words() {
+        // U+FE30–U+FE4F CJK Compatibility Forms: vertical presentation punctuation and spacing
+        // (Po / Pd / Ps / Pe / Pc)—not Rust whitespace. U+FE10–U+FE19 remains a separate arm.
+        for cp in 0xFE30u32..=0xFE4F {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "U+{:04X} should separate words, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn combining_half_marks_fe20_through_fe2f_stay_unmapped() {
+        // U+FE20–U+FE2F Combining Half Marks (Mn)—must not map to ASCII space (word-internal risk).
+        for cp in [0xFE20u32, 0xFE26, 0xFE2F] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} combining half mark must not split tokens: {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
     fn fullwidth_delimiters_operators_and_brackets_separate_words() {
         // U+FF03 NUMBER SIGN, U+FF04 DOLLAR SIGN, U+FF05 PERCENT, U+FF06 AMPERSAND, U+FF08/U+FF09
         // PARENS, U+FF0A ASTERISK, U+FF0B PLUS, U+FF0D HYPHEN-MINUS, U+FF0E FULL STOP,
@@ -2583,10 +2647,10 @@ mod tests {
     }
 
     #[test]
-    fn ogham_feather_marks_and_duployan_chinook_full_stop_separate_words() {
-        // Ogham U+169B FEATHER MARK (Ps), U+169C REVERSED FEATHER MARK (Pe). Duployan U+1BC9F CHINOOK FULL
-        // STOP (Po). None are Rust whitespace.
-        for sep in ['\u{169B}', '\u{169C}', '\u{1BC9F}'] {
+    fn ogham_feather_marks_and_duployan_o_cross_and_chinook_full_stop_separate_words() {
+        // Ogham U+169B FEATHER MARK (Ps), U+169C REVERSED FEATHER MARK (Pe). Duployan U+1BC9C SIGN O WITH CROSS
+        // (So) and U+1BC9F CHINOOK FULL STOP (Po). None are Rust whitespace.
+        for sep in ['\u{169B}', '\u{169C}', '\u{1BC9C}', '\u{1BC9F}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
@@ -2599,6 +2663,28 @@ mod tests {
                 !cleaned.contains(sep),
                 "cleaned output still contains U+{:04X}",
                 sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn duployan_unassigned_gap_u1bc9a_u1bc9b_stays_unmapped() {
+        // UnicodeData Cn before U+1BC9C; must not widen the So arm to a contiguous range.
+        for cp in [0x1BC9Au32, 0x1BC9B] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
             );
         }
     }
@@ -2623,6 +2709,132 @@ mod tests {
                 !cleaned.contains(sep),
                 "cleaned output still contains U+{:04X}",
                 sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn arabic_presentation_forms_ornate_parens_rial_and_bismillah_ligature_separate_words() {
+        // Arabic Presentation Forms-A: ornate parentheses U+FD3E / U+FD3F (Pe/Ps), RIAL SIGN U+FDFC (Sc),
+        // BISMILLAH ligature U+FDFD (So). None are Rust whitespace.
+        for sep in ['\u{FD3E}', '\u{FD3F}', '\u{FDFC}', '\u{FDFD}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn arabic_mathematical_alphabetic_operator_sm_separate_words() {
+        // U+1EEF0 ARABIC MATHEMATICAL OPERATOR MEEM WITH HAH WITH TATWEEL, U+1EEF1 ARABIC MATHEMATICAL OPERATOR HAH
+        // WITH DAL (Sm); not Rust whitespace.
+        for sep in ['\u{1EEF0}', '\u{1EEF1}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn ottoman_siyaq_marratan_so_separate_words() {
+        // U+1ED2E OTTOMAN SIYAQ MARRATAN (So); not Rust whitespace.
+        let sep = '\u{1ED2E}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+1ED2E normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+1ED2E"
+        );
+    }
+
+    #[test]
+    fn ottoman_siyaq_number_forms_stay_unmapped() {
+        // Block U+1ED01–U+1ED3D: all assigned scalars except U+1ED2E are No—must not map contiguously.
+        for cp in [0x1ED01u32, 0x1ED2D, 0x1ED2F, 0x1ED3D] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn arabic_mathematical_alphabetic_letters_and_block_gaps_stay_unmapped() {
+        // Block U+1EE00–U+1EEFF: mathematical Arabic letters (Lo) and large Cn gaps—must not map contiguously.
+        for cp in [0x1EE01u32, 0x1EED0, 0x1EEEF] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn arabic_presentation_forms_quranic_symbol_dots_stay_unmapped() {
+        // U+FBB2–U+FBC1 ARABIC SYMBOL DOT / TWO DOTS / … / RING / SMALL TAH (Sk)—annotation-like; must not widen
+        // to the whole Arabic Presentation Forms-A block (mostly Lo).
+        for cp in 0xFBB2u32..=0xFBC1 {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
             );
         }
     }
@@ -4682,7 +4894,8 @@ mod tests {
     fn duployan_selectors_and_shorthand_format_separate_words() {
         // U+1BC9D–U+1BC9E: Duployan thick letter selector / double mark (Mn). U+1BCA0–U+1BCA3:
         // shorthand format overlap / step (Cf). None are Rust whitespace. U+1BC9F CHINOOK FULL STOP
-        // (Po) is covered by `ogham_feather_marks_and_duployan_chinook_full_stop_separate_words`.
+        // (Po) and U+1BC9C SIGN O WITH CROSS (So) are covered by
+        // `ogham_feather_marks_and_duployan_o_cross_and_chinook_full_stop_separate_words`.
         for cp in (0x1BC9Du32..=0x1BC9E).chain(0x1BCA0..=0x1BCA3) {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
