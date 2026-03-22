@@ -220,9 +220,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // Vedic Extensions U+1CD3 VEDIC SIGN NIHSHVASA (Po) is not Rust whitespace; transliterated Vedic
                 // or Unicode-sample HTML can glue Latin tokens without ASCII space. Vedic tone marks U+1CD0–U+1CD2,
                 // U+1CD4–U+1CDF (Mn) stay unmapped—combining / word-internal risk.
-                // Gurmukhi abbreviation sign (U+0A76, Po), Gujarati abbreviation sign (U+0AF0, Po), Telugu sign
-                // siddham (U+0C77, Po), and Kannada sign siddham (U+0C84, Po) are not Rust whitespace; South Indic
-                // scholarly or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Gurmukhi abbreviation sign (U+0A76, Po), Gujarati abbreviation sign (U+0AF0, Po), Gujarati rupee
+                // sign (U+0AF1, Sc), Telugu sign siddham (U+0C77, Po), SIGN TUUMU (U+0C7F, So), and Kannada sign
+                // siddham (U+0C84, Po) are not Rust whitespace; South Indic scholarly or Unicode-sample HTML can glue
+                // Latin tokens without ASCII space. Telugu digits U+0C66–U+0C6F (Nd) and letters (Lo) stay unmapped—word-internal risk.
                 // Bengali rupee mark / rupee sign / ganda mark (U+09F2, U+09F3, U+09FB, Sc) are not Rust whitespace;
                 // South Asian price copy or Unicode-sample HTML can place them between Latin tokens without ASCII space.
                 // Bengali currency numerators U+09F4–U+09F9 (No) and letter khanda ta (U+09FC, Lo) stay unmapped—numeric /
@@ -230,10 +231,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // day through number signs (U+0BF3–U+0BFA, So/Sc), and Malayalam sign para / date mark (U+0D4F,
                 // U+0D79, So) are not Rust whitespace; Eastern / Tamil / Malayalam mixed-script or Unicode-sample HTML
                 // can glue Latin tokens without ASCII space.
-                // Thai PAIYANNOI / FONGMAN / ANGKHANKHU / KHOMUT (U+0E2F, U+0E4F, U+0E5A, U+0E5B, Po), Lao
-                // ELLIPSIS (U+0EAF, Po), Myanmar LITTLE SECTION / SECTION (U+104A–U+104B, Po), and Myanmar symbols
+                // Thai BAHT SIGN (U+0E3F, Sc), PAIYANNOI / FONGMAN / ANGKHANKHU / KHOMUT (U+0E2F, U+0E4F, U+0E5A, U+0E5B, Po), Lao
+                // ELLIPSIS (U+0EAF, Po) and LAO YAMAK (U+0EDF, Po), Myanmar LITTLE SECTION / SECTION (U+104A–U+104B, Po), and Myanmar symbols
                 // LOCATIVE / EXCLAMATION / COMPLETED / AFOREMENTIONED (U+104C–U+104F, So) are not Rust whitespace;
                 // Southeast Asian–Latin bilingual or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Lao LETTER KHMU GO (U+0EDE, Lo) and Lao digits U+0ED0–U+0ED9 (Nd) stay unmapped—letter- / numeric-internal risk.
                 // Thai MAIYAMOK (U+0E46, Lm) stays unmapped—modifier-like, can repeat word-internally.
                 // Arabic number signs / ayah markers (U+0600–U+0605, U+06DD, U+08E2), Arabic
                 // Extended-A currency format marks (U+0890–U+0891, pound/piastre mark above), Syriac
@@ -352,9 +354,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // U+1945, Po), Meetei Mayek cheikhei / ahang khuda (U+AAF0, U+AAF1, Po), and Meetei Mayek cheikhei (U+ABEB, Po) are not
                 // Rust whitespace; mixed-script or Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic full stop
                 // (U+1362, Po) is not Rust whitespace; mixed-script HTML can glue Latin tokens. Khmer signs khan through koomuut
-                // (U+17D4–U+17DA, Po) are not Rust whitespace;
+                // (U+17D4–U+17DA, Po) and KHMER CURRENCY SYMBOL RIEL (U+17DB, Sc) are not Rust whitespace;
                 // Javanese pada / section marks (U+A9C1–U+A9CF, Po) are not Rust whitespace—U+A9C0 PANGKON (Cf, virama) stays unmapped as
-                // word-internal risk alongside U+17B4/U+17B5 inherent vowels already mapped as format controls.
+                // word-internal risk alongside U+17B4/U+17B5 inherent vowels already mapped as format controls. Khmer SIGN
+                // AVAKRAHASANYA (U+17DC, Lo) and SIGN ATTHACAN (U+17DD, Mn) stay unmapped—letter- / combining-internal risk.
                 // Balinese inverted carik (U+1B4E–U+1B4F, Po), carik through pamengkeb (U+1B5A–U+1B60, Po), musical pitch
                 // names dong through dang gede (U+1B61–U+1B6A, So), hand / drum notation (U+1B74–U+1B7C, So), and lantang / bawak
                 // punctuation (U+1B7D–U+1B7F, Po) are not Rust whitespace; Balinese–Latin or Unicode-sample HTML can glue Latin
@@ -758,6 +761,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{17B4}'
                 | '\u{17B5}'
                 | '\u{17D4}'..='\u{17DA}'
+                | '\u{17DB}'
                 | '\u{A9C1}'..='\u{A9CF}'
                 | '\u{1B4E}'..='\u{1B4F}'
                 | '\u{1B5A}'..='\u{1B60}'
@@ -910,7 +914,9 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1CD3}'
                 | '\u{0A76}'
                 | '\u{0AF0}'
+                | '\u{0AF1}'
                 | '\u{0C77}'
+                | '\u{0C7F}'
                 | '\u{0C84}'
                 | '\u{09F2}'
                 | '\u{09F3}'
@@ -922,10 +928,12 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{0D4F}'
                 | '\u{0D79}'
                 | '\u{0E2F}'
+                | '\u{0E3F}'
                 | '\u{0E4F}'
                 | '\u{0E5A}'
                 | '\u{0E5B}'
                 | '\u{0EAF}'
+                | '\u{0EDF}'
                 | '\u{104A}'..='\u{104F}'
                 | '\u{1734}'..='\u{1736}'
                 | '\u{1A1E}'..='\u{1A1F}'
@@ -1549,7 +1557,9 @@ mod tests {
     fn nko_lajanyalan_tone_apostrophe_and_dantayalan_stay_unmapped() {
         // U+07FA LAJANYALAN (Lm), U+07F4–U+07F5 tone apostrophe (Lm), U+07FD DANTAYALAN (Mn), and
         // combining marks U+07F0–U+07F3 must not split Latin tokens.
-        for cp in [0x07F0u32, 0x07F1, 0x07F2, 0x07F3, 0x07F4, 0x07F5, 0x07FA, 0x07FD] {
+        for cp in [
+            0x07F0u32, 0x07F1, 0x07F2, 0x07F3, 0x07F4, 0x07F5, 0x07FA, 0x07FD,
+        ] {
             let c = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{c}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -3127,6 +3137,84 @@ mod tests {
     }
 
     #[test]
+    fn gujarati_rupee_sign_sc_u0af1_separate_words() {
+        // U+0AF1 GUJARATI RUPEE SIGN (Sc); not Rust whitespace. Extends FEAT-D118 Gujarati ABBREVIATION SIGN (Po).
+        let sep = '\u{0AF1}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+0AF1 normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+0AF1"
+        );
+    }
+
+    #[test]
+    fn gujarati_letter_lo_and_digit_nd_stay_unmapped() {
+        // U+0A85 GUJARATI LETTER A (Lo) and U+0AE6 GUJARATI DIGIT ZERO (Nd) must not widen the Gujarati Po/Sc arms.
+        for cp in [0x0A85u32, 0x0AE6] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn telugu_sign_tuumu_so_u0c7f_separate_words() {
+        // U+0C7F TELUGU SIGN TUUMU (So); not Rust whitespace. Extends FEAT-D118 Telugu SIGN SIDDHAM (Po).
+        let sep = '\u{0C7F}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+0C7F normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+0C7F"
+        );
+    }
+
+    #[test]
+    fn telugu_letter_lo_and_digit_nd_stay_unmapped() {
+        // U+0C05 TELUGU LETTER A (Lo) and U+0C66 TELUGU DIGIT ZERO (Nd) must not widen the Telugu Po/So arms.
+        for cp in [0x0C05u32, 0x0C66] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
     fn gurmukhi_gujarati_telugu_kannada_abbreviation_siddham_separate_words() {
         // Gurmukhi U+0A76 ABBREVIATION SIGN, Gujarati U+0AF0 ABBREVIATION SIGN, Telugu U+0C77 SIGN SIDDHAM,
         // Kannada U+0C84 SIGN SIDDHAM (all Po); not Rust whitespace.
@@ -3143,6 +3231,84 @@ mod tests {
                 !cleaned.contains(sep),
                 "cleaned output still contains U+{:04X}",
                 sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn thai_baht_currency_sc_u0e3f_separate_words() {
+        // U+0E3F THAI CURRENCY SYMBOL BAHT (Sc); not Rust whitespace. Extends FEAT-D75 Thai sentence Po marks.
+        let sep = '\u{0E3F}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+0E3F normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+0E3F"
+        );
+    }
+
+    #[test]
+    fn lao_yamak_po_u0edf_separate_words() {
+        // U+0EDF LAO YAMAK (Po); not Rust whitespace. Extends FEAT-D75 Lao ellipsis U+0EAF.
+        let sep = '\u{0EDF}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+0EDF normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+0EDF"
+        );
+    }
+
+    #[test]
+    fn lao_letter_khmu_go_u0ede_and_lao_digit_nd_stay_unmapped() {
+        // U+0EDE LAO LETTER KHMU GO (Lo) and U+0ED0 LAO DIGIT ZERO (Nd) must not widen the Lao Po arms.
+        for cp in [0x0EDEu32, 0x0ED0] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn thai_letter_lo_and_digit_nd_stay_unmapped() {
+        // U+0E01 THAI CHARACTER KO KAI (Lo) and U+0E50 THAI DIGIT ZERO (Nd) must not widen the Thai Po/Sc arms.
+        for cp in [0x0E01u32, 0x0E50] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
             );
         }
     }
@@ -3235,6 +3401,45 @@ mod tests {
                 !cleaned.contains(sep),
                 "cleaned output still contains U+{:04X}",
                 sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn khmer_riel_sign_sc_u17db_separate_words() {
+        // U+17DB KHMER CURRENCY SYMBOL RIEL (Sc); not Rust whitespace. Extends FEAT-D78 Khmer sentence Po U+17D4–U+17DA.
+        let sep = '\u{17DB}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+17DB normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+17DB"
+        );
+    }
+
+    #[test]
+    fn khmer_sign_avakrahasanya_lo_and_atthacan_mn_stay_unmapped() {
+        // U+17DC KHMER SIGN AVAKRAHASANYA (Lo) and U+17DD KHMER SIGN ATTHACAN (Mn) must not widen the Khmer Po/Sc arms.
+        for cp in [0x17DCu32, 0x17DD] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
             );
         }
     }
@@ -4694,9 +4899,7 @@ mod tests {
     #[test]
     fn slavonic_kavyka_syloti_north_indic_fractions_and_letter_neighbors_stay_unmapped() {
         // Cyrillic Ext-B Me/Mn/Lm; Syloti Lo/Mc; North Indic fraction numerics (No)—must not split Latin tokens.
-        for cp in [
-            0xA672_u32, 0xA674, 0xA67F, 0xA800, 0xA827, 0xA830, 0xA835,
-        ] {
+        for cp in [0xA672_u32, 0xA674, 0xA67F, 0xA800, 0xA827, 0xA830, 0xA835] {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
