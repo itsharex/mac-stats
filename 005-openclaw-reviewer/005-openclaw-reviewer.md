@@ -2,13 +2,13 @@
 
 Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (sibling: `../openclaw` from mac-stats). This file is the landing doc for the reviewer role; fix discrepancies in **OpenClaw**, not here.
 
-## Latest verification — 2026-03-23T12:00Z
+## Latest verification — 2026-03-22T23:24Z
 
 **OpenClaw root:** `../openclaw`  
 **OpenClaw `HEAD`:** `95ae8aabb77a99bed6747698fe810f6b8e34490b` (short: `95ae8aa`)  
 **References:** `AGENTS.md` (repo guidelines), `package.json` (scripts), `vitest.config.ts` (coverage).
 
-Re-ran layout + script + coverage checks on this `HEAD` (same commit as 2026-03-22T22:42Z); still aligned.
+Re-ran layout + script + coverage checks on this `HEAD`; still aligned with prior verification (2026-03-23T12:00Z).
 
 ### §7-style checks (doc vs code)
 
@@ -30,7 +30,7 @@ Re-ran layout + script + coverage checks on this `HEAD` (same commit as 2026-03-
 
 Earlier the same day, `AGENTS.md` had stale paths (`provider-web.ts`, old channel dirs), wrong format wording, and wrong branch threshold. Those were corrected upstream; the table above confirms the current tree matches the doc.
 
-**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of 2026-03-23T12:00Z (`95ae8aa`).
+**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of 2026-03-22T23:24Z (`95ae8aa`).
 
 ---
 

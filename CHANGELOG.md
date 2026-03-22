@@ -220,6 +220,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **HTML cleaning: Bengali currency Sc U+09F2 U+09F3 U+09FB (FETCH_URL)** — `collapse_whitespace()` maps BENGALI RUPEE MARK, BENGALI RUPEE SIGN, and BENGALI GANDA MARK (`Sc`) to ASCII space; not Rust whitespace. Extends FEAT-D119 (Bengali `So`/`Po` iss-har / abbreviation). Currency numerators U+09F4–U+09F9 (`No`) and U+09FC LETTER KHANDA TA (`Lo`) stay unmapped. Tests `bengali_currency_sc_u09f2_u09f3_u09fb_separate_words`, `bengali_currency_numerator_no_and_khanda_ta_stay_unmapped` in `commands/html_cleaning.rs`. (FEAT-D191.)
+- **HTML cleaning: Devanagari U+0970 + Mandaic U+085E (FETCH_URL)** — `collapse_whitespace()` maps DEVANAGARI ABBREVIATION SIGN and MANDAIC PUNCTUATION (`Po`) to ASCII space; not Rust whitespace. Extends FEAT-D74 (danda) and sits after Samaritan `Po` U+0830–U+083E. Devanagari digits U+0966–U+096F (`Nd`) and U+0971 HIGH SPACING DOT (`Lm`); Mandaic combining marks U+0859–U+085B (`Mn`); stay unmapped. Tests `devanagari_abbreviation_sign_u0970_and_mandaic_punctuation_u085e_separate_words`, `devanagari_high_spacing_dot_u0971_and_mandaic_combining_marks_stay_unmapped` in `commands/html_cleaning.rs`. (FEAT-D190.)
+- **HTML cleaning: NKo U+07F6 + U+07FE–U+07FF (FETCH_URL)** — `collapse_whitespace()` maps NKO SYMBOL OO DENNEN (`So`) and NKO DOROME / TAMAN SIGNS (`Sc`) to ASCII space; not Rust whitespace. Extends U+07F7–U+07F9 (`Po`). U+07FA (`Lm`), U+07F4–U+07F5 (`Lm`), U+07F0–U+07F3 / U+07FD (`Mn`), and unassigned U+07FB–U+07FC stay unmapped. Tests `nko_sentence_punctuation_and_samaritan_punctuation_separate_words`, `nko_lajanyalan_tone_apostrophe_and_dantayalan_stay_unmapped` in `commands/html_cleaning.rs`. (FEAT-D189.)
+- **HTML cleaning: Ethiopic Supplement tonal marks U+1390–U+1399 (FETCH_URL)** — `collapse_whitespace()` maps ETHIOPIC TONAL MARK YIZET through KURT (`So`) to ASCII space; not Rust whitespace. Ethiopic Supplement syllables U+1380–U+138F (`Lo`) and unassigned U+139A–U+139F stay unmapped. Tests `ethiopic_supplement_tonal_marks_so_u1390_through_u1399_separate_words`, `ethiopic_supplement_syllables_lo_and_unassigned_tail_stay_unmapped` in `commands/html_cleaning.rs`. (FEAT-D188.)
+- **HTML cleaning: Vedic Extensions U+1CD3 (FETCH_URL)** — `collapse_whitespace()` maps VEDIC SIGN NIHSHVASA (`Po`) to ASCII space; not Rust whitespace. Vedic tone marks U+1CD0–U+1CD2, U+1CD4–U+1CDF (`Mn`) stay unmapped. Tests `vedic_extensions_nihshvasa_u1cd3_separate_words`, `vedic_tone_marks_mn_u1cd0_u1cd1_u1cd4_stay_unmapped` in `commands/html_cleaning.rs`. (FEAT-D187.)
+
 ## [0.1.54] - 2026-03-22
 
 ### Added

@@ -213,12 +213,20 @@ fn collapse_whitespace(text: &str) -> String {
                 // Unicode-sample HTML can glue Latin tokens. U+055A (ARMENIAN APOSTROPHE) and U+055B
                 // (EMPHASIS MARK, Po) are omitted—apostrophe- or stress-like marks can sit word-internally
                 // in Armenian (same spirit as omitting U+2019 for Latin contractions).
-                // Devanagari danda / double danda (U+0964, U+0965, Po) are not Rust whitespace; mixed
-                // Latin–Devanagari or Unicode-sample HTML can place them between Latin tokens without ASCII space.
+                // Devanagari danda / double danda (U+0964, U+0965, Po) and abbreviation sign (U+0970, Po) are not Rust
+                // whitespace; mixed Latin–Devanagari or Unicode-sample HTML can place them between Latin tokens without ASCII
+                // space. Devanagari digits U+0966–U+096F (Nd) and high spacing dot (U+0971, Lm) stay unmapped—numeric /
+                // modifier-like, word-internal risk.
+                // Vedic Extensions U+1CD3 VEDIC SIGN NIHSHVASA (Po) is not Rust whitespace; transliterated Vedic
+                // or Unicode-sample HTML can glue Latin tokens without ASCII space. Vedic tone marks U+1CD0–U+1CD2,
+                // U+1CD4–U+1CDF (Mn) stay unmapped—combining / word-internal risk.
                 // Gurmukhi abbreviation sign (U+0A76, Po), Gujarati abbreviation sign (U+0AF0, Po), Telugu sign
                 // siddham (U+0C77, Po), and Kannada sign siddham (U+0C84, Po) are not Rust whitespace; South Indic
                 // scholarly or Unicode-sample HTML can glue Latin tokens without ASCII space.
-                // Bengali iss-har (U+09FA, So) and abbreviation sign (U+09FD, Po), Oriya isshar (U+0B70, So), Tamil
+                // Bengali rupee mark / rupee sign / ganda mark (U+09F2, U+09F3, U+09FB, Sc) are not Rust whitespace;
+                // South Asian price copy or Unicode-sample HTML can place them between Latin tokens without ASCII space.
+                // Bengali currency numerators U+09F4–U+09F9 (No) and letter khanda ta (U+09FC, Lo) stay unmapped—numeric /
+                // letter-internal risk. Iss-har (U+09FA, So) and abbreviation sign (U+09FD, Po), Oriya isshar (U+0B70, So), Tamil
                 // day through number signs (U+0BF3–U+0BFA, So/Sc), and Malayalam sign para / date mark (U+0D4F,
                 // U+0D79, So) are not Rust whitespace; Eastern / Tamil / Malayalam mixed-script or Unicode-sample HTML
                 // can glue Latin tokens without ASCII space.
@@ -231,11 +239,17 @@ fn collapse_whitespace(text: &str) -> String {
                 // Extended-A currency format marks (U+0890–U+0891, pound/piastre mark above), Syriac
                 // end of paragraph (U+0700, Bk) and sentence punctuation (U+0701–U+070D, Po), and
                 // Syriac abbreviation mark (U+070F) are not Rust whitespace (070F is Cf); RTL scholarly
-                // or financial HTML can place them between scripts without a real space. NKo GBAKURUNEN
-                // symbol / comma / exclamation (U+07F7–U+07F9, Po) are not Rust whitespace; U+07FA
-                // LAJANYALAN (Lm) omitted—modifier-like, word-internal risk. Samaritan punctuation
+                // or financial HTML can place them between scripts without a real space. NKo SYMBOL OO
+                // DENNEN (U+07F6, So), GBAKURUNEN symbol / comma / exclamation (U+07F7–U+07F9, Po), and
+                // DOROME / TAMAN SIGNS (U+07FE–U+07FF, Sc) are not Rust whitespace; U+07FA LAJANYALAN (Lm),
+                // tone apostrophes U+07F4–U+07F5 (Lm), combining marks U+07F0–U+07F3 / U+07FD (Mn), and
+                // unassigned U+07FB–U+07FC omitted. Samaritan punctuation
                 // marks (U+0830–U+083E, Po) are not Rust whitespace; Hebrew/Samaritan scholarly or
-                // Unicode-sample HTML can glue Latin tokens without ASCII space. Nyiakeng Puachue
+                // Unicode-sample HTML can glue Latin tokens without ASCII space. Mandaic PUNCTUATION (U+085E, Po) is not Rust
+                // whitespace; Mandaic–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space. Mandaic
+                // affrication / vocalization / gemination marks (U+0859–U+085B, Mn) stay unmapped—combining /
+                // word-internal risk. Syriac Supplement letters U+0860–U+086A (Lo) stay unmapped.
+                // Nyiakeng Puachue
                 // Hmong exclamation / question (U+16FE2, U+16FE3, Po) are not Rust whitespace;
                 // U+16FE0–U+16FE1 (Lo/Lm) and U+16FE4 LOGOGRAM NYIAM (Lo) stay unmapped. Wancho
                 // comma / full stop (U+1E2FE–U+1E2FF, Po) are not Rust whitespace; Northeast-Indian
@@ -503,7 +517,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // Latin tokens without ASCII space.
                 // Kirat Rai sign yupi, danda, double danda (U+16D6D–U+16D6F, Po) are not Rust whitespace;
                 // U+16D6B SIGN VIRAMA and U+16D6C SIGN SAAT (Lm) stay unmapped—modifier-like, word-internal risk.
-                // Ethiopic wordspace (U+1361, Po) is not Rust whitespace. Braille Patterns (U+2800–U+28FF;
+                // Ethiopic wordspace (U+1361, Po) is not Rust whitespace. Ethiopic Supplement tonal marks
+                // U+1390–U+1399 (YIZET through KURT; all So) are not Rust whitespace; Ethiopic-layout or
+                // Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic Supplement syllables
+                // U+1380–U+138F (Lo) stay unmapped—word-internal risk. Unassigned tail U+139A–U+139F (Cn) excluded.
+                // Braille Patterns (U+2800–U+28FF;
                 // all So, including pattern blank U+2800) are not Rust whitespace; accessibility or
                 // Unicode-sample HTML can place dot patterns between Latin tokens without ASCII space.
                 // Supplemental Arrows-B (U+2900–U+297F; mostly Sm) and Miscellaneous Mathematical Symbols-B
@@ -716,8 +734,11 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{06DD}'
                 | '\u{0700}'..='\u{070D}'
                 | '\u{070F}'
+                | '\u{07F6}'
                 | '\u{07F7}'..='\u{07F9}'
+                | '\u{07FE}'..='\u{07FF}'
                 | '\u{0830}'..='\u{083E}'
+                | '\u{085E}'
                 | '\u{16FE2}'
                 | '\u{16FE3}'
                 | '\u{1E2FE}'..='\u{1E2FF}'
@@ -885,11 +906,16 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{058A}'
                 | '\u{0964}'
                 | '\u{0965}'
+                | '\u{0970}'
+                | '\u{1CD3}'
                 | '\u{0A76}'
                 | '\u{0AF0}'
                 | '\u{0C77}'
                 | '\u{0C84}'
+                | '\u{09F2}'
+                | '\u{09F3}'
                 | '\u{09FA}'
+                | '\u{09FB}'
                 | '\u{09FD}'
                 | '\u{0B70}'
                 | '\u{0BF3}'..='\u{0BFA}'
@@ -936,6 +962,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{AA77}'..='\u{AA79}'
                 | '\u{ABEB}'
                 | '\u{1362}'
+                | '\u{1390}'..='\u{1399}'
                 | '\u{2010}'..='\u{2015}'
                 | '\u{2016}'..='\u{2018}'
                 | '\u{201A}'..='\u{201F}'
@@ -1493,10 +1520,11 @@ mod tests {
 
     #[test]
     fn nko_sentence_punctuation_and_samaritan_punctuation_separate_words() {
-        // NKo U+07F7–U+07F9 (SYMBOL GBAKURUNEN, COMMA, EXCLAMATION MARK; Po)—not Rust whitespace.
+        // NKo U+07F6 (SYMBOL OO DENNEN; So), U+07F7–U+07F9 (SYMBOL GBAKURUNEN, COMMA, EXCLAMATION MARK; Po),
+        // U+07FE–U+07FF (DOROME / TAMAN SIGNS; Sc)—not Rust whitespace.
         // Samaritan U+0830–U+083E (punctuation marks through ANNAAU; Po)—not Rust whitespace.
         // U+083F unassigned. U+07FA LAJANYALAN (Lm) omitted.
-        for cp in [0x07F7u32, 0x07F8, 0x07F9]
+        for cp in [0x07F6u32, 0x07F7, 0x07F8, 0x07F9, 0x07FE, 0x07FF]
             .into_iter()
             .chain(0x0830u32..=0x083E)
         {
@@ -1512,6 +1540,29 @@ mod tests {
             assert!(
                 !cleaned.contains(sep),
                 "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn nko_lajanyalan_tone_apostrophe_and_dantayalan_stay_unmapped() {
+        // U+07FA LAJANYALAN (Lm), U+07F4–U+07F5 tone apostrophe (Lm), U+07FD DANTAYALAN (Mn), and
+        // combining marks U+07F0–U+07F3 must not split Latin tokens.
+        for cp in [0x07F0u32, 0x07F1, 0x07F2, 0x07F3, 0x07F4, 0x07F5, 0x07FA, 0x07FD] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
                 cp
             );
         }
@@ -2619,6 +2670,131 @@ mod tests {
     }
 
     #[test]
+    fn devanagari_abbreviation_sign_u0970_and_mandaic_punctuation_u085e_separate_words() {
+        // U+0970 DEVANAGARI ABBREVIATION SIGN and U+085E MANDAIC PUNCTUATION (both Po); not Rust whitespace.
+        for sep in ['\u{0970}', '\u{085E}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn devanagari_high_spacing_dot_u0971_and_mandaic_combining_marks_stay_unmapped() {
+        // U+0971 (Lm), Devanagari digit zero (U+0966, Nd), and Mandaic combining marks (Mn) must not widen the
+        // Devanagari / Mandaic Po arms.
+        for cp in [0x0966u32, 0x0971, 0x0859, 0x085A, 0x085B] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn vedic_extensions_nihshvasa_u1cd3_separate_words() {
+        // U+1CD3 VEDIC SIGN NIHSHVASA (Po); not Rust whitespace.
+        let sep = '\u{1CD3}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+1CD3 normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+1CD3"
+        );
+    }
+
+    #[test]
+    fn ethiopic_supplement_tonal_marks_so_u1390_through_u1399_separate_words() {
+        // Ethiopic Supplement U+1390–U+1399 ETHIOPIC TONAL MARK YIZET through KURT (all So); not Rust whitespace.
+        for cp in 0x1390u32..=0x1399 {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn ethiopic_supplement_syllables_lo_and_unassigned_tail_stay_unmapped() {
+        // Ethiopic Supplement syllables (Lo) and unassigned tail must not split Latin tokens.
+        for cp in [0x1380u32, 0x138F, 0x139A, 0x139F] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn vedic_tone_marks_mn_u1cd0_u1cd1_u1cd4_stay_unmapped() {
+        // Vedic Extensions combining tone marks (Mn); must not widen the Po arm to the full block.
+        for cp in [0x1CD0u32, 0x1CD1, 0x1CD4] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
     fn phags_pa_saurashtra_devanagari_ext_myanmar_aiton_meetei_cheikhei_separate_words() {
         // Phags-pa U+A874–U+A877 (single/double head mark, shad, double shad; Po). Saurashtra U+A8CE DANDA, U+A8CF DOUBLE DANDA (Po).
         // Devanagari Extended U+A8F8 PUSHPIKA, U+A8F9 GAP FILLER, U+A8FA CARET, U+A8FC SIGN SIDDHAM (Po). Myanmar Extended-A U+AA77–U+AA79
@@ -2903,6 +3079,48 @@ mod tests {
             assert!(
                 !cleaned.contains(sep),
                 "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn bengali_currency_sc_u09f2_u09f3_u09fb_separate_words() {
+        // U+09F2 BENGALI RUPEE MARK, U+09F3 BENGALI RUPEE SIGN, U+09FB BENGALI GANDA MARK (all Sc); not Rust whitespace.
+        for sep in ['\u{09F2}', '\u{09F3}', '\u{09FB}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn bengali_currency_numerator_no_and_khanda_ta_stay_unmapped() {
+        // U+09F4 BENGALI CURRENCY NUMERATOR ONE (No) and U+09FC BENGALI LETTER KHANDA TA (Lo) must not widen the Bengali Sc arms.
+        for cp in [0x09F4u32, 0x09FC] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
                 cp
             );
         }
