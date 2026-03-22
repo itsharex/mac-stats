@@ -206,6 +206,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // in Armenian (same spirit as omitting U+2019 for Latin contractions).
                 // Devanagari danda / double danda (U+0964, U+0965, Po) are not Rust whitespace; mixed
                 // Latin–Devanagari or Unicode-sample HTML can place them between Latin tokens without ASCII space.
+                // Gurmukhi abbreviation sign (U+0A76, Po), Gujarati abbreviation sign (U+0AF0, Po), Telugu sign
+                // siddham (U+0C77, Po), and Kannada sign siddham (U+0C84, Po) are not Rust whitespace; South Indic
+                // scholarly or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // Thai PAIYANNOI / FONGMAN / ANGKHANKHU / KHOMUT (U+0E2F, U+0E4F, U+0E5A, U+0E5B, Po), Lao
                 // ELLIPSIS (U+0EAF, Po), and Myanmar LITTLE SECTION / SECTION (U+104A–U+104B, Po) are not Rust
                 // whitespace; Southeast Asian–Latin bilingual or Unicode-sample HTML can glue Latin tokens without
@@ -352,6 +355,13 @@ fn collapse_whitespace(text: &str) -> String {
                 // SignWriting–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // Ol Onal abbreviation sign (U+1E5FF, Po) is not Rust whitespace; Unicode-sample or mixed-script HTML
                 // can glue Latin tokens without ASCII space.
+                // Yezidi hyphenation mark (U+10EAD, Pd) is not Rust whitespace; Kurdish Yezidi or Unicode-sample HTML
+                // can place it between Latin tokens without ASCII space.
+                // Indic Siyaq placeholder (U+1ECAC, So) and rupee mark (U+1ECB0, Sc) are not Rust whitespace;
+                // Indo-Persian financial notation or Unicode-sample HTML can glue Latin tokens for `split_whitespace()`.
+                // Vithkuqi comma through question mark (U+1057B–U+1057F, Po) are not Rust whitespace; Albanian Vithkuqi
+                // or Unicode-sample HTML can place them between Latin tokens without ASCII space. U+10570–U+1057A (Lo)
+                // stay unmapped—letters, word-internal risk.
                 // Warang Citi danda through section mark (U+118C8–U+118CF, Po) are not Rust whitespace; Austroasiatic
                 // or Unicode-sample HTML can glue Latin tokens without ASCII space. U+118D0 NUMBER ZERO (Nl) starts
                 // the numeric subrange and is not included.
@@ -540,6 +550,10 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{058A}'
                 | '\u{0964}'
                 | '\u{0965}'
+                | '\u{0A76}'
+                | '\u{0AF0}'
+                | '\u{0C77}'
+                | '\u{0C84}'
                 | '\u{0E2F}'
                 | '\u{0E4F}'
                 | '\u{0E5A}'
@@ -588,6 +602,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1039F}'
                 | '\u{103D0}'
                 | '\u{1056F}'
+                | '\u{1057B}'..='\u{1057F}'
                 | '\u{10857}'
                 | '\u{10877}'
                 | '\u{10878}'
@@ -606,11 +621,14 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{10ED0}'
                 | '\u{1DA87}'..='\u{1DA8B}'
                 | '\u{1E5FF}'
+                | '\u{1ECAC}'
+                | '\u{1ECB0}'
                 | '\u{10FF5}'
                 | '\u{10D29}'..='\u{10D2D}'
                 | '\u{10D6E}'
                 | '\u{10D8E}'
                 | '\u{10D8F}'
+                | '\u{10EAD}'
                 | '\u{118C8}'..='\u{118CF}'
                 | '\u{11B00}'..='\u{11B09}'
                 | '\u{11BE1}'
@@ -1366,6 +1384,46 @@ mod tests {
     }
 
     #[test]
+    fn vithkuqi_sentence_punctuation_separate_words() {
+        // Vithkuqi U+1057B COMMA through U+1057F QUESTION MARK (all Po).
+        for sep in '\u{1057B}'..='\u{1057F}' {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {:?} normalized before collapse, got {:?}",
+                sep,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn yezidi_hyphenation_and_indic_siyaq_placeholder_rupee_separate_words() {
+        // Yezidi U+10EAD HYPHENATION MARK (Pd). Indic Siyaq U+1ECAC PLACEHOLDER (So), U+1ECB0 RUPEE MARK (Sc).
+        for sep in ['\u{10EAD}', '\u{1ECAC}', '\u{1ECB0}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {:?} normalized before collapse, got {:?}",
+                sep,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
     fn arabic_biblical_end_of_verse_signwriting_and_ol_onal_punctuation_separate_words() {
         // Arabic Extended-C U+10ED0 END OF VERSE (Po). SignWriting U+1DA87–U+1DA8B (Po). Ol Onal U+1E5FF (Po).
         let mut seps: Vec<char> = vec![char::from_u32(0x10ED0).unwrap(), char::from_u32(0x1E5FF).unwrap()];
@@ -1770,6 +1828,27 @@ mod tests {
         // U+0964 (DEVANAGARI DANDA) and U+0965 (DEVANAGARI DOUBLE DANDA), both Po; not Rust
         // whitespace—mixed Latin–Devanagari or Unicode-sample HTML can glue tokens without ASCII space.
         for sep in ['\u{0964}', '\u{0965}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn gurmukhi_gujarati_telugu_kannada_abbreviation_siddham_separate_words() {
+        // Gurmukhi U+0A76 ABBREVIATION SIGN, Gujarati U+0AF0 ABBREVIATION SIGN, Telugu U+0C77 SIGN SIDDHAM,
+        // Kannada U+0C84 SIGN SIDDHAM (all Po); not Rust whitespace.
+        for sep in ['\u{0A76}', '\u{0AF0}', '\u{0C77}', '\u{0C84}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
