@@ -209,10 +209,15 @@ fn collapse_whitespace(text: &str) -> String {
                 // Gurmukhi abbreviation sign (U+0A76, Po), Gujarati abbreviation sign (U+0AF0, Po), Telugu sign
                 // siddham (U+0C77, Po), and Kannada sign siddham (U+0C84, Po) are not Rust whitespace; South Indic
                 // scholarly or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Bengali iss-har (U+09FA, So) and abbreviation sign (U+09FD, Po), Oriya isshar (U+0B70, So), Tamil
+                // day through number signs (U+0BF3–U+0BFA, So/Sc), and Malayalam sign para / date mark (U+0D4F,
+                // U+0D79, So) are not Rust whitespace; Eastern / Tamil / Malayalam mixed-script or Unicode-sample HTML
+                // can glue Latin tokens without ASCII space.
                 // Thai PAIYANNOI / FONGMAN / ANGKHANKHU / KHOMUT (U+0E2F, U+0E4F, U+0E5A, U+0E5B, Po), Lao
-                // ELLIPSIS (U+0EAF, Po), and Myanmar LITTLE SECTION / SECTION (U+104A–U+104B, Po) are not Rust
-                // whitespace; Southeast Asian–Latin bilingual or Unicode-sample HTML can glue Latin tokens without
-                // ASCII space. Thai MAIYAMOK (U+0E46, Lm) stays unmapped—modifier-like, can repeat word-internally.
+                // ELLIPSIS (U+0EAF, Po), Myanmar LITTLE SECTION / SECTION (U+104A–U+104B, Po), and Myanmar symbols
+                // LOCATIVE / EXCLAMATION / COMPLETED / AFOREMENTIONED (U+104C–U+104F, So) are not Rust whitespace;
+                // Southeast Asian–Latin bilingual or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Thai MAIYAMOK (U+0E46, Lm) stays unmapped—modifier-like, can repeat word-internally.
                 // Arabic number signs / ayah markers (U+0600–U+0605, U+06DD, U+08E2), Arabic
                 // Extended-A currency format marks (U+0890–U+0891, pound/piastre mark above), Syriac
                 // end of paragraph (U+0700, Bk) and sentence punctuation (U+0701–U+070D, Po), and
@@ -271,9 +276,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // Po), and astrological / editorial marks (U+0FD0–U+0FD4, U+0FD9–U+0FDA, Po) are not Rust whitespace—only intersyllabic
                 // tsheg (U+0F0B) was covered before; mixed Tibetan–Latin or Unicode-sample HTML can otherwise glue Latin tokens. U+0F13
                 // (caret So) stays unmapped. Sinhala kunddaliya (U+0DF4, Po), Limbu tokma / exclamation / question (U+1940, U+1944,
-                // U+1945, Po), and Meetei Mayek cheikhei / ahang khuda (U+AAF0, U+AAF1, Po) are not Rust whitespace; mixed-script or
-                // Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic full stop (U+1362, Po) is not Rust whitespace;
-                // mixed-script HTML can glue Latin tokens. Khmer signs khan through koomuut (U+17D4–U+17DA, Po) are not Rust whitespace;
+                // U+1945, Po), Meetei Mayek cheikhei / ahang khuda (U+AAF0, U+AAF1, Po), and Meetei Mayek cheikhei (U+ABEB, Po) are not
+                // Rust whitespace; mixed-script or Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic full stop
+                // (U+1362, Po) is not Rust whitespace; mixed-script HTML can glue Latin tokens. Khmer signs khan through koomuut
+                // (U+17D4–U+17DA, Po) are not Rust whitespace;
                 // Javanese pada / section marks (U+A9C1–U+A9CF, Po) are not Rust whitespace—U+A9C0 PANGKON (Cf, virama) stays unmapped as
                 // word-internal risk alongside U+17B4/U+17B5 inherent vowels already mapped as format controls.
                 // Balinese carik through pamengkeb (U+1B5A–U+1B60, Po) are not Rust whitespace; Balinese–Latin or Unicode-sample HTML can glue
@@ -290,6 +296,15 @@ fn collapse_whitespace(text: &str) -> String {
                 // not Rust whitespace; Sundanese–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // Kayah Li signs cwi and shya (U+A92E, U+A92F, Po) and Rejang section mark (U+A95F, Po) are not Rust
                 // whitespace; Myanmar-extended / Sumatra-script HTML or Unicode samples can glue Latin tokens without ASCII space.
+                // Phags-pa single/double head marks and shad / double shad (U+A874–U+A877, Po) are not Rust whitespace;
+                // Phags-pa–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Saurashtra danda / double danda (U+A8CE, U+A8CF, Po) are not Rust whitespace; Saurashtra–Latin or
+                // Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Devanagari Extended pushpika, gap filler, caret, and siddham (U+A8F8–U+A8FA, U+A8FC, Po) are not Rust
+                // whitespace; editorial Devanagari–Latin HTML can glue Latin tokens without ASCII space. U+A8FB HEADSTROKE (Lo)
+                // stays unmapped—letter-like, word-internal risk.
+                // Myanmar Extended-A Aiton exclamation / one / two (U+AA77–U+AA79, So) are not Rust whitespace; Khamti /
+                // Aiton or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // Lisu punctuation comma / full stop (U+A4FE, U+A4FF, Po) and Vai comma / full stop / question / exclamation
                 // (U+A60C–U+A60F, Po) are not Rust whitespace; Fraser- or Vai–Latin bilingual or Unicode-sample HTML can glue
                 // Latin tokens without ASCII space.
@@ -554,12 +569,18 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{0AF0}'
                 | '\u{0C77}'
                 | '\u{0C84}'
+                | '\u{09FA}'
+                | '\u{09FD}'
+                | '\u{0B70}'
+                | '\u{0BF3}'..='\u{0BFA}'
+                | '\u{0D4F}'
+                | '\u{0D79}'
                 | '\u{0E2F}'
                 | '\u{0E4F}'
                 | '\u{0E5A}'
                 | '\u{0E5B}'
                 | '\u{0EAF}'
-                | '\u{104A}'..='\u{104B}'
+                | '\u{104A}'..='\u{104F}'
                 | '\u{1734}'..='\u{1736}'
                 | '\u{1A1E}'..='\u{1A1F}'
                 | '\u{1AA0}'..='\u{1AA6}'
@@ -588,6 +609,12 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1945}'
                 | '\u{AAF0}'
                 | '\u{AAF1}'
+                | '\u{A874}'..='\u{A877}'
+                | '\u{A8CE}'..='\u{A8CF}'
+                | '\u{A8F8}'..='\u{A8FA}'
+                | '\u{A8FC}'
+                | '\u{AA77}'..='\u{AA79}'
+                | '\u{ABEB}'
                 | '\u{1362}'
                 | '\u{2010}'..='\u{2015}'
                 | '\u{2016}'..='\u{2018}'
@@ -1845,6 +1872,60 @@ mod tests {
     }
 
     #[test]
+    fn phags_pa_saurashtra_devanagari_ext_myanmar_aiton_meetei_cheikhei_separate_words() {
+        // Phags-pa U+A874–U+A877 (single/double head mark, shad, double shad; Po). Saurashtra U+A8CE DANDA, U+A8CF DOUBLE DANDA (Po).
+        // Devanagari Extended U+A8F8 PUSHPIKA, U+A8F9 GAP FILLER, U+A8FA CARET, U+A8FC SIGN SIDDHAM (Po). Myanmar Extended-A U+AA77–U+AA79
+        // Aiton exclamation / one / two (So). Meetei Mayek U+ABEB CHEIKHEI (Po). U+A8FB HEADSTROKE (Lo) omitted. None are Rust whitespace.
+        let mut seps: Vec<char> = ('\u{A874}'..='\u{A877}').collect();
+        seps.extend('\u{A8CE}'..='\u{A8CF}');
+        seps.extend('\u{A8F8}'..='\u{A8FA}');
+        seps.push('\u{A8FC}');
+        seps.extend('\u{AA77}'..='\u{AA79}');
+        seps.push('\u{ABEB}');
+        for sep in seps {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn bengali_oriya_tamil_malayalam_issher_abbrev_and_financial_signs_separate_words() {
+        // Bengali U+09FA ISSHAR (So), U+09FD ABBREVIATION SIGN (Po); Oriya U+0B70 ISSHAR (So); Tamil U+0BF3–U+0BFA
+        // (day/month/year/debit/credit/as above/rupee/number; So/Sc); Malayalam U+0D4F SIGN PARA, U+0D79 DATE MARK
+        // (So). None are Rust whitespace.
+        for cp in [0x09FAu32, 0x09FD, 0x0B70, 0x0D4F, 0x0D79]
+            .into_iter()
+            .chain(0x0BF3..=0x0BFA)
+        {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
     fn gurmukhi_gujarati_telugu_kannada_abbreviation_siddham_separate_words() {
         // Gurmukhi U+0A76 ABBREVIATION SIGN, Gujarati U+0AF0 ABBREVIATION SIGN, Telugu U+0C77 SIGN SIDDHAM,
         // Kannada U+0C84 SIGN SIDDHAM (all Po); not Rust whitespace.
@@ -1868,8 +1949,9 @@ mod tests {
     #[test]
     fn thai_lao_myanmar_sentence_punctuation_separate_words() {
         // Thai: U+0E2F PAIYANNOI, U+0E4F FONGMAN, U+0E5A ANGKHANKHU, U+0E5B KHOMUT (Po). Lao: U+0EAF ELLIPSIS
-        // (Po). Myanmar: U+104A LITTLE SECTION, U+104B SECTION (Po). None are Rust whitespace.
-        for cp in [0x0E2Fu32, 0x0E4F, 0x0E5A, 0x0E5B, 0x0EAF].into_iter().chain(0x104A..=0x104B) {
+        // (Po). Myanmar: U+104A LITTLE SECTION, U+104B SECTION (Po); U+104C–U+104F locative / exclamation /
+        // completed / aforementioned (So). None are Rust whitespace.
+        for cp in [0x0E2Fu32, 0x0E4F, 0x0E5A, 0x0E5B, 0x0EAF].into_iter().chain(0x104A..=0x104F) {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
