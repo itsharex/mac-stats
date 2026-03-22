@@ -203,14 +203,23 @@ fn collapse_whitespace(text: &str) -> String {
                 // separators, so pasted HTML can glue Latin tokens for `split_whitespace()`.
                 // Bullet (U+2022, Po), bullet operator (U+2219, Sm), and dot operator (U+22C5, Sm)
                 // are not Rust whitespace; list-heavy or MathML-style HTML can place them between
-                // Latin tokens without ASCII space. One dot leader / two dot leader / horizontal
+                // Latin tokens without ASCII space. Fraction slash (U+2044, Sm), division slash
+                // (U+2215, Sm), and fullwidth solidus (U+FF0F, Po) are not Rust whitespace either;
+                // math fractions, MathML, or CJK fullwidth paths can use them between Latin tokens
+                // without ASCII space. One dot leader / two dot leader / horizontal
                 // ellipsis / hyphenation point (U+2024–U+2027, Po) are not Rust whitespace either;
                 // TOC-style leaders or UI copy like "more…" can glue Latin tokens without ASCII space.
-                // Supplemental Punctuation U+2E31–U+2E33 (word separator middle dot, three-dot
-                // punctuation, raised dot; all Po) are not Rust whitespace; typography and Unicode
-                // names use them as word dividers. Aegean word separator line / dot (U+10100–U+10101,
-                // Po) and Phoenician word separator (U+1091F, Po) are not Rust whitespace; scholarly
-                // or mixed-script HTML can place them between Latin tokens without ASCII space.
+                // Supplemental Punctuation U+2E00–U+2E5D (editorial / transcription brackets and
+                // marks, word-separator dots, dashes, stenographic and medieval punctuation, Tironian
+                // et, specialized brackets, oblique hyphen; Po / Pd / Pi / Pf / Ps / Pe / Lm / So as
+                // assigned) are not Rust whitespace—the full block can sit between Latin tokens in
+                // scholarly HTML without ASCII space. Earlier arms covered only U+2E31–U+2E3B; U+2E00–
+                // U+2E30 and U+2E3C–U+2E5D are now included in one range. Runic single /
+                // multiple / cross punctuation (U+16EB–U+16ED, Po) are not Rust whitespace; epigraphic
+                // or Unicode-sample HTML can glue Latin tokens for `split_whitespace()`. Aegean word
+                // separator line / dot (U+10100–U+10101, Po) and Phoenician word separator (U+1091F,
+                // Po) are not Rust whitespace; scholarly or mixed-script HTML can place them between
+                // Latin tokens without ASCII space.
                 // Ethiopic wordspace (U+1361, Po) and Braille pattern blank (U+2800, So) are not Rust
                 // whitespace. Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn) and
                 // shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust whitespace.
@@ -253,8 +262,12 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{30FB}'
                 | '\u{FF65}'
                 | '\u{2022}'
+                | '\u{2044}'
+                | '\u{2215}'
+                | '\u{FF0F}'
                 | '\u{2024}'..='\u{2027}'
-                | '\u{2E31}'..='\u{2E33}'
+                | '\u{2E00}'..='\u{2E5D}'
+                | '\u{16EB}'..='\u{16ED}'
                 | '\u{10100}'..='\u{10101}'
                 | '\u{1091F}'
                 | '\u{2219}'
@@ -685,23 +698,55 @@ mod tests {
                 sep,
                 cleaned
             );
-            assert!(!cleaned.contains(sep), "cleaned output still contains {:?}", sep);
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
         }
     }
 
     #[test]
-    fn supplemental_punctuation_word_separator_dots_separate_words() {
-        // U+2E31 / U+2E32 / U+2E33: Supplemental Punctuation (Po); not Rust whitespace.
-        for sep in ['\u{2E31}', '\u{2E32}', '\u{2E33}'] {
+    fn supplemental_punctuation_u2e00_through_u2e5d_separate_words() {
+        // U+2E00–U+2E5D: full assigned Supplemental Punctuation block (Po/Pd/Pi/Pf/Ps/Pe/Lm/So); not
+        // Rust whitespace—critical edition / transcription HTML can glue Latin tokens for
+        // `split_whitespace()` without normalization.
+        for cp in 0x2E00u32..=0x2E5D {
+            let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
                 cleaned.contains("hello world"),
-                "expected {:?} normalized before collapse, got {:?}",
-                sep,
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
                 cleaned
             );
-            assert!(!cleaned.contains(sep), "cleaned output still contains {:?}", sep);
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn runic_word_punctuation_separates_words() {
+        // U+16EB–U+16ED: Runic single / multiple / cross punctuation (Po); not Rust whitespace.
+        for cp in 0x16EBu32..=0x16ED {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
         }
     }
 
@@ -718,7 +763,11 @@ mod tests {
                 sep,
                 cleaned
             );
-            assert!(!cleaned.contains(sep), "cleaned output still contains {:?}", sep);
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
         }
     }
 
@@ -735,7 +784,33 @@ mod tests {
                 sep,
                 cleaned
             );
-            assert!(!cleaned.contains(sep), "cleaned output still contains {:?}", sep);
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn fraction_division_and_fullwidth_solidus_separate_words() {
+        // U+2044 (FRACTION SLASH) and U+2215 (DIVISION SLASH) are Sm; U+FF0F (FULLWIDTH SOLIDUS) is
+        // Po—none are Rust whitespace; math or CJK-layout HTML can glue Latin tokens for
+        // `split_whitespace()` without ASCII space.
+        for sep in ['\u{2044}', '\u{2215}', '\u{FF0F}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {:?} normalized before collapse, got {:?}",
+                sep,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
         }
     }
 
@@ -753,7 +828,11 @@ mod tests {
                 sep,
                 cleaned
             );
-            assert!(!cleaned.contains(sep), "cleaned output still contains {:?}", sep);
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
         }
     }
 
