@@ -168,19 +168,32 @@ fn collapse_whitespace(text: &str) -> String {
                 // filler jamo, variation selectors (emoji / IVS), interlinear annotation
                 // markers, object replacement (U+FFF9–U+FFFC), and deprecated Unicode language
                 // tag characters (U+E0000–U+E007F) get the same treatment so FETCH_URL bodies
-                // tokenize cleanly.
-                '\u{200B}'
+                // tokenize cleanly. Khmer inherent vowels (U+17B4, U+17B5) are Cf and not Rust
+                // whitespace, so Khmer-layout HTML can otherwise glue adjacent Latin tokens.
+                // Arabic number signs / ayah markers (U+0600–U+0605, U+06DD, U+08E2) and Syriac
+                // abbreviation mark (U+070F) are Cf and not Rust whitespace; RTL scholarly HTML
+                // can place them between scripts without a real space. Mongolian U+1806 (TODO SOFT
+                // HYPHEN) and U+180A (NIRUGU) are Cf but lie outside U+180B–U+180E (FVS / vowel sep).
+                '\u{0600}'..='\u{0605}'
+                | '\u{06DD}'
+                | '\u{070F}'
+                | '\u{08E2}'
+                | '\u{200B}'
                 | '\u{200C}'
                 | '\u{200D}'
                 | '\u{2060}'
                 | '\u{FEFF}'
                 | '\u{00AD}'
                 | '\u{00A0}'
+                | '\u{17B4}'
+                | '\u{17B5}'
                 | '\u{034F}'
                 | '\u{061C}'
                 | '\u{200E}'
                 | '\u{200F}'
                 | '\u{202A}'..='\u{202E}'
+                | '\u{1806}'
+                | '\u{180A}'
                 | '\u{180B}'..='\u{180E}'
                 | '\u{115F}'
                 | '\u{1160}'
@@ -434,14 +447,55 @@ mod tests {
     }
 
     #[test]
-    fn invisible_fillers_separate_words() {
-        // U+180B–U+180D Mongolian free variation selectors; U+180E Mongolian vowel separator;
-        // U+115F/U+1160 Hangul choseong/jungseong fillers; U+3164 Hangul filler; U+FFA0
-        // halfwidth Hangul filler: not Unicode whitespace in Rust, so they glue tokens in
-        // `split_whitespace()` without normalization.
+    fn arabic_and_syriac_edition_format_separate_words() {
+        // U+0600–U+0605 (Arabic number sign / edition marks), U+06DD (end of ayah), U+08E2
+        // (disputed end of ayah), U+070F (Syriac abbreviation mark): Cf, not Rust whitespace.
         for sep in [
-            '\u{180B}', '\u{180C}', '\u{180D}', '\u{180E}', '\u{115F}', '\u{1160}', '\u{3164}',
-            '\u{FFA0}',
+            '\u{0600}', '\u{0601}', '\u{0602}', '\u{0603}', '\u{0604}', '\u{0605}', '\u{06DD}',
+            '\u{070F}', '\u{08E2}',
+        ] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn khmer_inherent_vowel_format_separates_words() {
+        // U+17B4/U+17B5 (Khmer vowel inherent AQ / AA) are Cf; Rust `split_whitespace()` does not
+        // treat them as whitespace, so mixed Khmer/Latin or pasted layout text can glue tokens.
+        for sep in ['\u{17B4}', '\u{17B5}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {sep:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn invisible_fillers_separate_words() {
+        // U+1806 Mongolian TODO SOFT HYPHEN; U+180A NIRUGU; U+180B–U+180D Mongolian free variation
+        // selectors; U+180E Mongolian vowel separator; U+115F/U+1160 Hangul choseong/jungseong
+        // fillers; U+3164 Hangul filler; U+FFA0 halfwidth Hangul filler: not Unicode whitespace in
+        // Rust, so they glue tokens in `split_whitespace()` without normalization.
+        for sep in [
+            '\u{1806}', '\u{180A}', '\u{180B}', '\u{180C}', '\u{180D}', '\u{180E}', '\u{115F}',
+            '\u{1160}', '\u{3164}', '\u{FFA0}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
