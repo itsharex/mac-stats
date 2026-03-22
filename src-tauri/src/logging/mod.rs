@@ -230,6 +230,14 @@ mod tests {
     }
 
     #[test]
+    fn ellipse_max_len_two_clamped() {
+        // F7: max_len below sep_len+1 (4) clamps; same effective budget as max_len 4 for long strings.
+        let result = ellipse("abcdef", 2);
+        assert_eq!(result, "...f");
+        assert_eq!(result.chars().count(), 4);
+    }
+
+    #[test]
     fn ellipse_empty_string() {
         assert_eq!(ellipse("", 10), "");
     }

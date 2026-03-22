@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`prepare_conversation_history` integration tests (022 §F1)** — Below `COMPACTION_THRESHOLD`, a new topic clears prior turns; the normal path runs `annotate_discord_401` so assistant text that matches the Discord-401 confusion heuristic gets the FETCH_URL vs `DISCORD_API` system correction appended. (`commands/session_history.rs`; FEAT-D24.)
+- **022 §F1 / §F7 contract tests** — `cap_tail_keeps_last_n_in_chronological_order` now drives length and expected tail from `CONVERSATION_HISTORY_CAP` (router + Discord share the same cap). `ellipse_max_len_two_clamped` asserts `max_len` below `sep_len + 1` clamps for long strings. No runtime behaviour change. (`commands/session_history.rs`, `logging/mod.rs`; FEAT-D23.)
 - **`shorten_file_path_internal` unit tests (022 §F7)** — Five tests lock debug-log location shortening: `src-tauri/src/…` and `src/…` prefix strip, fallback to the last `src/` segment for absolute-ish paths, passthrough when no match, empty input. Same helper used by `debug!` / `debug1!` macros via `file!()`. No runtime behaviour change. (`logging/legacy.rs`; FEAT-D22.)
 - **`looks_like_discord_401_confusion` unit tests** — Four tests document when assistant text is treated as FETCH_URL-vs-Discord API confusion (401/unauthorized + token/credential/auth + discord/guild/channel) before `annotate_discord_401` appends the system correction in `prepare_conversation_history`. No runtime behaviour change. (`commands/reply_helpers.rs`; FEAT-D21.)
 - **Discord history caps in `session_history` (022 §F1)** — `HAVING_FUN_IDLE_HISTORY_CAP` (10) for having_fun idle thoughts; normal having_fun replies use `CONVERSATION_HISTORY_CAP` (20) instead of a duplicate literal so the agent router and Discord stay aligned. Contract test in `session_history.rs`. (`discord/mod.rs`, `commands/session_history.rs`; FEAT-D19.)
@@ -27,10 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TASK agent paragraph helper** — **TASK** block in `build_agent_descriptions` moved to `format_task_agent_description()` for unit testing; wording unchanged. (`commands/agent_descriptions.rs`)
 
 ### Documentation
-- **Autoresearch snapshot plotter** — `scripts/plot_autoresearch_snapshot.py` reads mac-stats-reviewer Track A `results.tsv` and writes PNG/SVG (optional `state.json` subtitle). Checked-in sample under `docs/autoresearch-snapshots/` (amvara8 openclaw 24h: TSV, SVG, PNG, state JSON).
+- **Autoresearch snapshot plotter** — `scripts/plot_autoresearch_snapshot.py` reads mac-stats-reviewer Track A `results.tsv` and writes PNG/SVG (optional `state.json` subtitle). Generate outputs locally when needed; large samples are not kept in-tree.
 - **022 review & FEATURE-CODER backlog** — F5 checklist items marked complete with test pointers; new FEAT-D9–D11 rows in the coder backlog. (`docs/022_feature_review_plan.md`, `006-feature-coder/FEATURE-CODER.md`)
 
+### Removed
+- **Autoresearch sample artifacts** — Dropped checked-in `docs/autoresearch-snapshots/amvara8-005-openclaw-24h_*` PNG/SVG/TSV/state JSON (~2.4k lines + binary) to reduce repo weight; recreate with `scripts/plot_autoresearch_snapshot.py` if you want the same plots.
+
 ### Fixed
+- **Clippy `assertions_on_constants` (`prepare_conversation_history` tests)** — The below-threshold tokio tests no longer use runtime `assert!` on `COMPACTION_THRESHOLD`; a single `const` assert (`COMPACTION_THRESHOLD > 2`) in the test module documents the assumption (FEAT-D25). No runtime behaviour change. (`commands/session_history.rs`)
 - **Clippy `assertions_on_constants` (session history caps)** — Ordering `HAVING_FUN_IDLE_HISTORY_CAP` < `CONVERSATION_HISTORY_CAP` is now a module-level `const` assert; the unit test only checks the literal values (20 / 10). (`commands/session_history.rs`; FEAT-D20.)
 - **Monitor stats persistence after each check** — `check_monitor` now calls `save_monitors()` after updating `last_check` / `last_status`, so background `run_due_monitor_checks` and manual checks write `monitors.json` instead of keeping stats only in memory until add/remove. The monitors mutex is released before save to avoid deadlock with `save_monitors`’ lock order. Failures from `save_monitors` (e.g. busy `try_lock`) are ignored; in-memory stats remain authoritative for the running process. (`commands/monitors.rs`; FEAT-E1, 022 §3 F10.)
 

@@ -179,10 +179,17 @@ pub(crate) async fn prepare_conversation_history(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_execution_message_stack, cap_tail_chronological, CONVERSATION_HISTORY_CAP,
-        HAVING_FUN_IDLE_HISTORY_CAP,
+        build_execution_message_stack, cap_tail_chronological, prepare_conversation_history,
+        CONVERSATION_HISTORY_CAP, HAVING_FUN_IDLE_HISTORY_CAP,
     };
+    use crate::commands::compaction::COMPACTION_THRESHOLD;
     use crate::ollama::ChatMessage;
+
+    /// Below-threshold `prepare_conversation_history` tests use 1–2 turns; compaction must not run.
+    const _: () = assert!(COMPACTION_THRESHOLD > 2);
+
+    const SYSTEM_CORRECTION_401: &str =
+        "[SYSTEM CORRECTION: The above 401 was from FETCH_URL (no token). Use DISCORD_API instead.]";
 
     #[test]
     fn execution_stack_order_system_history_user() {
@@ -238,9 +245,14 @@ mod tests {
 
     #[test]
     fn cap_tail_keeps_last_n_in_chronological_order() {
-        let v: Vec<i32> = (1..=25).collect();
-        let out = cap_tail_chronological(v, 20);
-        assert_eq!(out, (6..=25).collect::<Vec<_>>());
+        // docs/022_feature_review_plan.md §F1: same cap as `answer_with_ollama_and_fetch` + Discord reply path.
+        let cap = CONVERSATION_HISTORY_CAP;
+        let total = cap + 5;
+        let v: Vec<i32> = (1..=total as i32).collect();
+        let out = cap_tail_chronological(v, cap);
+        assert_eq!(out.len(), cap);
+        let start = (total - cap + 1) as i32;
+        assert_eq!(out, (start..=total as i32).collect::<Vec<_>>());
     }
 
     #[test]
@@ -269,5 +281,51 @@ mod tests {
         // Ordering idle < conversation is enforced at compile time (const assert above).
         assert_eq!(CONVERSATION_HISTORY_CAP, 20);
         assert_eq!(HAVING_FUN_IDLE_HISTORY_CAP, 10);
+    }
+
+    #[tokio::test]
+    async fn prepare_history_new_topic_below_compaction_threshold_clears() {
+        let raw = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: "earlier".to_string(),
+                images: None,
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "old reply".to_string(),
+                images: None,
+            },
+        ];
+        let out = prepare_conversation_history(
+            raw,
+            "fresh question",
+            true,
+            None,
+            "test-req-new-topic",
+        )
+        .await;
+        assert!(out.is_empty());
+    }
+
+    #[tokio::test]
+    async fn prepare_history_below_threshold_appends_discord_401_correction() {
+        let confused = "Got 401 Unauthorized: bad bearer token calling Discord API.";
+        let raw = vec![ChatMessage {
+            role: "assistant".to_string(),
+            content: confused.to_string(),
+            images: None,
+        }];
+        let out = prepare_conversation_history(
+            raw,
+            "follow-up",
+            false,
+            None,
+            "test-req-401-annotate",
+        )
+        .await;
+        assert_eq!(out.len(), 1);
+        assert!(out[0].content.contains(confused));
+        assert!(out[0].content.contains(SYSTEM_CORRECTION_401));
     }
 }
