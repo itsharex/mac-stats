@@ -222,7 +222,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // Hmong exclamation / question (U+16FE2, U+16FE3, Po) are not Rust whitespace;
                 // U+16FE0–U+16FE1 (Lo/Lm) and U+16FE4 LOGOGRAM NYIAM (Lo) stay unmapped. Wancho
                 // comma / full stop (U+1E2FE–U+1E2FF, Po) are not Rust whitespace; Northeast-Indian
-                // script or Unicode-sample HTML can glue Latin tokens without ASCII space. Mongolian
+                // script or Unicode-sample HTML can glue Latin tokens without ASCII space. Adlam
+                // initial exclamation / question (U+1E95E, U+1E95F, Po) are not Rust whitespace;
+                // Adlam–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
+                // Medefaidrin comma / full stop / exclamation oh (U+16E97, U+16E98, U+16E9A, Po) are
+                // not Rust whitespace; U+16E99 SYMBOL AIVA (So) stays unmapped. Mongolian
                 // U+1800–U+180E (BIRGA through vowel separator) are Po/Pd/Mn/Cf and not Rust
                 // whitespace—sentence punctuation (U+1800–U+1805, U+1807–U+180A), TODO soft hyphen
                 // (U+1806, Pd), free variation selectors (U+180B–U+180D, Mn), vowel separator
@@ -328,15 +332,26 @@ fn collapse_whitespace(text: &str) -> String {
                 // whitespace. Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn) and
                 // shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust whitespace.
                 // Kaithi number signs (U+110BD, U+110CD, Cf) are not Rust whitespace; Indic numeral
-                // layout HTML can place them between scripts without an ASCII space. Egyptian
+                // layout HTML can place them between scripts without an ASCII space. Kaithi
+                // abbreviation / enumeration and section marks through double danda (U+110BB, U+110BC,
+                // U+110BE–U+110C1, Po) are mapped here as word separators; they are not Rust
+                // whitespace. Egyptian
                 // hieroglyph format joiners / segment markers (U+13430–U+13455, Cf) and musical
                 // symbol begin/end beam–tie–slur–phrase (U+1D173–
                 // U+1D17A, Cf) are not Rust whitespace; scholarly or MusicXML-derived HTML can place
                 // them between scripts without an ASCII space. Brahmi number joiner (U+1107F, Mn) is
                 // not Rust whitespace; Indic numeral layout can sit between scripts without ASCII
-                // space. Ideographic description characters (U+2FF0–U+2FFB, So) are not Rust
-                // whitespace; Han-component notation or pasted CJK-scholarly HTML can glue Latin
-                // tokens.
+                // space. Brahmi danda / double danda and punctuation dot through lotus (U+11047–
+                // U+1104D, Po) are not Rust whitespace; epigraphic or Unicode-sample HTML can glue
+                // Latin tokens without ASCII space. Ideographic description characters (U+2FF0–
+                // U+2FFB, So) are not Rust whitespace; Han-component notation or pasted CJK-scholarly
+                // HTML can glue Latin tokens. Chakma section mark and sentence punctuation (U+11140–
+                // U+11143, Po) are not Rust whitespace; U+11144–U+11147 (Lo/Mc) stay unmapped.
+                // Sharada danda / double danda / abbreviation / separator / sutra mark (U+111C5–U+111C8,
+                // U+111CD, Po) are not Rust whitespace; Sharada–Latin or Unicode-sample HTML can glue
+                // Latin tokens without ASCII space. Khojki danda through abbreviation sign (U+11238–
+                // U+1123D, Po) are not Rust whitespace; Khojki–Latin or Unicode-sample HTML can glue
+                // Latin tokens without ASCII space.
                 '\u{0600}'..='\u{0605}'
                 | '\u{06DD}'
                 | '\u{0700}'..='\u{070D}'
@@ -346,6 +361,10 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{16FE2}'
                 | '\u{16FE3}'
                 | '\u{1E2FE}'..='\u{1E2FF}'
+                | '\u{16E97}'
+                | '\u{16E98}'
+                | '\u{16E9A}'
+                | '\u{1E95E}'..='\u{1E95F}'
                 | '\u{08E2}'
                 | '\u{0890}'..='\u{0891}'
                 | '\u{200B}'
@@ -480,8 +499,15 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1BC9D}'..='\u{1BC9E}'
                 | '\u{1BCA0}'..='\u{1BCA3}'
                 | '\u{1107F}'
+                | '\u{11047}'..='\u{1104D}'
+                | '\u{110BB}'..='\u{110BC}'
+                | '\u{110BE}'..='\u{110C1}'
                 | '\u{110BD}'
                 | '\u{110CD}'
+                | '\u{11140}'..='\u{11143}'
+                | '\u{111C5}'..='\u{111C8}'
+                | '\u{111CD}'
+                | '\u{11238}'..='\u{1123D}'
                 | '\u{13430}'..='\u{13455}'
                 | '\u{2FF0}'..='\u{2FFB}'
                 | '\u{1D173}'..='\u{1D17A}'
@@ -855,6 +881,32 @@ mod tests {
         for cp in [0x07F7u32, 0x07F8, 0x07F9]
             .into_iter()
             .chain(0x0830u32..=0x083E)
+        {
+            let sep = char::from_u32(cp).unwrap();
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn adlam_initial_punctuation_and_medefaidrin_sentence_marks_separate_words() {
+        // Adlam U+1E95E–U+1E95F (INITIAL EXCLAMATION / QUESTION; Po)—not Rust whitespace.
+        // Medefaidrin U+16E97–U+16E98, U+16E9A (COMMA, FULL STOP, EXCLAMATION OH; Po)—not Rust
+        // whitespace. U+16E99 SYMBOL AIVA (So) omitted.
+        for cp in [0x16E97u32, 0x16E98, 0x16E9A]
+            .into_iter()
+            .chain(0x1E95Eu32..=0x1E95F)
         {
             let sep = char::from_u32(cp).unwrap();
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -1902,6 +1954,58 @@ mod tests {
             cleaned
         );
         assert!(!cleaned.contains('\u{1107F}'));
+    }
+
+    #[test]
+    fn brahmi_danda_through_lotus_and_kaithi_sentence_punctuation_separate_words() {
+        // Brahmi: U+11047 DANDA through U+1104D PUNCTUATION LOTUS (Po). Kaithi: U+110BB–U+110BC,
+        // U+110BE–U+110C1 (Po); U+110BD NUMBER SIGN (Cf) is covered by `kaithi_number_format_signs_separate_words`.
+        for cp in (0x11047u32..=0x1104D)
+            .chain(0x110BB..=0x110BC)
+            .chain(0x110BE..=0x110C1)
+        {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn chakma_sharada_and_khojki_sentence_punctuation_separate_words() {
+        // Chakma: U+11140 SECTION MARK through U+11143 QUESTION MARK (Po). Sharada: U+111C5 DANDA
+        // through U+111C8 SEPARATOR and U+111CD SUTRA MARK (Po). Khojki: U+11238 DANDA through
+        // U+1123D ABBREVIATION SIGN (Po). None are Rust whitespace.
+        for cp in (0x11140u32..=0x11143)
+            .chain(0x111C5..=0x111C8)
+            .chain(std::iter::once(0x111CD))
+            .chain(0x11238..=0x1123D)
+        {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
     }
 
     #[test]
