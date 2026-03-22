@@ -336,6 +336,20 @@ fn collapse_whitespace(text: &str) -> String {
                 // epigraphic Palmyrene–Latin or Unicode-sample HTML can place them between tokens without ASCII space.
                 // Pahawh Hmong clause and sentence signs (U+16B37–U+16B3B, U+16B44, Po) are not Rust whitespace;
                 // U+16B30–U+16B36 (Mn), U+16B40–U+16B43 (Lm), and U+16B3C–U+16B3F / U+16B45 (So) stay unmapped.
+                // Nabataean word separator (U+1089F, Po) and Hatran section mark (U+108FB, Po) are not Rust
+                // whitespace; epigraphic or Unicode-sample HTML can place them between Latin tokens without ASCII space.
+                // Old North Arabian word divider (U+10A9D, Po) is not Rust whitespace; U+10A9E / U+10A9F (Nl) stay
+                // unmapped. Elymaic section mark (U+10FF5, Po) is not Rust whitespace; Unicode-sample HTML can glue
+                // Latin tokens without ASCII space.
+                // Hanifi Rohingya signs tana / penda / dotted variants / jaha (U+10D29–U+10D2D, Po) are not Rust
+                // whitespace; U+10D2E SIGN VIRAMA (Mn) stays unmapped—word-internal risk.
+                // Warang Citi danda through section mark (U+118C8–U+118CF, Po) are not Rust whitespace; Austroasiatic
+                // or Unicode-sample HTML can glue Latin tokens without ASCII space. U+118D0 NUMBER ZERO (Nl) starts
+                // the numeric subrange and is not included.
+                // Sunuwar sign pvo (U+11BE1, Po) is not Rust whitespace; Nepal–Unicode-sample HTML can glue Latin
+                // tokens without ASCII space.
+                // Kirat Rai sign yupi, danda, double danda (U+16D6D–U+16D6F, Po) are not Rust whitespace;
+                // U+16D6B SIGN VIRAMA and U+16D6C SIGN SAAT (Lm) stay unmapped—modifier-like, word-internal risk.
                 // Ethiopic wordspace (U+1361, Po) and Braille pattern blank (U+2800, So) are not Rust
                 // whitespace. Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn) and
                 // shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust whitespace.
@@ -564,15 +578,23 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{10857}'
                 | '\u{10877}'
                 | '\u{10878}'
+                | '\u{1089F}'
+                | '\u{108FB}'
                 | '\u{1091F}'
                 | '\u{1093F}'
                 | '\u{10A7F}'
+                | '\u{10A9D}'
                 | '\u{10AF0}'..='\u{10AF6}'
                 | '\u{10A50}'..='\u{10A58}'
                 | '\u{10B39}'..='\u{10B3F}'
                 | '\u{10B99}'..='\u{10B9C}'
                 | '\u{10F55}'..='\u{10F59}'
                 | '\u{10F86}'..='\u{10F89}'
+                | '\u{10FF5}'
+                | '\u{10D29}'..='\u{10D2D}'
+                | '\u{118C8}'..='\u{118CF}'
+                | '\u{11BE1}'
+                | '\u{16D6D}'..='\u{16D6F}'
                 | '\u{2219}'
                 | '\u{22C5}'
                 | '\u{1361}'
@@ -1263,6 +1285,71 @@ mod tests {
         // U+10100 / U+10101 / U+10102 (Aegean word separator line/dot/check mark, Po) and U+1091F (Phoenician word
         // separator, Po) are not Rust whitespace.
         for sep in ['\u{10100}', '\u{10101}', '\u{10102}', '\u{1091F}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {:?} normalized before collapse, got {:?}",
+                sep,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn hanifi_rohingya_sentence_marks_and_warang_citi_punctuation_separate_words() {
+        // Hanifi Rohingya U+10D29–U+10D2D (tana / penda / dotted / jaha, all Po). U+10D2E VIRAMA (Mn) omitted.
+        // Warang Citi U+118C8–U+118CF (danda through section mark, all Po).
+        for sep in (0x10D29u32..=0x10D2D).chain(0x118C8..=0x118CF) {
+            let sep = char::from_u32(sep).expect("valid test scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {:?} normalized before collapse, got {:?}",
+                sep,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn sunuwar_pvo_and_kirat_rai_sentence_punctuation_separate_words() {
+        // Sunuwar U+11BE1 SIGN PVO (Po). Kirat Rai U+16D6D SIGN YUPI, U+16D6E DANDA, U+16D6F DOUBLE DANDA (all Po).
+        // U+16D6B SIGN VIRAMA / U+16D6C SIGN SAAT (Lm) omitted.
+        for sep in std::iter::once(0x11BE1u32).chain(0x16D6D..=0x16D6F) {
+            let sep = char::from_u32(sep).expect("valid test scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {:?} normalized before collapse, got {:?}",
+                sep,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn nabataean_hatran_old_north_arabian_elymaic_word_separators_separate_words() {
+        // Nabataean U+1089F WORD SEPARATOR, Hatran U+108FB SECTION MARK, Old North Arabian U+10A9D WORD DIVIDER,
+        // Elymaic U+10FF5 SECTION MARK (all Po). U+10A9E / U+10A9F (Old North Arabian numbers, Nl) stay unmapped.
+        for sep in ['\u{1089F}', '\u{108FB}', '\u{10A9D}', '\u{10FF5}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
