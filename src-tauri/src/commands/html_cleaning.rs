@@ -420,8 +420,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // Latin tokens without ASCII space.
                 // Kirat Rai sign yupi, danda, double danda (U+16D6D–U+16D6F, Po) are not Rust whitespace;
                 // U+16D6B SIGN VIRAMA and U+16D6C SIGN SAAT (Lm) stay unmapped—modifier-like, word-internal risk.
-                // Ethiopic wordspace (U+1361, Po) and Braille pattern blank (U+2800, So) are not Rust
-                // whitespace. Optical Character Recognition hook through double backslash (U+2440–U+245F, So)
+                // Ethiopic wordspace (U+1361, Po) is not Rust whitespace. Braille Patterns (U+2800–U+28FF;
+                // all So, including pattern blank U+2800) are not Rust whitespace; accessibility or
+                // Unicode-sample HTML can place dot patterns between Latin tokens without ASCII space.
+                // Optical Character Recognition hook through double backslash (U+2440–U+245F, So)
                 // are not Rust whitespace; OCR zoning / anchor symbols in scanned PDF or legacy HTML exports
                 // can sit between Latin tokens without ASCII space. Enclosed Alphanumerics (U+2460–U+24FF: circled
                 // and parenthesized digits, digit full stops, enclosed Latin letters, etc.; No / So) are not Rust
@@ -432,6 +434,13 @@ fn collapse_whitespace(text: &str) -> String {
                 // Miscellaneous Symbols (U+2600–U+26FF; weather, chess, card suits, warning signs, etc.—mostly So / Sm /
                 // Po as assigned) are not Rust whitespace; emoji-era or Unicode-sample HTML can place them between
                 // Latin tokens without ASCII space.
+                // Dingbats (U+2700–U+27BF; checkmarks, crosses, pencil, scissors, decorative bullets, etc.—mostly So /
+                // Sm / Po as assigned) are not Rust whitespace; Zapf Dingbats–style or Unicode-sample HTML can place
+                // them between Latin tokens without ASCII space.
+                // Miscellaneous Mathematical Symbols-A (U+27C0–U+27EF; angles, triangles, set/membership notations,
+                // etc.—mostly Sm) and Supplemental Arrows-A (U+27F0–U+27FF; long arrows, mostly Sm) are not Rust
+                // whitespace; MathML, LaTeX-to-HTML, or Unicode-sample pages can place them between Latin tokens without
+                // ASCII space.
                 // Duployan thick letter selector / double mark (U+1BC9D–U+1BC9E, Mn), CHINOOK FULL
                 // STOP (U+1BC9F, Po), and shorthand format overlap / step (U+1BCA0–U+1BCA3, Cf) are not Rust
                 // whitespace (Mn/Cf mapped with other controls; U+1BC9F mapped as visible Po).
@@ -751,7 +760,9 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2460}'..='\u{24FF}'
                 | '\u{2500}'..='\u{25FF}'
                 | '\u{2600}'..='\u{26FF}'
-                | '\u{2800}'
+                | '\u{2700}'..='\u{27BF}'
+                | '\u{27C0}'..='\u{27FF}'
+                | '\u{2800}'..='\u{28FF}'
                 | '\u{2CFE}'..='\u{2CFF}'
                 | '\u{2D70}'
                 | '\u{1BC9D}'..='\u{1BC9E}'
@@ -2727,17 +2738,69 @@ mod tests {
     }
 
     #[test]
-    fn braille_pattern_blank_separates_words() {
-        // U+2800 BRAILLE PATTERN BLANK is So, not Rust whitespace; used as a visible “empty” cell
-        // and sometimes as a spacing hack in plain text.
-        let html = "<html><body><p>hello\u{2800}world</p></body></html>";
-        let cleaned = clean_html(html);
-        assert!(
-            cleaned.contains("hello world"),
-            "expected Braille blank normalized before collapse, got {:?}",
-            cleaned
-        );
-        assert!(!cleaned.contains('\u{2800}'));
+    fn dingbats_separate_words() {
+        // U+2700–U+27BF Dingbats (mostly So / Sm / Po); not Rust whitespace; Zapf-style or Unicode-sample HTML can
+        // glue Latin tokens without ASCII space.
+        for cp in 0x2700u32..=0x27BF {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn miscellaneous_mathematical_symbols_a_and_supplemental_arrows_a_separate_words() {
+        // U+27C0–U+27EF Miscellaneous Mathematical Symbols-A + U+27F0–U+27FF Supplemental Arrows-A (mostly Sm); not Rust
+        // whitespace; MathML / LaTeX-style or Unicode-sample HTML can glue Latin tokens without ASCII space.
+        for cp in 0x27C0u32..=0x27FF {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn braille_patterns_separate_words() {
+        // U+2800–U+28FF Braille Patterns (all So); not Rust whitespace; U+2800 blank and raised-dot
+        // cells in accessibility or Unicode-sample HTML can glue Latin tokens without ASCII space.
+        for cp in 0x2800u32..=0x28FF {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
     }
 
     #[test]
