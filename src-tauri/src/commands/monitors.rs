@@ -462,22 +462,24 @@ pub fn check_monitor(monitor_id: String) -> Result<crate::monitors::MonitorStatu
         monitor_url
     );
 
-    let monitors = get_monitors().lock().map_err(|e| e.to_string())?;
+    let result = {
+        let monitors = get_monitors().lock().map_err(|e| e.to_string())?;
+        let monitor = monitors.get(&monitor_id).ok_or_else(|| {
+            debug!("Monitor: Monitor not found - ID: {}", monitor_id);
+            format!("Monitor not found: {}", monitor_id)
+        })?;
 
-    let monitor = monitors.get(&monitor_id).ok_or_else(|| {
-        debug!("Monitor: Monitor not found - ID: {}", monitor_id);
-        format!("Monitor not found: {}", monitor_id)
-    })?;
-
-    let start_time = std::time::Instant::now();
-    let result = monitor.check().map_err(|e| {
-        debug!(
-            "Monitor: Check failed - ID: {}, URL: {}, Error: {}",
-            monitor_id, monitor_url, e
-        );
-        e.to_string()
-    })?;
-    let _duration = start_time.elapsed();
+        let start_time = std::time::Instant::now();
+        let result = monitor.check().map_err(|e| {
+            debug!(
+                "Monitor: Check failed - ID: {}, URL: {}, Error: {}",
+                monitor_id, monitor_url, e
+            );
+            e.to_string()
+        })?;
+        let _duration = start_time.elapsed();
+        result
+    };
 
     if result.is_up {
         let ms = result.response_time_ms.unwrap_or(0);
@@ -492,23 +494,27 @@ pub fn check_monitor(monitor_id: String) -> Result<crate::monitors::MonitorStatu
         );
     }
 
-    // Save stats after check (in memory only - don't save to disk on every check)
-    // Disk saves happen on explicit actions (add/remove monitor) to avoid blocking
     let now = Utc::now();
-    if let Ok(mut stats) = get_monitor_stats().lock() {
-        stats.insert(
-            monitor_id.clone(),
-            MonitorStats {
-                last_check: Some(now),
-                last_status: Some(result.clone()),
-            },
-        );
-        trace!(
-            "Monitor: Saved stats in memory for monitor - ID: {}, Last check: {:?}",
-            monitor_id,
-            now
-        );
+    {
+        if let Ok(mut stats) = get_monitor_stats().lock() {
+            stats.insert(
+                monitor_id.clone(),
+                MonitorStats {
+                    last_check: Some(now),
+                    last_status: Some(result.clone()),
+                },
+            );
+            trace!(
+                "Monitor: Saved stats in memory for monitor - ID: {}, Last check: {:?}",
+                monitor_id,
+                now
+            );
+        }
     }
+
+    // Persist last_check / last_status so restarts and `run_due_monitor_checks` intervals stay
+    // correct after reboot. `save_monitors` uses try_lock on each map — skip quietly if busy.
+    let _ = save_monitors();
 
     Ok(result)
 }

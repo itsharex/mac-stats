@@ -14,7 +14,8 @@ use crate::commands::ollama_config::{
     read_ollama_fast_model_from_env_or_config,
 };
 use crate::commands::ollama_memory::{
-    load_memory_block_for_request, load_soul_content, search_memory_for_request,
+    format_router_soul_block, load_memory_block_for_request, load_soul_content,
+    search_memory_for_request,
 };
 use crate::commands::ollama_models::list_ollama_models;
 use crate::commands::perplexity_helpers::is_news_query;
@@ -40,7 +41,8 @@ use crate::commands::agent_descriptions::{
 use crate::commands::browser_helpers::wants_visible_browser;
 use crate::commands::prompt_assembly::build_execution_system_content;
 use crate::commands::session_history::{
-    cap_tail_chronological, prepare_conversation_history, CONVERSATION_HISTORY_CAP,
+    build_execution_message_stack, cap_tail_chronological, prepare_conversation_history,
+    CONVERSATION_HISTORY_CAP,
 };
 use crate::commands::verification::build_verification_retry_hint;
 use crate::{mac_stats_debug, mac_stats_info};
@@ -491,19 +493,10 @@ pub fn answer_with_ollama_and_fetch(
         // When no agent/skill override, prepend soul (~/.mac-stats/agents/soul.md) so Ollama gets personality/vibe in context.
         let router_soul = skill_content.as_ref().map_or_else(
             || {
-                let s = load_soul_content();
-                if s.is_empty() {
-                    format!(
-                        "You are mac-stats v{}.\n\n",
-                        crate::config::Config::version()
-                    )
-                } else {
-                    format!(
-                        "{}\n\nYou are mac-stats v{}.\n\n",
-                        s,
-                        crate::config::Config::version()
-                    )
-                }
+                format_router_soul_block(
+                    &load_soul_content(),
+                    &crate::config::Config::version(),
+                )
             },
             |_| String::new(),
         );
@@ -776,19 +769,19 @@ pub fn answer_with_ollama_and_fetch(
                 &model_identity,
                 None,
             );
-            let mut msgs: Vec<crate::ollama::ChatMessage> = vec![crate::ollama::ChatMessage {
-                role: "system".to_string(),
-                content: prompt.content,
-                images: None,
-            }];
-            for msg in &conversation_history {
-                msgs.push(msg.clone());
-            }
-            msgs.push(crate::ollama::ChatMessage {
-                role: "user".to_string(),
-                content: question_for_plan_and_exec.clone(),
-                images: attachment_images_base64.clone(),
-            });
+            let msgs = build_execution_message_stack(
+                crate::ollama::ChatMessage {
+                    role: "system".to_string(),
+                    content: prompt.content,
+                    images: None,
+                },
+                &conversation_history,
+                crate::ollama::ChatMessage {
+                    role: "user".to_string(),
+                    content: question_for_plan_and_exec.clone(),
+                    images: attachment_images_base64.clone(),
+                },
+            );
             // Preserve multi-tool chains so the executor runs them step by step (not one RUN_CMD with the whole chain).
             let synthetic = if all_tools.len() > 1 {
                 all_tools
@@ -823,19 +816,19 @@ pub fn answer_with_ollama_and_fetch(
                 &model_identity,
                 Some(&recommendation),
             );
-            let mut msgs: Vec<crate::ollama::ChatMessage> = vec![crate::ollama::ChatMessage {
-                role: "system".to_string(),
-                content: prompt.content,
-                images: None,
-            }];
-            for msg in &conversation_history {
-                msgs.push(msg.clone());
-            }
-            msgs.push(crate::ollama::ChatMessage {
-                role: "user".to_string(),
-                content: question_for_plan_and_exec.clone(),
-                images: attachment_images_base64.clone(),
-            });
+            let mut msgs = build_execution_message_stack(
+                crate::ollama::ChatMessage {
+                    role: "system".to_string(),
+                    content: prompt.content,
+                    images: None,
+                },
+                &conversation_history,
+                crate::ollama::ChatMessage {
+                    role: "user".to_string(),
+                    content: question_for_plan_and_exec.clone(),
+                    images: attachment_images_base64.clone(),
+                },
+            );
             let response = match send_ollama_chat_messages(
                 msgs.clone(),
                 model_override.clone(),

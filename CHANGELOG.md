@@ -8,16 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Router soul prefix + F4 tests (022 §F4)** — `format_router_soul_block()` in `ollama_memory.rs` centralizes shared-soul + app identity lines for agent-router planning; three unit tests cover empty/non-empty soul text and empty prefix when `skill_content` is present (same branch as agent `combined_prompt`). Call site unchanged aside from helper. (`commands/ollama_memory.rs`, `commands/ollama.rs`; FEAT-D13.)
 - **Chat verbosity ↔ legacy atomic (022 §F8)** — Unit tests assert `set_chat_verbosity` updates `logging::VERBOSITY` (same atomic as `-v`/`-vv`/`-vvv` and `ellipse`-gated request logs) and clamps levels above 3. Mutex-serialized with restore. (`commands/logging.rs`)
 - **TASK prompt contract tests (022 §F6)** — `format_task_agent_description()` holds the **TASK** tool paragraph for the dynamic agent list; three unit tests assert orchestrator-vs-TASK_CREATE guidance and duplicate-task → TASK_APPEND/TASK_STATUS wording. (`commands/agent_descriptions.rs`)
 - **`MAC_STATS_TASK_DIR`** — Optional override for the task file directory (defaults unchanged: `$HOME/.mac-stats/task/`). Used by unit tests; also available for isolated runs. (`config/mod.rs`)
 - **TASK_CREATE deduplication tests** — `test_slug_deterministic` and `create_task_duplicate_topic_id_errors_with_task_append_hint` in `task/mod.rs` document 022 §3 F5 (slug stability, duplicate topic+id error mentions `TASK_APPEND` / alternate id). (`task/mod.rs`)
 
 ### Changed
+- **Agent-router execution messages (022 §F2)** — Both execution paths in `answer_with_ollama_and_fetch` now use `build_execution_message_stack()` (`session_history.rs`) for system → history → current user; two unit tests lock the ordering contract. No change to wire format or model payloads. (`commands/session_history.rs`, `commands/ollama.rs`)
 - **TASK agent paragraph helper** — **TASK** block in `build_agent_descriptions` moved to `format_task_agent_description()` for unit testing; wording unchanged. (`commands/agent_descriptions.rs`)
 
 ### Documentation
 - **022 review & FEATURE-CODER backlog** — F5 checklist items marked complete with test pointers; new FEAT-D9–D11 rows in the coder backlog. (`docs/022_feature_review_plan.md`, `006-feature-coder/FEATURE-CODER.md`)
+
+### Fixed
+- **Monitor stats persistence after each check** — `check_monitor` now calls `save_monitors()` after updating `last_check` / `last_status`, so background `run_due_monitor_checks` and manual checks write `monitors.json` instead of keeping stats only in memory until add/remove. The monitors mutex is released before save to avoid deadlock with `save_monitors`’ lock order. Failures from `save_monitors` (e.g. busy `try_lock`) are ignored; in-memory stats remain authoritative for the running process. (`commands/monitors.rs`; FEAT-E1, 022 §3 F10.)
 
 ## [0.1.54] - 2026-03-22
 

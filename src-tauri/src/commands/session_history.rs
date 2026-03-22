@@ -10,6 +10,21 @@ use crate::ollama::ChatMessage;
 
 pub(crate) const CONVERSATION_HISTORY_CAP: usize = 20;
 
+/// Build agent-router **execution** messages: system prompt, then prior turns, then the current user message.
+///
+/// Order matches `docs/022_feature_review_plan.md` §F2 (history after system, before the current question).
+pub(crate) fn build_execution_message_stack(
+    system: ChatMessage,
+    history: &[ChatMessage],
+    user: ChatMessage,
+) -> Vec<ChatMessage> {
+    let mut msgs = Vec::with_capacity(1 + history.len() + 1);
+    msgs.push(system);
+    msgs.extend(history.iter().cloned());
+    msgs.push(user);
+    msgs
+}
+
 /// Keep the last `cap` items in chronological order (oldest first).
 ///
 /// Same effect as `items.into_iter().rev().take(cap).rev().collect()` but skips work when
@@ -158,7 +173,60 @@ pub(crate) async fn prepare_conversation_history(
 
 #[cfg(test)]
 mod tests {
-    use super::cap_tail_chronological;
+    use super::{build_execution_message_stack, cap_tail_chronological};
+    use crate::ollama::ChatMessage;
+
+    #[test]
+    fn execution_stack_order_system_history_user() {
+        let system = ChatMessage {
+            role: "system".to_string(),
+            content: "sys".to_string(),
+            images: None,
+        };
+        let h1 = ChatMessage {
+            role: "user".to_string(),
+            content: "u1".to_string(),
+            images: None,
+        };
+        let h2 = ChatMessage {
+            role: "assistant".to_string(),
+            content: "a1".to_string(),
+            images: None,
+        };
+        let user = ChatMessage {
+            role: "user".to_string(),
+            content: "current".to_string(),
+            images: None,
+        };
+        let out = build_execution_message_stack(system, &[h1.clone(), h2.clone()], user.clone());
+        assert_eq!(out.len(), 4);
+        assert_eq!(out[0].role, "system");
+        assert_eq!(out[0].content, "sys");
+        assert_eq!(out[1].role, h1.role);
+        assert_eq!(out[1].content, h1.content);
+        assert_eq!(out[2].role, h2.role);
+        assert_eq!(out[2].content, h2.content);
+        assert_eq!(out[3].role, user.role);
+        assert_eq!(out[3].content, user.content);
+    }
+
+    #[test]
+    fn execution_stack_empty_history() {
+        let system = ChatMessage {
+            role: "system".to_string(),
+            content: "s".to_string(),
+            images: None,
+        };
+        let user = ChatMessage {
+            role: "user".to_string(),
+            content: "q".to_string(),
+            images: None,
+        };
+        let out = build_execution_message_stack(system, &[], user.clone());
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[1].role, user.role);
+        assert_eq!(out[1].content, user.content);
+    }
 
     #[test]
     fn cap_tail_keeps_last_n_in_chronological_order() {

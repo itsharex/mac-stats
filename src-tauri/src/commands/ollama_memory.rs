@@ -9,6 +9,17 @@ pub(crate) fn load_soul_content() -> String {
     Config::load_soul_content()
 }
 
+/// Planning-system prefix: shared `soul.md` plus the app identity line when no skill or agent
+/// `combined_prompt` is active. When `skill_content` is `Some`, callers use an empty string instead
+/// so the skill/agent block is the only extra voice (022 §F4).
+pub(crate) fn format_router_soul_block(soul_md: &str, app_version: &str) -> String {
+    if soul_md.is_empty() {
+        format!("You are mac-stats v{}.\n\n", app_version)
+    } else {
+        format!("{}\n\nYou are mac-stats v{}.\n\n", soul_md, app_version)
+    }
+}
+
 /// Load global memory (~/.mac-stats/agents/memory.md) for inclusion in system prompt.
 pub(crate) fn load_global_memory_block() -> String {
     let path = Config::memory_file_path();
@@ -154,5 +165,38 @@ pub(crate) fn search_memory_for_request(
         None
     } else {
         Some(top.join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_router_soul_block_empty_soul() {
+        assert_eq!(
+            format_router_soul_block("", "9.9.9"),
+            "You are mac-stats v9.9.9.\n\n"
+        );
+    }
+
+    #[test]
+    fn format_router_soul_block_non_empty_soul() {
+        assert_eq!(
+            format_router_soul_block("Be concise.", "1.0.0"),
+            "Be concise.\n\nYou are mac-stats v1.0.0.\n\n"
+        );
+    }
+
+    /// `agent_override` sets `skill_content` to the agent `combined_prompt` (see `answer_with_ollama_and_fetch`);
+    /// the soul prefix must stay empty to avoid double system voice.
+    #[test]
+    fn router_soul_skipped_when_skill_or_agent_prompt_active() {
+        let skill = Some("skill instructions".to_string());
+        let prefix = skill.as_ref().map_or_else(
+            || format_router_soul_block("unused", "1.0"),
+            |_| String::new(),
+        );
+        assert!(prefix.is_empty());
     }
 }
