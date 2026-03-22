@@ -2,7 +2,7 @@
 
 Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (sibling: `../openclaw` from mac-stats). This file is the landing doc for the reviewer role; fix discrepancies in **OpenClaw**, not here.
 
-## Latest verification — 2026-03-22T22:00Z
+## Latest verification — 2026-03-22T22:23Z
 
 **OpenClaw root:** `../openclaw`  
 **OpenClaw `HEAD`:** `95ae8aabb77a99bed6747698fe810f6b8e34490b` (short: `95ae8aa`)  
@@ -13,7 +13,7 @@ Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (siblin
 | # | Claim (AGENTS.md) | Code truth | Verdict |
 |---|-------------------|------------|---------|
 | 1 | WhatsApp web surface: `src/channel-web.ts` (L9) | **`src/channel-web.ts`** present; no `provider-web.ts` | **Aligned** |
-| 2 | Messaging: `docs/channels/`, `src/channels/`, `src/routing`, `src/channel-web.ts`, `src/plugins/…`, `extensions/*` (L17–20) | **`src/channels/`**, **`src/plugins/`** exist; no bogus top-level `src/telegram` etc. | **Aligned** |
+| 2 | Messaging: `docs/channels/`, `src/channels/`, `src/routing`, `src/channel-web.ts`, `src/plugins/…`, `extensions/*` (L17–20) | **`src/channels/`**, **`src/routing/`** (directory), **`src/plugins/`**, **`extensions/*`** present; channel code not misplaced as bogus top-level dirs (e.g. `src/telegram`) | **Aligned** |
 | 3 | Format check vs write (L71–72) | **`pnpm format:check`** → `oxfmt --check`; **`pnpm format`** / **`format:fix`** → `oxfmt --write`; **`pnpm check`** includes `format:check` | **Aligned** |
 | 4 | Vitest coverage (L113) | `vitest.config.ts`: lines/functions/statements **70**, branches **55** | **Aligned** |
 | 5 | TypeScript: `pnpm tsgo` (L68–69) | Doc states `tsgo` comes from **`@typescript/native-preview`** and that **`pnpm check`** invokes it; no separate `"tsgo"` script in `package.json` | **Aligned** |
@@ -22,13 +22,13 @@ Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (siblin
 
 - **`format:fix`** and **`format`** remain redundant aliases (`oxfmt --write`); harmless.
 - No OpenClaw code issues surfaced; this pass is doc↔config/layout consistency only.
-- Evening pass re-ran the same checks at OpenClaw `95ae8aa`; outcomes unchanged from the earlier 2026-03-22 re-check.
+- Re-verified on the same `HEAD` as the prior 2026-03-22 entries; structure bullets in § “Project Structure” (`src/cli`, `src/commands`, `src/infra`, `src/media`) match the tree on disk.
 
 ### Historical (2026-03-22 morning)
 
 Earlier the same day, `AGENTS.md` had stale paths (`provider-web.ts`, old channel dirs), wrong format wording, and wrong branch threshold. Those were corrected upstream; the table above confirms the current tree matches the doc.
 
-**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of this re-verification (`95ae8aa`).
+**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of 2026-03-22T22:23Z (`95ae8aa`).
 
 ---
 

@@ -299,12 +299,26 @@ fn collapse_whitespace(text: &str) -> String {
                 // ASCII space. Wavy dash (U+3030, Pd), ideographic telegraph line-feed separator
                 // (U+3037, So), part alternation mark (U+303D, Po), Katakana-Hiragana double hyphen
                 // (U+30A0, Pd), and fullwidth low line (U+FF3F, Pc) are not Rust whitespace either;
-                // mixed CJK / romanization HTML can do the same. Enclosed CJK Letters and Months (Unicode block
+                // mixed CJK / romanization HTML can do the same. CJK Radicals Supplement (Unicode block U+2E80–U+2EFF):
+                // assigned So U+2E80–U+2E99 and U+2E9B–U+2EF3; not Rust whitespace. Unassigned U+2E9A and tail U+2EF4–U+2EFF
+                // (Cn) stay unmapped. Kangxi Radicals (Unicode block U+2F00–U+2FDF): assigned So U+2F00–U+2FD5 (214 radicals);
+                // not Rust whitespace. Unassigned tail U+2FD6–U+2FDF (Cn) and inter-block gap U+2FE0–U+2FEF (Cn) stay unmapped.
+                // Ideographic Description Characters U+2FF0–U+2FFF (all assigned scalars So, including overlap/surround/overlay/rotation U+2FFC–U+2FFF);
+                // not Rust whitespace. Kanbun (Unicode block U+3190–U+319F): linking and reverse
+                // marks U+3190–U+3191 (So) and top/earth/man annotation marks U+3196–U+319F (So) are not Rust whitespace;
+                // classical Japanese kanbun or Unicode-sample HTML can glue Latin tokens without ASCII space. Ideographic
+                // annotation digit marks U+3192–U+3195 (No) stay unmapped—numeric risk. Bopomofo Extended U+31A0–U+31BF (Lo)
+                // stays unmapped. CJK Strokes U+31C0–U+31E3 (all So as assigned): not Rust whitespace; stroke nomenclature or
+                // font-chart HTML can sit between Latin tokens without ASCII space. Gap U+31E4–U+31EF unassigned—excluded.
+                // Katakana Phonetic Extensions U+31F0–U+31FF (Lo)—excluded. Enclosed CJK Letters and Months (Unicode block
                 // U+3200–U+32FF): assigned So parenthesized / circled Hangul, parenthesized / circled CJK ideograph labels,
                 // ideographic telegraph month symbols, circled katakana, squared Latin abbreviations (e.g. PTE, Hz, eV), era
                 // name square, etc.; not Rust whitespace. All No scalars stay unmapped: parenthesized ideograph one–ten
                 // (U+3220–U+3229), circled numbers on black square (U+3248–U+324F), circled Latin digit pairs / decades
                 // (U+3251–U+325F, U+32B1–U+32BF), circled ideograph one–ten (U+3280–U+3289). Unassigned U+321F (Cn) excluded.
+                // CJK Compatibility (Unicode block U+3300–U+33FF): all 256 assigned scalars are So (squared katakana words,
+                // telegraph-era labels, etc.); not Rust whitespace. JIS / carrier or Unicode-sample HTML can place them between
+                // Latin tokens without ASCII space. CJK Unified Ideographs Extension A U+3400+ (Lo) immediately after—excluded.
                 // Hebrew maqaf (U+05BE, Pd), paseq (U+05C0, Po), and sof pasuq
                 // (U+05C3, Po; sentence end like a colon) are not Rust whitespace. Georgian paragraph separator (U+10FB, Po) is
                 // not Rust whitespace; mixed Latin–Georgian or Unicode-sample HTML can glue tokens without ASCII space. Tibetan yig mgo
@@ -598,7 +612,7 @@ fn collapse_whitespace(text: &str) -> String {
                 // space. Brahmi danda / double danda and punctuation dot through lotus (U+11047–
                 // U+1104D, Po) are not Rust whitespace; epigraphic or Unicode-sample HTML can glue
                 // Latin tokens without ASCII space. Ideographic description characters (U+2FF0–
-                // U+2FFB, So) are not Rust whitespace; Han-component notation or pasted CJK-scholarly
+                // U+2FFF, So) are not Rust whitespace; Han-component notation or pasted CJK-scholarly
                 // HTML can glue Latin tokens. Chakma section mark and sentence punctuation (U+11140–
                 // U+11143, Po) are not Rust whitespace; U+11144–U+11147 (Lo/Mc) stay unmapped.
                 // Sharada danda / double danda / abbreviation / separator / sutra mark (U+111C5–U+111C8,
@@ -723,12 +737,19 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{303C}'
                 | '\u{303E}'
                 | '\u{303F}'
+                | '\u{2E80}'..='\u{2E99}'
+                | '\u{2E9B}'..='\u{2EF3}'
+                | '\u{2F00}'..='\u{2FD5}'
+                | '\u{3190}'..='\u{3191}'
+                | '\u{3196}'..='\u{319F}'
+                | '\u{31C0}'..='\u{31E3}'
                 | '\u{3200}'..='\u{321E}'
                 | '\u{322A}'..='\u{3247}'
                 | '\u{3250}'
                 | '\u{3260}'..='\u{327F}'
                 | '\u{328A}'..='\u{32B0}'
                 | '\u{32C0}'..='\u{32FF}'
+                | '\u{3300}'..='\u{33FF}'
                 | '\u{FF0C}'
                 | '\u{FF1A}'
                 | '\u{FF1B}'
@@ -1050,7 +1071,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{12470}'..='\u{12474}'
                 | '\u{12FF1}'..='\u{12FF2}'
                 | '\u{13430}'..='\u{13455}'
-                | '\u{2FF0}'..='\u{2FFB}'
+                | '\u{2FF0}'..='\u{2FFF}'
                 | '\u{1D173}'..='\u{1D17A}'
                 | '\u{FE00}'..='\u{FE0F}'
                 | '\u{E0100}'..='\u{E01EF}'
@@ -3208,6 +3229,136 @@ mod tests {
     }
 
     #[test]
+    fn cjk_radicals_supplement_so_assigned_subranges_separate_words() {
+        // CJK Radicals Supplement: So U+2E80–U+2E99, U+2E9B–U+2EF3; not Rust whitespace.
+        let cps = (0x2E80u32..=0x2E99).chain(0x2E9B..=0x2EF3);
+        for cp in cps {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn cjk_radicals_supplement_unassigned_gaps_stay_unmapped() {
+        // Cn: U+2E9A, U+2EF4–U+2EFF—not included in supplement So arms.
+        for cp in [0x2E9Au32, 0x2EF4, 0x2EFF] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn kangxi_radicals_so_u2f00_through_u2fd5_separate_words() {
+        // Kangxi Radicals: all assigned scalars U+2F00–U+2FD5 are So; not Rust whitespace.
+        for cp in 0x2F00u32..=0x2FD5 {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn kangxi_radicals_unassigned_tail_and_inter_block_gap_stay_unmapped() {
+        // Cn: U+2FD6–U+2FDF (tail of Kangxi block), U+2FE0–U+2FEF (gap before IDC U+2FF0+).
+        for cp in [0x2FD6u32, 0x2FDF, 0x2FE0, 0x2FEF] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn kangxi_radicals_neighbor_cjk_ext_a_stay_unmapped() {
+        // CJK Unified Ideographs Extension A U+3400 (`Lo`)—word-internal risk; not a Kangxi radical.
+        let cp = 0x3400u32;
+        let sep = char::from_u32(cp).expect("valid scalar");
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+            cp,
+            cleaned
+        );
+    }
+
+    #[test]
+    fn kanbun_so_marks_and_cjk_strokes_separate_words() {
+        // Kanbun: So U+3190–U+3191, U+3196–U+319F; CJK Strokes U+31C0–U+31E3 (all So). Not Rust whitespace.
+        let cps = (0x3190u32..=0x3191)
+            .chain(0x3196..=0x319F)
+            .chain(0x31C0..=0x31E3);
+        for cp in cps {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn kanbun_no_numerics_bopomofo_ext_and_strokes_gap_stay_unmapped() {
+        // Kanbun No U+3192–U+3195; Bopomofo Extended Lo U+31A0–U+31BF; unassigned U+31E4–U+31EF; Katakana Phonetic Ext Lo U+31F0.
+        for cp in [0x3192u32, 0x3195, 0x31A0, 0x31BF, 0x31E4, 0x31EF, 0x31F0] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
     fn enclosed_cjk_letters_and_months_so_assigned_subranges_separate_words() {
         // U+3200–U+32FF block: all assigned So subranges; not Rust whitespace. No numerics and unassigned U+321F excluded in
         // implementation—see `enclosed_cjk_letters_and_months_no_numerics_and_gap_stay_unmapped`.
@@ -3252,6 +3403,40 @@ mod tests {
                 cleaned
             );
         }
+    }
+
+    #[test]
+    fn cjk_compatibility_u3300_through_u33ff_all_so_separate_words() {
+        // U+3300–U+33FF: UnicodeData assigns every scalar as So; not Rust whitespace.
+        for cp in 0x3300u32..=0x33FF {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn cjk_compatibility_neighbor_cjk_ext_a_stay_unmapped() {
+        // CJK Unified Ideographs Extension A starts at U+3400 (Lo)—must not split Latin tokens like squared katakana So.
+        let sep = char::from_u32(0x3400).expect("valid scalar");
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+3400 should not map to ASCII space between Latin tokens, got {:?}",
+            cleaned
+        );
     }
 
     #[test]
@@ -4698,9 +4883,9 @@ mod tests {
 
     #[test]
     fn ideographic_description_characters_separate_words() {
-        // U+2FF0–U+2FFB: ideographic description characters are So, not Rust whitespace; rare
+        // U+2FF0–U+2FFF: ideographic description characters are So, not Rust whitespace; rare
         // mixed or pedagogical HTML can place them between Latin letters without an ASCII space.
-        for cp in 0x2FF0u32..=0x2FFB {
+        for cp in 0x2FF0u32..=0x2FFF {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
