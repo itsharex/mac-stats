@@ -8,9 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **FETCH_URL oversized body** — When the response exceeds the char cap, the ellipsed text now ends with ` [content truncated]` (after reserving suffix length inside the cap) so the model explicitly knows content was cut, not only middle `...`. (`commands/browser.rs`)
 - **`logging/subsystem.rs` test placement** — `#[cfg(test)] mod tests` now follows the exported `mac_stats_*` macros so `cargo clippy` stays warning-free (`items_after_test_module`). (`logging/subsystem.rs`)
 
 ### Fixed
+- **SSRF redirect validation** — HTTP redirect targets are checked with the same rigor as the initial URL: DNS resolution failure or an empty address list stops the redirect instead of following blindly (extracted `check_redirect_target_ssrf`, used by `ssrf_redirect_policy`). Four new unit tests. (`commands/browser.rs`)
+- **SSRF IPv4-mapped broadcast** — IPv6 addresses that embed IPv4 (e.g. `::ffff:255.255.255.255`) now treat mapped IPv4 broadcast the same as native IPv4 (`is_broadcast()` in the `to_ipv4_mapped()` guard). Unit test added. (`commands/browser.rs`)
 - **Session resume after restart (legacy filenames)** — `load_messages_from_latest_session_file` now picks up both the current layout `session-memory-{id}-{timestamp}-{topic}.md` and the older `session-memory-{topic}-{id}-{timestamp}.md` files, so Discord/session context can load after upgrading from pre-reorder naming. Filename matching uses explicit new/legacy patterns (with unit tests) instead of a simple `session-memory-{id}-` prefix. (`session_memory.rs`)
 
 ## [0.1.53] - 2026-03-22

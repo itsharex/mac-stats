@@ -11,6 +11,24 @@ use url::Url;
 /// Max response body size (chars) to avoid huge strings (e.g. 500 KB of text).
 const MAX_BODY_CHARS: usize = 500_000;
 
+/// Suffix appended when the body exceeds [`MAX_BODY_CHARS`] so the model sees explicit truncation (review D3).
+const FETCH_BODY_TRUNC_SUFFIX: &str = " [content truncated]";
+
+/// If `body` is longer than [`MAX_BODY_CHARS`] (Unicode scalar values), ellipse the middle and append
+/// [`FETCH_BODY_TRUNC_SUFFIX`]. Total char count is at most [`MAX_BODY_CHARS`].
+fn truncate_fetch_body_if_needed(body: String) -> String {
+    if body.chars().count() <= MAX_BODY_CHARS {
+        return body;
+    }
+    let suffix_len = FETCH_BODY_TRUNC_SUFFIX.chars().count();
+    let budget = MAX_BODY_CHARS.saturating_sub(suffix_len);
+    format!(
+        "{}{}",
+        crate::logging::ellipse(&body, budget),
+        FETCH_BODY_TRUNC_SUFFIX
+    )
+}
+
 /// Browser-like User-Agent so servers that block bots/scrapers allow the request (avoids 403).
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -65,7 +83,11 @@ fn is_blocked_ip(ip: &IpAddr) -> bool {
                 || is_ipv6_link_local(v6)
                 || is_ipv6_unique_local(v6)
                 || v6.to_ipv4_mapped().is_some_and(|v4| {
-                    v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
+                    v4.is_loopback()
+                        || v4.is_private()
+                        || v4.is_link_local()
+                        || v4.is_unspecified()
+                        || v4.is_broadcast()
                 })
         }
     }
@@ -122,36 +144,65 @@ pub fn validate_url_no_ssrf(url: &Url, allowed_hosts: &[String]) -> Result<(), S
     Ok(())
 }
 
+/// Validate a redirect target the same way as the initial URL: resolve host and reject
+/// blocklist IPs, empty resolution, or DNS failure. Does not follow redirects we cannot verify.
+fn check_redirect_target_ssrf(url: &Url, allowed_hosts: &[String]) -> Result<(), std::io::Error> {
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Redirect with credentials blocked (SSRF guard)",
+        ));
+    }
+    let Some(host) = url.host_str() else {
+        return Ok(());
+    };
+    if allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(host)) {
+        return Ok(());
+    }
+    let port = url
+        .port()
+        .unwrap_or(if url.scheme() == "https" { 443 } else { 80 });
+    let addr_str = format!("{}:{}", host, port);
+    let addrs: Vec<std::net::SocketAddr> = addr_str
+        .to_socket_addrs()
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!(
+                    "Redirect host DNS resolution failed for '{}' (SSRF guard): {}",
+                    host, e
+                ),
+            )
+        })?
+        .collect();
+    if addrs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "Redirect host '{}' resolved to no addresses (SSRF guard)",
+                host
+            ),
+        ));
+    }
+    for addr in &addrs {
+        if is_blocked_ip(&addr.ip()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!(
+                    "Redirect to private network ({}) blocked (SSRF guard)",
+                    addr.ip()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Build a reqwest redirect policy that blocks redirects to private/loopback networks.
 fn ssrf_redirect_policy(allowed_hosts: Vec<String>) -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(move |attempt| {
-        let url = attempt.url();
-        if !url.username().is_empty() || url.password().is_some() {
-            return attempt.error(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "Redirect with credentials blocked (SSRF guard)",
-            ));
-        }
-        if let Some(host) = url.host_str() {
-            if !allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(host)) {
-                let port = url
-                    .port()
-                    .unwrap_or(if url.scheme() == "https" { 443 } else { 80 });
-                let addr_str = format!("{}:{}", host, port);
-                if let Ok(addrs) = addr_str.to_socket_addrs() {
-                    for addr in addrs {
-                        if is_blocked_ip(&addr.ip()) {
-                            return attempt.error(std::io::Error::new(
-                                std::io::ErrorKind::PermissionDenied,
-                                format!(
-                                    "Redirect to private network ({}) blocked (SSRF guard)",
-                                    addr.ip()
-                                ),
-                            ));
-                        }
-                    }
-                }
-            }
+        if let Err(e) = check_redirect_target_ssrf(attempt.url(), &allowed_hosts) {
+            return attempt.error(e);
         }
         if attempt.previous().len() > 10 {
             attempt.stop()
@@ -204,11 +255,7 @@ pub fn fetch_page_content(url: &str) -> Result<String, String> {
 
     let body = resp.text().map_err(|e| format!("Read body: {}", e))?;
 
-    let body = if body.chars().count() > MAX_BODY_CHARS {
-        crate::logging::ellipse(&body, MAX_BODY_CHARS)
-    } else {
-        body
-    };
+    let body = truncate_fetch_body_if_needed(body);
     let n = body.chars().count();
     info!("Fetch page: fetched {} chars from {}", n, url);
     Ok(body)
@@ -319,5 +366,63 @@ mod tests {
     fn is_blocked_ip_public_is_ok() {
         assert!(!is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(8, 8, 8, 8))));
         assert!(!is_blocked_ip(&IpAddr::V4(std::net::Ipv4Addr::new(1, 1, 1, 1))));
+    }
+
+    #[test]
+    fn is_blocked_ip_ipv4_mapped_broadcast() {
+        // ::ffff:255.255.255.255 — must match plain IPv4 broadcast handling (SSRF review nit).
+        let mapped = std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xffff, 0xffff);
+        assert!(is_blocked_ip(&IpAddr::V6(mapped)));
+    }
+
+    #[test]
+    fn truncate_fetch_body_short_unchanged() {
+        let s = "hello".to_string();
+        assert_eq!(truncate_fetch_body_if_needed(s.clone()), s);
+    }
+
+    #[test]
+    fn truncate_fetch_body_uses_configured_max() {
+        let over = MAX_BODY_CHARS + 100;
+        let body: String = "x".repeat(over);
+        let out = truncate_fetch_body_if_needed(body);
+        assert!(out.ends_with(FETCH_BODY_TRUNC_SUFFIX));
+        assert!(out.contains("..."));
+        assert!(out.chars().count() <= MAX_BODY_CHARS);
+    }
+
+    #[test]
+    fn ssrf_redirect_check_blocks_private() {
+        let url = Url::parse("http://192.168.1.1/").unwrap();
+        let err = check_redirect_target_ssrf(&url, &[]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(err.to_string().contains("private network"));
+    }
+
+    #[test]
+    fn ssrf_redirect_check_allowlist_bypasses() {
+        let url = Url::parse("http://127.0.0.1/").unwrap();
+        let allowed = vec!["127.0.0.1".to_string()];
+        assert!(check_redirect_target_ssrf(&url, &allowed).is_ok());
+    }
+
+    #[test]
+    fn ssrf_redirect_check_allows_public() {
+        let url = Url::parse("https://www.example.com/").unwrap();
+        assert!(check_redirect_target_ssrf(&url, &[]).is_ok());
+    }
+
+    #[test]
+    fn ssrf_redirect_dns_failure_is_error() {
+        // .invalid is reserved (RFC 6761); should not resolve in normal DNS.
+        let url = Url::parse("http://mac-stats-ssrf-redirect-test.invalid/").unwrap();
+        let err = check_redirect_target_ssrf(&url, &[]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("DNS resolution failed") || msg.contains("SSRF guard"),
+            "unexpected message: {}",
+            msg
+        );
     }
 }
