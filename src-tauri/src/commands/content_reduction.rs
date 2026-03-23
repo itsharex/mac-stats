@@ -140,6 +140,29 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
     false
 }
 
+/// True if `phrase` appears in `haystack` and is not immediately preceded by ASCII alnum / `_`
+/// (so `rows exceed` does not match inside `arrows exceed` / `throws exceed`, `columns exceed`
+/// does not match inside `microcolumns exceed`, and `tables exceed` does not match inside
+/// `constables exceed`; `table exceed` does not match inside `stable exceed`).
+fn contains_phrase_after_ident_boundary(haystack: &str, phrase: &str) -> bool {
+    fn ident_continue(c: char) -> bool {
+        c.is_ascii_alphanumeric() || c == '_'
+    }
+    for (i, _) in haystack.match_indices(phrase) {
+        if i == 0 {
+            return true;
+        }
+        if !haystack[..i]
+            .chars()
+            .next_back()
+            .is_some_and(ident_continue)
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Check whether an Ollama error string indicates a context-window overflow.
 pub(crate) fn is_context_overflow_error(err: &str) -> bool {
     let lower = err.to_lowercase();
@@ -621,6 +644,80 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((lower.contains("files exceed")
             || lower.contains("files exceeded")
             || lower.contains("file exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "line(s) exceed(s/ed)" (FEAT-D318). Parallel to `files exceed` /
+        // `file exceed`. `line exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `lines exceed` (the `s` after `line`).
+        || ((lower.contains("lines exceed")
+            || lower.contains("lines exceeded")
+            || lower.contains("line exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "cell(s) exceed(s/ed)" (FEAT-D319). Parallel to `lines exceed` /
+        // `line exceed`. `cell exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `cells exceed` (the `s` after `cell`).
+        || ((lower.contains("cells exceed")
+            || lower.contains("cells exceeded")
+            || lower.contains("cell exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "row(s) exceed(s/ed)" (FEAT-D320). Parallel to `cells exceed` /
+        // `cell exceed`. `row exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `rows exceed` (the `s` after `row`).
+        // Ident-boundary on the phrases so `arrows exceed` / `throws exceed` / `arrow exceed`
+        // do not match.
+        || ((contains_phrase_after_ident_boundary(&lower, "rows exceed")
+            || contains_phrase_after_ident_boundary(&lower, "rows exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "row exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "column(s) exceed(s/ed)" (FEAT-D321). Parallel to `rows exceed` /
+        // `row exceed`. `column exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `columns exceed` (the `s` after `column`).
+        // Ident-boundary so `microcolumns exceed` / `multicolumn exceeds` do not false-positive.
+        || ((contains_phrase_after_ident_boundary(&lower, "columns exceed")
+            || contains_phrase_after_ident_boundary(&lower, "columns exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "column exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "table(s) exceed(s/ed)" (FEAT-D322). Parallel to `columns exceed` /
+        // `column exceed`. `table exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `tables exceed` (the `s` after `table`).
+        // Ident-boundary so `constables exceed` / `stable exceed` do not false-positive.
+        || ((contains_phrase_after_ident_boundary(&lower, "tables exceed")
+            || contains_phrase_after_ident_boundary(&lower, "tables exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "table exceed"))
             && (lower.contains("context window")
                 || lower.contains("context length")
                 || lower.contains("context limit")
@@ -1438,6 +1535,54 @@ mod tests {
         assert!(is_context_overflow_error(
             "gateway: file exceeded the context window"
         ));
+        assert!(is_context_overflow_error(
+            "API: lines exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: lines exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: line exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: line exceeded the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "API: cells exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: cells exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: cell exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: cell exceeded the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "API: rows exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: rows exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: row exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: row exceeded the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "API: columns exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: columns exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: column exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: column exceeded the context window"
+        ));
     }
 
     #[test]
@@ -1540,6 +1685,81 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "storage: file exceed max upload size (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: lines exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: lines exceeded daily usage cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "log: line exceed max line length (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: cells exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: cells exceeded daily usage cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "spreadsheet: cell exceed max formula length (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: rows exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: rows exceeded daily usage cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "spreadsheet: row exceed max row height (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: columns exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: columns exceeded daily usage cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "spreadsheet: column exceed max column width (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: tables exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: tables exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: table exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: table exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: tables exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: tables exceeded daily usage cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "SQL: constables exceed department headcount (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: stable exceed viewport width (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "microcolumns exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "multicolumn exceeds max column width (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "arrows exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "throws exceed available context for the completion"
+        ));
+        assert!(!is_context_overflow_error(
+            "arrow exceed per-row display cap (no model context configured)"
         ));
         assert!(!is_context_overflow_error(
             "catalog: entry exceed max sku length (no model context configured)"
