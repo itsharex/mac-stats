@@ -130,6 +130,8 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || lower.contains("exceeds the context window")
         || lower.contains("context window exceeded")
         || lower.contains("exceeded the context limit")
+        || lower.contains("exceeds the context limit")
+        || lower.contains("exceed the context limit")
         || lower.contains("requested more tokens than")
         || lower.contains("total prompt tokens exceed")
         || lower.contains("fit in the context")
@@ -192,6 +194,57 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || lower.contains("sequence")
                 || lower.contains("n_ctx")
                 || lower.contains("window")))
+        || lower.contains("exceeds the configured context")
+        || (lower.contains("configured context")
+            && (lower.contains("overflow")
+                || lower.contains("exceed")
+                || lower.contains("full")))
+        || (lower.contains("would exceed") && lower.contains("context"))
+        || lower.contains("past the context")
+        || lower.contains("reached the context limit")
+        || lower.contains("hit the context limit")
+        || lower.contains("over the context limit")
+        || (lower.contains("truncated")
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("max context")))
+        || lower.contains("context exhausted")
+        || (lower.contains("context")
+            && (lower.contains("fully exhausted") || lower.contains("completely exhausted")))
+        || lower.contains("insufficient remaining context")
+        || ((lower.contains("kv cache") || lower.contains("kv-cache"))
+            && lower.contains("is full")
+            && lower.contains("context"))
+        || lower.contains("exceeds the context size")
+        || lower.contains("context size exceeds")
+        || lower.contains("exceeded the context size")
+        || (lower.contains("context window") && lower.contains("too small"))
+        || (lower.contains("context capacity")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("full")))
+        || (lower.contains("allocated context")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("full")))
+        || (lower.contains("prefill")
+            && lower.contains("context")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")))
+        || (lower.contains("max_context")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")
+                || lower.contains("larger")
+                || lower.contains("greater")))
+        || (lower.contains("context_length")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")))
 }
 
 /// Check whether an Ollama error indicates message role/ordering conflict.
@@ -422,6 +475,12 @@ mod tests {
         ));
         assert!(is_context_overflow_error("context window exceeded"));
         assert!(is_context_overflow_error("exceeded the context limit"));
+        assert!(is_context_overflow_error(
+            "error: exceeds the context limit (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: cannot exceed the context limit for this model"
+        ));
         assert!(is_context_overflow_error("input exceeds the context window"));
         assert!(is_context_overflow_error(
             "error: prompt does not fit in the context window"
@@ -549,6 +608,78 @@ mod tests {
         assert!(is_context_overflow_error(
             "input tokens exceed n_ctx; reduce prompt or raise num_ctx"
         ));
+        assert!(is_context_overflow_error(
+            "error: input exceeds the configured context (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: configured context full; shorten the prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "generation would exceed remaining context; aborting"
+        ));
+        assert!(is_context_overflow_error(
+            "error: prompt extends past the context boundary"
+        ));
+        assert!(is_context_overflow_error(
+            "model hit the context limit during prefill"
+        ));
+        assert!(is_context_overflow_error(
+            "llama.cpp: reached the context limit (n_ctx)"
+        ));
+        assert!(is_context_overflow_error(
+            "error: encoded batch went over the context limit"
+        ));
+        assert!(is_context_overflow_error(
+            "warning: prompt truncated to fit max context"
+        ));
+        assert!(is_context_overflow_error(
+            "server truncated input due to context length constraints"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: context exhausted during prefill"
+        ));
+        assert!(is_context_overflow_error(
+            "error: the model context is fully exhausted; shorten the prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "decode failed: KV cache for this context slot is full"
+        ));
+        assert!(is_context_overflow_error(
+            "insufficient remaining context for the completion request"
+        ));
+        assert!(is_context_overflow_error(
+            "error: encoded prompt exceeds the context size (n_ctx=4096)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: context size exceeds allocated n_ctx"
+        ));
+        assert!(is_context_overflow_error(
+            "error: exceeded the context size for this request"
+        ));
+        assert!(is_context_overflow_error(
+            "model error: the context window is too small for this prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "llama.cpp: context capacity exceeded during batch decode"
+        ));
+        assert!(is_context_overflow_error(
+            "error: prompt overflows allocated context buffer"
+        ));
+        assert!(is_context_overflow_error(
+            "prefill failed: input exceeds context slot (n_ctx)"
+        ));
+        assert!(is_context_overflow_error(
+            "error: max_context exceeded by encoded prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: prompt is larger than max_context allows"
+        ));
+        assert!(is_context_overflow_error(
+            "validation failed: context_length exceeds the configured maximum"
+        ));
+        assert!(is_context_overflow_error(
+            "json error: context_length too large for model slot"
+        ));
     }
 
     #[test]
@@ -582,6 +713,30 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "network buffer full; retry later"
+        ));
+        assert!(!is_context_overflow_error(
+            "response truncated for display (unrelated to model context)"
+        ));
+        assert!(!is_context_overflow_error(
+            "log truncated; see full trace for context"
+        ));
+        assert!(!is_context_overflow_error(
+            "this feature is fully supported in the application context"
+        ));
+        assert!(!is_context_overflow_error(
+            "gpu kv cache is full (tensor allocation failed)"
+        ));
+        assert!(!is_context_overflow_error(
+            "prefill completed; context tensors initialized"
+        ));
+        assert!(!is_context_overflow_error(
+            "Modelfile: allocated context is 8192 tokens (default)"
+        ));
+        assert!(!is_context_overflow_error(
+            "options: max_context=8192 num_ctx=8192 (ok)"
+        ));
+        assert!(!is_context_overflow_error(
+            "request fields: context_length, temperature, stream"
         ));
     }
 
