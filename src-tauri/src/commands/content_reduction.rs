@@ -126,6 +126,20 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || lower.contains("context length exceeded")
         || lower.contains("maximum context length")
         || lower.contains("exceeds the model's context window")
+        || lower.contains("exceeds the context window")
+        || lower.contains("context window exceeded")
+        || lower.contains("exceeded the context limit")
+        || lower.contains("requested more tokens than")
+        || lower.contains("total prompt tokens exceed")
+        || lower.contains("fit in the context")
+        || lower.contains("larger than the context")
+        || lower.contains("outside the context window")
+        || lower.contains("ran out of context")
+        || lower.contains("context size exceeded")
+        || lower.contains("exceeded context size")
+        || lower.contains("prompt has more tokens than")
+        || lower.contains("exceeds available context")
+        || (lower.contains("longer than") && lower.contains("context"))
         || (lower.contains("too long") && lower.contains("context"))
 }
 
@@ -349,6 +363,42 @@ mod tests {
             "exceeds the model's context window"
         ));
         assert!(is_context_overflow_error("request too long for context"));
+        assert!(is_context_overflow_error(
+            "llama runner: requested more tokens than fit in the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "error: total prompt tokens exceed context size"
+        ));
+        assert!(is_context_overflow_error("context window exceeded"));
+        assert!(is_context_overflow_error("exceeded the context limit"));
+        assert!(is_context_overflow_error("input exceeds the context window"));
+        assert!(is_context_overflow_error(
+            "error: prompt does not fit in the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: prompt is larger than the context size"
+        ));
+        assert!(is_context_overflow_error(
+            "input falls outside the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "model ran out of context during generation"
+        ));
+        assert!(is_context_overflow_error(
+            "error: context size exceeded (n_ctx=4096)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: exceeded context size for prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "prompt has more tokens than allowed by the model context"
+        ));
+        assert!(is_context_overflow_error(
+            "input exceeds available context; truncate or increase num_ctx"
+        ));
+        assert!(is_context_overflow_error(
+            "the encoded prompt is longer than the context length"
+        ));
     }
 
     #[test]
@@ -458,6 +508,42 @@ mod tests {
     fn sanitize_exceeds_models_context_window_phrase() {
         let msg = sanitize_ollama_error_for_user("input exceeds the model's context window");
         let text = msg.expect("overflow phrase should sanitize");
+        assert!(
+            text.contains("context window") && text.contains("new topic"),
+            "unexpected: {text}"
+        );
+    }
+
+    #[test]
+    fn sanitize_requested_more_tokens_than_context_phrase() {
+        let msg = sanitize_ollama_error_for_user(
+            "llama runner: requested more tokens than fit in the context window",
+        );
+        let text = msg.expect("runner overflow phrase should sanitize");
+        assert!(
+            text.contains("context window") && text.contains("new topic"),
+            "unexpected: {text}"
+        );
+    }
+
+    #[test]
+    fn sanitize_fit_in_the_context_phrase() {
+        let msg = sanitize_ollama_error_for_user(
+            "error: prompt does not fit in the context window",
+        );
+        let text = msg.expect("fit-in-context phrase should sanitize");
+        assert!(
+            text.contains("context window") && text.contains("new topic"),
+            "unexpected: {text}"
+        );
+    }
+
+    #[test]
+    fn sanitize_context_size_exceeded_phrase() {
+        let msg = sanitize_ollama_error_for_user(
+            "llama runner: context size exceeded (n_ctx=8192)",
+        );
+        let text = msg.expect("context size exceeded should sanitize");
         assert!(
             text.contains("context window") && text.contains("new topic"),
             "unexpected: {text}"

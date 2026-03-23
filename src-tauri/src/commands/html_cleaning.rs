@@ -382,7 +382,12 @@ fn collapse_whitespace(text: &str) -> String {
                 // is a separate arm (FEAT-D130). Fraction slash (U+2044, Sm)
                 // and fullwidth solidus (U+FF0F, Po) are not Rust whitespace either; math fractions,
                 // MathML, or CJK fullwidth paths can use them between Latin tokens without ASCII space.
-                // IDEOGRAPHIC COMMA (U+3001, Po) and IDEOGRAPHIC FULL STOP (U+3002, Po; colloquially
+                // IDEOGRAPHIC SPACE (U+3000, Zs) is Unicode separator space and Rust `char::is_whitespace`—it
+                // is not listed on this match arm; the per-line `split_whitespace()` pass already splits on it
+                // (same spirit as TAB / LF–CR staying unmapped at the top of this function). NBSP (U+00A0, Zs)
+                // is still mapped to ASCII U+0020 so cleaned FETCH_URL text is plain-space–only even when a
+                // scalar would otherwise survive inside a segment; U+3000 between Latin tokens still yields
+                // ASCII spaces after split+join. IDEOGRAPHIC COMMA (U+3001, Po) and IDEOGRAPHIC FULL STOP (U+3002, Po; colloquially
                 // “ideographic comma / full stop” for both) and
                 // fullwidth ASCII-like punctuation (U+FF0C comma, U+FF1A colon, U+FF1B semicolon,
                 // U+FF01 exclamation, U+FF02 quotation, U+FF1F question; all Po) are not Rust whitespace; CJK or
@@ -425,7 +430,8 @@ fn collapse_whitespace(text: &str) -> String {
                 // (U+3031–U+3035, Lm), CIRCLED POSTAL MARK (U+3036, So; same contiguous arm), MASU MARK
                 // (U+303C, So), IDEOGRAPHIC VARIATION INDICATOR /
                 // IDEOGRAPHIC HALF FILL SPACE (U+303E–U+303F, So) are not Rust whitespace. Omitted on purpose:
-                // iteration marks U+3005 / U+303B (Lm), IDEOGRAPHIC NUMBER ZERO (U+3007, Nl; colloquially
+                // IDEOGRAPHIC ITERATION MARK (U+3005, Lm) and VERTICAL IDEOGRAPHIC ITERATION MARK (U+303B, Lm),
+                // IDEOGRAPHIC NUMBER ZERO (U+3007, Nl; colloquially
                 // “ideographic zero”) and Hangzhou numerals
                 // U+3021–U+3029 / U+3038–U+303A (Nl), and ideographic tone marks U+302A–U+302F (Mn/Mc).
                 // Vertical Forms compatibility punctuation (U+FE10–U+FE19, Po/Ps/Pe/Pc) is not
@@ -1596,6 +1602,25 @@ mod tests {
             cleaned
         );
         assert!(!cleaned.contains('\u{00A0}'));
+    }
+
+    #[test]
+    fn ideographic_space_zs_u3000_separates_words_plain_ascii_between_tokens() {
+        // IDEOGRAPHIC SPACE (U+3000, `Zs`) is Rust whitespace; it is not on the CJK punctuation `match`
+        // arm (see `collapse_whitespace` comment; FEAT-D273). Between Latin tokens, `split_whitespace`
+        // still splits and `join(" ")` yields ASCII spaces only—unlike NBSP, there is no explicit `=> ' '`
+        // mapping because the separator never survives as U+3000 between words after collapse.
+        let html = "<html><body><p>hello\u{3000}world</p></body></html>";
+        let cleaned = clean_html(html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected ideographic space to separate tokens, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains('\u{3000}'),
+            "cleaned output should not retain U+3000 between tokens"
+        );
     }
 
     #[test]
@@ -3717,7 +3742,8 @@ mod tests {
     fn cjk_symbols_brackets_ditto_wave_vertical_repeat_masu_half_fill_separate_words() {
         // U+3003 DITTO MARK (`Po`) / U+3004 JAPANESE INDUSTRIAL STANDARD SYMBOL (`So`) / U+3006 IDEOGRAPHIC CLOSING MARK (`Lo`
         // in UnicodeData; FEAT-D257 wrongly said `Po`—still mapped as a non–Rust-whitespace separator);
-        // U+3007 IDEOGRAPHIC NUMBER ZERO (`Nl`) stays unmapped with iteration marks U+3005 / U+303B (see filter below);
+        // U+3007 IDEOGRAPHIC NUMBER ZERO (`Nl`) stays unmapped with IDEOGRAPHIC ITERATION MARK U+3005 /
+        // VERTICAL IDEOGRAPHIC ITERATION MARK U+303B (both `Lm`; see filter below);
         // U+3008–U+3011 / U+3014–U+301B: bracket `Ps`/`Pe` pairs per UnicodeData; U+3012 POSTAL MARK / U+3013 GETA MARK (`So`);
         // U+301C WAVE DASH (`Pd`); U+301D / U+301E–U+301F (UnicodeData: REVERSED DOUBLE PRIME QUOTATION MARK `Ps`, DOUBLE PRIME QUOTATION MARK / LOW DOUBLE PRIME QUOTATION MARK `Pe`); U+3020 POSTAL MARK FACE (`So`); U+3031–U+3035 (`Lm`); U+3036 CIRCLED POSTAL MARK (`So`); U+303C MASU MARK (`So`); U+303E IDEOGRAPHIC VARIATION INDICATOR / U+303F IDEOGRAPHIC HALF FILL SPACE (`So`): not Rust whitespace
         // (see `collapse_whitespace` comment; FEAT-D271 / FEAT-D272 official scalar names). Mixed
