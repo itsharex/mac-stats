@@ -197,6 +197,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // HTML5 tree construction drops NUL from text nodes before we see them (so `clean_html` cannot
                 // exercise NUL end-to-end). TAB (U+0009), LF / VT / FF / CR (U+000A–U+000D) stay unmapped
                 // here—they are White_Space and already tokenize with `split_whitespace()`.
+                // Basic Latin SPACING CIRCUMFLEX ACCENT (U+005E) and SPACING GRAVE ACCENT (U+0060, both Sk) are not Rust
+                // whitespace; ASCII markup, transliteration, or legacy typography in HTML can glue Latin tokens without ASCII
+                // space (distinct from MODIFIER LETTER CIRCUMFLEX U+02C6 / CARON U+02C7, which are `Lm` and stay unmapped).
+                // LOW LINE U+005F (`Pc`, underscore) stays unmapped—identifier / word-internal risk.
                 // Khmer inherent vowels (U+17B4, U+17B5) are Cf and not Rust
                 // whitespace, so Khmer-layout HTML can otherwise glue adjacent Latin tokens.
                 // Latin-1 inverted exclamation / question (U+00A1, U+00BF) and double angle quotes
@@ -204,10 +208,12 @@ fn collapse_whitespace(text: &str) -> String {
                 // HTML can place them between Latin tokens without ASCII space. Cent / pound /
                 // generic currency / yen signs (U+00A2–U+00A5, all Sc) are not Rust whitespace;
                 // legacy Western price copy or entity-encoded HTML can glue Latin tokens without ASCII
-                // space (distinct from block Currency Symbols U+20A0+). BROKEN BAR (U+00A6, Sm) is not Rust
+                // space (distinct from block Currency Symbols U+20A0+). BROKEN BAR (U+00A6, So) is not Rust
                 // whitespace; legacy ISO 8859-1 / entity-encoded HTML often uses it as a tall pipe between
                 // tokens (distinct from ASCII VERTICAL LINE U+007C). U+00A8 DIAERESIS (Sk) stays unmapped—
-                // spacing-mark / combining-like risk. COPYRIGHT SIGN
+                // spacing-mark / combining-like risk. MACRON (U+00AF), ACUTE ACCENT (U+00B4), and CEDILLA
+                // (U+00B8, all Sk) are not Rust whitespace; legacy ISO 8859-1 or linguistics typography in HTML
+                // can sit them between Latin tokens without ASCII space (FEAT-D245). COPYRIGHT SIGN
                 // (U+00A9, So) and REGISTERED SIGN (U+00AE, So) are not Rust whitespace; legal or trademark HTML
                 // often places them between Latin tokens without ASCII space. DEGREE SIGN (U+00B0, So) is not Rust
                 // whitespace; weather or scientific HTML can glue Latin tokens without ASCII space. Latin-1 math
@@ -232,6 +238,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // can sit them between Latin tokens without ASCII space. U+02EC MODIFIER LETTER VOICING (Lm) and U+02EE
                 // MODIFIER LETTER DOUBLE APOSTROPHE (Lm) stay unmapped—letter- / apostrophe-like, word-internal risk.
                 // Superscript letters U+02E0 SMALL GAMMA through U+02E4 REVERSED GLOTTAL STOP (Lm) stay unmapped.
+                // Modifier Tone Letters (Unicode block U+A700–U+A71F): seventeen contiguous spacing `Sk` scalars U+A700
+                // MODIFIER LETTER CHINESE TONE YIN PING through U+A716 MODIFIER LETTER EXTRA-LOW LEFT-STEM TONE BAR—are
+                // not Rust whitespace; Chinese tone / IPA-style tone-bar notation or Unicode-sample HTML can sit them between
+                // Latin tokens without ASCII space. Tail U+A717 MODIFIER LETTER DOT VERTICAL BAR through U+A71F MODIFIER LETTER
+                // LOW INVERTED EXCLAMATION MARK are `Lm`—stay unmapped (word-internal risk).
                 // Latin Extended-D (Unicode block U+A720–U+A7FF): four spacing `Sk` scalars—MODIFIER LETTER STRESS AND HIGH
                 // TONE (U+A720), STRESS AND LOW TONE (U+A721), COLON (U+A789), SHORT EQUALS SIGN (U+A78A)—are not Rust
                 // whitespace; phonetic or Unicode-sample HTML can sit them between Latin tokens without ASCII space. All
@@ -247,8 +258,15 @@ fn collapse_whitespace(text: &str) -> String {
                 // (U+037E, Po; erotimatiko) is not Rust whitespace and is distinct from Greek ano
                 // teleia (U+0387) mapped with middle-dot punctuation. Greek spacing tonos (U+0384, Sk)
                 // and spacing dialytika tonos (U+0385, Sk) are not Rust whitespace; polytonic Greek or
-                // mixed-script HTML can sit them between Latin tokens without ASCII space. U+0374 GREEK
-                // NUMERAL SIGN (Lm) and U+0375 GREEK LOWER NUMERAL SIGN (Sk) stay unmapped—Greek
+                // mixed-script HTML can sit them between Latin tokens without ASCII space. Greek Extended
+                // (Unicode block U+1F00–U+1FFF): fifteen spacing polytonic `Sk` scalars—U+1FBD KORONIS,
+                // U+1FBF PSILI, U+1FC0 PERISPOMENI, U+1FC1 DIALYTIKA AND PERISPOMENI, U+1FCD–U+1FCF (psili
+                // with varia/oxia/perispomeni), U+1FDD–U+1FDF (dasia with varia/oxia/perispomeni),
+                // U+1FED–U+1FEF (dialytika with varia/oxia, VARIA), U+1FFD OXIA, U+1FFE DASIA—are not Rust
+                // whitespace; polytonic Greek or Unicode-sample HTML can sit them between Latin tokens without
+                // ASCII space (extends FEAT-D235). Precomposed Greek letters with diacritics (`Ll`/`Lu`/`Lt`),
+                // U+1FBE PROSGEGRAMMENI (`Ll`), and other block scalars stay unmapped—word-internal risk.
+                // U+0374 GREEK NUMERAL SIGN (Lm) and U+0375 GREEK LOWER NUMERAL SIGN (Sk) stay unmapped—Greek
                 // thousands / numeral notation, word-internal risk. Greek pi symbol (U+03D6, Sm) and
                 // reversed lunate epsilon symbol (U+03F6, Sm) are not Rust whitespace; MathML or Greek
                 // math typography can sit them between Latin tokens without ASCII space (outside the
@@ -504,8 +522,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // not Rust whitespace. Lu/Ll/Lo mathematical letters (e.g. U+2102, U+210E–U+2113,
                 // U+2115, U+2119–U+2124, U+2126, U+212A–U+212D, U+212F–U+2134, U+2135–U+2138,
                 // U+2139, U+213C–U+213E, U+2145–U+2149, U+214E) stay unmapped—word-internal risk.
-                // U+213F DOUBLE-STRUCK N-ARY SUMMATION (`Sm`) maps—not Rust whitespace; sits between
-                // turned sans-serif So U+213A–U+213B and double-struck Pi / empty-set So U+2140–U+2144.
+                // DOUBLE-STRUCK N-ARY SUMMATION (U+2140, `Sm`) maps—not Rust whitespace; extends turned
+                // sans-serif So U+213A–U+213B into double-struck Pi / empty-set So U+2140–U+2144. U+213F
+                // DOUBLE-STRUCK CAPITAL PI is `Lu` in UnicodeData—stays unmapped (FEAT-D246; historical FEAT-D231
+                // assumed n-ary summation at U+213F).
                 // U+20D0–U+20FF combining marks for symbols stay unmapped—combining / enclosing risk.
                 // Number Forms U+2150–U+2182 and U+2185–U+218B (vulgar fractions, Roman
                 // numerals, turned digit two/three; all No / Nl / So) are not Rust whitespace;
@@ -688,7 +708,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // Symbols for Legacy Computing: assigned So U+1FB00–U+1FB92 and U+1FB94–U+1FBEF (PETSCII / block graphics,
                 // box-drawing diagonals, stick figures, etc.); not Rust whitespace. U+1FB93 unassigned—excluded. U+1FBF0–U+1FBF9
                 // SEGMENTED DIGIT ZERO–NINE (Nd)—excluded (numeric / word-internal risk). U+1FBFA–U+1FBFF unassigned—excluded.
-                // BMP Greek Extended U+1FB0–U+1FBF (Ll/Lu/Lt/Sk) is unrelated to supplementary-plane U+1FB00+ and stays unmapped.
+                // BMP Greek Extended spacing polytonic `Sk` U+1FBD, U+1FBF, U+1FC0–U+1FC1, U+1FCD–U+1FCF,
+                // U+1FDD–U+1FDF, U+1FED–U+1FEF, U+1FFD–U+1FFE map on the dedicated arm (FEAT-D244)—not Rust
+                // whitespace; unrelated to supplementary-plane Symbols for Legacy Computing U+1FB00+ (Nd/So).
                 // Symbols for Legacy Computing Supplement: assigned So U+1CC00–U+1CCFC, U+1CD00–U+1CEB3, U+1CEBA–U+1CEBF (Unicode 17
                 // block; game sprites, schematics, octants, outlined Latin/digits as So, etc.); not Rust whitespace. Sundanese
                 // Supplement U+1CC0–U+1CC7 (Po) stays on its own arm—distinct from supplementary-plane U+1CC00+. Gaps U+1CCFD–U+1CCFF
@@ -867,6 +889,8 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{00AD}'
                 | '\u{0001}'..='\u{0008}'
                 | '\u{000E}'..='\u{001F}'
+                | '\u{005E}'
+                | '\u{0060}'
                 | '\u{007F}'
                 | '\u{0080}'..='\u{009F}'
                 | '\u{00A0}'
@@ -983,6 +1007,9 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{00A1}'
                 | '\u{00A2}'..='\u{00A5}'
                 | '\u{00A6}'
+                | '\u{00AF}'
+                | '\u{00B4}'
+                | '\u{00B8}'
                 | '\u{00A9}'
                 | '\u{00AE}'
                 | '\u{00B0}'
@@ -995,6 +1022,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{02E5}'..='\u{02EB}'
                 | '\u{02ED}'
                 | '\u{02EF}'..='\u{02FF}'
+                | '\u{A700}'..='\u{A716}'
                 | '\u{A720}'
                 | '\u{A721}'
                 | '\u{A789}'
@@ -1002,6 +1030,13 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{AB5B}'
                 | '\u{AB6A}'
                 | '\u{AB6B}'
+                | '\u{1FBD}'
+                | '\u{1FBF}'
+                | '\u{1FC0}'..='\u{1FC1}'
+                | '\u{1FCD}'..='\u{1FCF}'
+                | '\u{1FDD}'..='\u{1FDF}'
+                | '\u{1FED}'..='\u{1FEF}'
+                | '\u{1FFD}'..='\u{1FFE}'
                 | '\u{00D7}'
                 | '\u{00F7}'
                 | '\u{00BC}'
@@ -1022,7 +1057,6 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2127}'
                 | '\u{2129}'
                 | '\u{212E}'
-                | '\u{213F}'
                 | '\u{213A}'..='\u{213B}'
                 | '\u{2140}'..='\u{2144}'
                 | '\u{214A}'..='\u{214D}'
@@ -2035,6 +2069,41 @@ mod tests {
     }
 
     #[test]
+    fn modifier_tone_letters_sk_u_a700_through_u_a716_separate_words() {
+        // Modifier Tone Letters: contiguous `Sk` U+A700–U+A716 (Chinese tone marks through extra-low left-stem tone bar);
+        // not Rust whitespace (FEAT-D243).
+        for sep in '\u{A700}'..='\u{A716}' {
+            let s = format!("foo{sep}bar");
+            let t = collapse_whitespace(&s);
+            let w: Vec<&str> = t.split_whitespace().collect();
+            assert_eq!(
+                w,
+                vec!["foo", "bar"],
+                "U+{:04X} Sk should separate words, got {:?}",
+                sep as u32,
+                w
+            );
+        }
+    }
+
+    #[test]
+    fn modifier_tone_letters_lm_u_a717_through_u_a71f_stay_unmapped() {
+        // U+A717–U+A71F are `Lm` (dot vertical bar through low inverted exclamation)—spot-check ends and middle.
+        for sep in ['\u{A717}', '\u{A71A}', '\u{A71F}'] {
+            let s = format!("foo{sep}bar");
+            let t = collapse_whitespace(&s);
+            let w: Vec<&str> = t.split_whitespace().collect();
+            assert_eq!(
+                w,
+                vec![s.as_str()],
+                "U+{:04X} Lm should not split tokens, got {:?}",
+                sep as u32,
+                w
+            );
+        }
+    }
+
+    #[test]
     fn latin_extended_d_modifier_letters_sk_a720_a721_a789_a78a_separate_words() {
         // Latin Extended-D: sole `Sk` scalars U+A720/U+A721 (stress / high-low tone) and U+A789/U+A78A (colon / short equals);
         // not Rust whitespace (FEAT-D241).
@@ -2102,6 +2171,47 @@ mod tests {
                 w
             );
         }
+    }
+
+    #[test]
+    fn greek_extended_spacing_sk_polytonic_separate_words() {
+        // Greek Extended: fifteen assigned spacing `Sk` polytonic marks; not Rust whitespace (FEAT-D244; extends FEAT-D235).
+        let seps: Vec<char> = std::iter::once('\u{1FBD}')
+            .chain(std::iter::once('\u{1FBF}'))
+            .chain('\u{1FC0}'..='\u{1FC1}')
+            .chain('\u{1FCD}'..='\u{1FCF}')
+            .chain('\u{1FDD}'..='\u{1FDF}')
+            .chain('\u{1FED}'..='\u{1FEF}')
+            .chain('\u{1FFD}'..='\u{1FFE}')
+            .collect();
+        assert_eq!(seps.len(), 15);
+        for sep in seps {
+            let s = format!("foo{sep}bar");
+            let t = collapse_whitespace(&s);
+            let w: Vec<&str> = t.split_whitespace().collect();
+            assert_eq!(
+                w,
+                vec!["foo", "bar"],
+                "U+{:04X} Sk should separate words, got {:?}",
+                sep as u32,
+                w
+            );
+        }
+    }
+
+    #[test]
+    fn greek_extended_letter_alpha_with_perispomeni_ll_u1fb6_stays_unmapped() {
+        // U+1FB6 GREEK SMALL LETTER ALPHA WITH PERISPOMENI (`Ll`)—precomposed syllable, not a spacing `Sk` separator.
+        let sep = '\u{1FB6}';
+        let s = format!("foo{sep}bar");
+        let t = collapse_whitespace(&s);
+        let w: Vec<&str> = t.split_whitespace().collect();
+        assert_eq!(
+            w,
+            vec![s.as_str()],
+            "U+1FB6 Ll should not split tokens, got {:?}",
+            w
+        );
     }
 
     #[test]
@@ -2190,7 +2300,7 @@ mod tests {
 
     #[test]
     fn latin1_broken_bar_sm_u00a6_separate_words() {
-        // U+00A6 BROKEN BAR (Sm); not Rust whitespace—legacy HTML can glue Latin tokens without ASCII space
+        // U+00A6 BROKEN BAR (So in UnicodeData; legacy docs call it a bar / pipe substitute); not Rust whitespace—legacy HTML
         // (FEAT-D226; ISO 8859-1 pipe substitute, distinct from ASCII U+007C).
         let sep = '\u{00A6}';
         let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -2217,6 +2327,61 @@ mod tests {
         assert!(
             !cleaned.contains("hello world"),
             "U+00A8 must stay unmapped, got {:?}",
+            cleaned
+        );
+        assert!(cleaned.contains(sep), "expected {:?} in {:?}", sep, cleaned);
+    }
+
+    #[test]
+    fn latin1_macron_acute_and_cedilla_sk_u00af_u00b4_u00b8_separate_words() {
+        // U+00AF MACRON, U+00B4 ACUTE ACCENT, U+00B8 CEDILLA (Sk); not Rust whitespace—legacy Latin-1 or
+        // dictionary typography can glue Latin tokens without ASCII space (FEAT-D245). U+00A8 DIAERESIS (`Sk`)
+        // stays unmapped—`latin1_diaeresis_sk_u00a8_stays_unmapped`.
+        for sep in ['\u{00AF}', '\u{00B4}', '\u{00B8}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn basic_latin_spacing_circumflex_and_grave_sk_u005e_u0060_separate_words() {
+        // U+005E CIRCUMFLEX ACCENT and U+0060 GRAVE ACCENT (both Sk); not Rust whitespace—ASCII or transliterated HTML can
+        // glue Latin tokens without ASCII space (FEAT-D247).
+        for sep in ['\u{005E}', '\u{0060}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected {sep:?} normalized before collapse, got {:?}",
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains {:?}",
+                sep
+            );
+        }
+    }
+
+    #[test]
+    fn basic_latin_low_line_pc_u005f_stays_unmapped() {
+        // U+005F LOW LINE (`Pc`); underscore semantics—must not split like U+005E / U+0060 (FEAT-D247).
+        let sep = '\u{005F}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+005F must stay unmapped, got {:?}",
             cleaned
         );
         assert!(cleaned.contains(sep), "expected {:?} in {:?}", sep, cleaned);
@@ -2366,7 +2531,7 @@ mod tests {
     #[test]
     fn letterlike_symbol_subranges_separate_words() {
         // Letterlike Symbols: So/Sm only (FEAT-D147; U+2103..=U+2109 includes U+2107 EULER CONSTANT, FEAT-D230;
-        // U+213F n-ary summation `Sm`, FEAT-D231); not Rust whitespace.
+        // U+2140 DOUBLE-STRUCK N-ARY SUMMATION `Sm` through U+2144; U+213F is `Lu` (FEAT-D246). Not Rust whitespace.
         let runs: &[(u32, u32)] = &[
             (0x2100, 0x2101),
             (0x2103, 0x2109),
@@ -2377,7 +2542,6 @@ mod tests {
             (0x2127, 0x2127),
             (0x2129, 0x2129),
             (0x212E, 0x212E),
-            (0x213F, 0x213F),
             (0x213A, 0x213B),
             (0x2140, 0x2144),
             (0x214A, 0x214D),
@@ -2412,8 +2576,9 @@ mod tests {
             0x2115,    // DOUBLE-STRUCK CAPITAL N (Lu)
             0x2126,    // OHM SIGN (Lu)
             0x2135,    // ALEF SYMBOL (Lo)
-            0x213C,    // DOUBLE-STRUCK SMALL GAMMA (Ll)
-            0x213E,    // DOUBLE-STRUCK CAPITAL PI (Lu)
+            0x213C,    // DOUBLE-STRUCK SMALL PI (Ll)
+            0x213E,    // DOUBLE-STRUCK CAPITAL GAMMA (Lu)
+            0x213F,    // DOUBLE-STRUCK CAPITAL PI (Lu)
             0x2146,    // DOUBLE-STRUCK ITALIC SMALL D (Ll)
         ] {
             let sep = char::from_u32(cp).expect("valid scalar");
