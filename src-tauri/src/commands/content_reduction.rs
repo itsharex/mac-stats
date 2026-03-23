@@ -180,7 +180,17 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `cookies exceed` does not match inside `microcookies exceed` / `metacookies exceed`, and
 /// `cookie exceed` does not match inside `subcookie exceed`; `bodies exceed` does not match
 /// inside `microbodies exceed` / `metabodies exceed`, and `body exceed` does not match inside
-/// `subbody exceed`.
+/// `subbody exceed`; `parts exceed` does not match inside `microparts exceed` /
+/// `metaparts exceed`, and `part exceed` does not match inside `subpart exceed`;
+/// `pieces exceed` does not match inside `micropieces exceed` /
+/// `metapieces exceed`, and `piece exceed` does not match inside `subpiece exceed`;
+/// `shards exceed` does not match inside `microshards exceed` /
+/// `metashards exceed`, and `shard exceed` does not match inside `subshard exceed`
+/// (left-boundary rejects `reshard exceed`); `fragments exceed` does not match inside
+/// `microfragments exceed` / `metafragments exceed`, and `fragment exceed` does not match inside
+/// `subfragment exceed` (left-boundary rejects `refragment exceed`); `packets exceed` does not match
+/// inside `micropackets exceed` / `metapackets exceed`, and `packet exceed` does not match inside
+/// `subpacket exceed` (left-boundary rejects `repacket exceed`).
 fn contains_phrase_after_ident_boundary(haystack: &str, phrase: &str) -> bool {
     fn ident_continue(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_'
@@ -1068,6 +1078,86 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "bodies exceed")
             || contains_phrase_after_ident_boundary(&lower, "bodies exceeded")
             || contains_phrase_after_ident_boundary(&lower, "body exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "part(s) exceed(s/ed)" (FEAT-D343). Parallel to `bodies exceed` /
+        // `body exceed`. `part exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `parts exceed` (the `s` after `part`).
+        // Ident-boundary so `microparts exceed` / `metaparts exceed` / `subpart exceed` do not
+        // false-positive.
+        || ((contains_phrase_after_ident_boundary(&lower, "parts exceed")
+            || contains_phrase_after_ident_boundary(&lower, "parts exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "part exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "piece(s) exceed(s/ed)" (FEAT-D344). Parallel to `parts exceed` /
+        // `part exceed`. `piece exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `pieces exceed` (the `s` after `piece`).
+        // Ident-boundary so `micropieces exceed` / `metapieces exceed` / `subpiece exceed` do not
+        // false-positive.
+        || ((contains_phrase_after_ident_boundary(&lower, "pieces exceed")
+            || contains_phrase_after_ident_boundary(&lower, "pieces exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "piece exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "shard(s) exceed(s/ed)" (FEAT-D345). Parallel to `pieces exceed` /
+        // `piece exceed`. `shard exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `shards exceed` (the `s` after `shard`).
+        // Ident-boundary so `microshards exceed` / `metashards exceed` / `subshard exceed` do not
+        // false-positive; `reshard exceed` is rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "shards exceed")
+            || contains_phrase_after_ident_boundary(&lower, "shards exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "shard exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "fragment(s) exceed(s/ed)" (FEAT-D346). Parallel to `shards exceed` /
+        // `shard exceed`. `fragment exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `fragments exceed` (the `s` after `fragment`).
+        // Ident-boundary so `microfragments exceed` / `metafragments exceed` / `subfragment exceed` do not
+        // false-positive; `refragment exceed` is rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "fragments exceed")
+            || contains_phrase_after_ident_boundary(&lower, "fragments exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "fragment exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "packet(s) exceed(s/ed)" (FEAT-D347). Parallel to `fragments exceed` /
+        // `fragment exceed`. `packet exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `packets exceed` (the `s` after `packet`).
+        // Ident-boundary so `micropackets exceed` / `metapackets exceed` / `subpacket exceed` do not
+        // false-positive; `repacket exceed` is rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "packets exceed")
+            || contains_phrase_after_ident_boundary(&lower, "packets exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "packet exceed"))
             && (lower.contains("context window")
                 || lower.contains("context length")
                 || lower.contains("context limit")
@@ -2698,6 +2788,165 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "layout: subbody exceed display cap (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: parts exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: parts exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: part exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: part exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: parts exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: parts exceeded max multipart count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: part exceed max allowed size on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microparts exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaparts exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: subpart exceed display cap (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: pieces exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: pieces exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: piece exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: piece exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: pieces exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: pieces exceeded max puzzle count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: piece exceed max allowed size on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micropieces exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metapieces exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: subpiece exceed display cap (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: shards exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: shards exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: shard exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: shard exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: shards exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: shards exceeded max replica count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: shard exceed max allowed size on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microshards exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metashards exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: subshard exceed display cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: reshard exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: fragments exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: fragments exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: fragment exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: fragment exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: fragments exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: fragments exceeded max packet count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: fragment exceed max allowed size on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microfragments exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metafragments exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: subfragment exceed display cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: refragment exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: packets exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: packets exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: packet exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: packet exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: packets exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: packets exceeded max MTU count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: packet exceed max allowed size on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micropackets exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metapackets exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: subpacket exceed display cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: repacket exceed the model's context window on this request"
         ));
         assert!(!is_context_overflow_error(
             "microcolumns exceed the model's context window on this request"
