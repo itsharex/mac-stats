@@ -407,9 +407,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // U+FFFD REPLACEMENT CHARACTER (So, same block) is not Rust whitespace either;
                 // transcoding or mojibake HTML can insert it between Latin tokens without ASCII space.
                 // CJK Symbols and Punctuation: ditto mark (U+3003, Po), JIS symbol (U+3004, So),
-                // ideographic closing mark (U+3006, Po), CJK brackets and postal/geta marks
-                // (U+3008–U+301B, Ps/Pe/So), wave dash (U+301C, Pd), reversed/double-prime quotes
-                // (U+301D–U+301F), postal mark face (U+3020, So), vertical kana repeat marks
+                // ideographic closing mark (U+3006, Lo in UnicodeData—not `Po`; FEAT-D257 misread the
+                // category), CJK brackets and postal/geta marks
+                // (U+3008–U+301B, Ps/Pe/So), wave dash (U+301C, Pd), reversed/double-prime quotation
+                // marks—REVERSED DOUBLE PRIME (U+301D, Ps), DOUBLE PRIME and LOW DOUBLE PRIME (U+301E–U+301F, Pe;
+                // both `Pe` in UnicodeData, not a Ps/Pe pair by adjacent code points), postal mark face (U+3020, So), vertical kana repeat marks
                 // (U+3031–U+3035, Lm), CIRCLED POSTAL MARK (U+3036, So; same contiguous arm), masu mark
                 // (U+303C, So), ideographic variation indicator /
                 // half fill space (U+303E–U+303F, So) are not Rust whitespace. Omitted on purpose:
@@ -546,8 +548,11 @@ fn collapse_whitespace(text: &str) -> String {
                 // match arms—Letterlike gap between U+2144 and Number Forms U+2150+; not Rust whitespace (FEAT-D262).
                 // U+214E TURNED SMALL F (`Ll`) stays unmapped—letter-like, word-internal risk.
                 // U+20D0–U+20FF combining marks for symbols stay unmapped—combining / enclosing risk.
-                // Number Forms U+2150–U+2182 and U+2185–U+218B (vulgar fractions, Roman
-                // numerals, turned digit two/three; all No / Nl / So) are not Rust whitespace;
+                // Number Forms U+2150–U+2182 and U+2185–U+218B: vulgar fractions, Roman numerals,
+                // late Roman numerals, vulgar fraction zero thirds (U+2189, `No`), turned digits
+                // U+218A–U+218B (TURNED DIGIT TWO/THREE; both `So` in UnicodeData—symbol digits, not `Nl`;
+                // FEAT-D265 corrects FEAT-D263’s misread). Every other mapped scalar in these arms is `No` or `Nl`.
+                // Not Rust whitespace;
                 // typography or Unicode-sample HTML can place ⅓, Ⅷ, vulgar fraction zero thirds
                 // (U+2189), turned digits, etc. between Latin tokens
                 // without ASCII space. U+2183 ROMAN NUMERAL REVERSED ONE HUNDRED (Lu) and U+2184
@@ -555,8 +560,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // U+218C–U+218F are unassigned and stay unmapped.
                 // Arrows U+2190–U+21FF (mostly Sm) are not Rust whitespace; MathML, diagram, or
                 // Unicode-sample HTML can place arrows between Latin tokens without ASCII space.
-                // Number Forms fractions / Roman numerals (U+2150–U+2182, U+2185–U+218B; includes U+2189) sit
-                // after Currency Symbols and before Arrows; U+2183/U+2184 letter-like scalars stay unmapped.
+                // Number Forms fractions / Roman numerals (U+2150–U+2182, U+2185–U+218B; includes U+2189 (`No`)
+                // and U+218A–U+218B (`So`); remaining mapped scalars `No`/`Nl`) sit after Currency Symbols and before Arrows;
+                // U+2183/U+2184 letter-like scalars stay unmapped.
                 // Mathematical Operators U+2200–U+22FF, Miscellaneous Technical U+2300–U+23FF, and Control Pictures U+2400–U+243F
                 // are mapped in the following contiguous range arms.
                 // Unicode dash punctuation (U+2010–U+2015, Pd)—hyphen, non-breaking hyphen, figure
@@ -1964,7 +1970,8 @@ mod tests {
     }
 
     #[test]
-    fn spacing_modifier_arrowheads_sk_u02c2_through_u02c5_and_tacks_u02d2_through_u02d5_separate_words() {
+    fn spacing_modifier_arrowheads_sk_u02c2_through_u02c5_and_tacks_u02d2_through_u02d5_separate_words(
+    ) {
         // U+02C2–U+02C5: modifier-letter arrowheads (`Sk`); U+02D2–U+02D5: centred half-rings and tacks (`Sk`); not Rust
         // whitespace—IPA or Unicode-sample HTML can glue Latin tokens without ASCII space (FEAT-D239 arm narrowed in FEAT-D240:
         // U+02C6/U+02C7 are `Lm`, not `Sk`).
@@ -2588,7 +2595,9 @@ mod tests {
     #[test]
     fn number_forms_fractions_romans_and_turned_digits_separate_words() {
         // U+2150–U+2182, U+2185–U+218B: vulgar fractions, Roman numerals, late forms, vulgar fraction
-        // zero thirds (U+2189), turned digits (No / Nl / So); not Rust whitespace. U+2183 (Lu) / U+2184 (Ll) omitted in implementation.
+        // zero thirds (U+2189, `No`), turned digits U+218A–U+218B (`So` in UnicodeData; FEAT-D265—FEAT-D263
+        // mis-stated them as `No`/`Nl`). Other mapped scalars here are `No`/`Nl`. Not Rust whitespace.
+        // U+2183 (Lu) / U+2184 (Ll) omitted in implementation.
         let cps = (0x2150u32..=0x2182).chain(0x2185..=0x218B);
         for cp in cps {
             let sep = char::from_u32(cp).expect("valid scalar");
@@ -3695,8 +3704,9 @@ mod tests {
 
     #[test]
     fn cjk_symbols_brackets_ditto_wave_vertical_repeat_masu_half_fill_separate_words() {
-        // U+3003 / U+3004 / U+3006 (3006 is `Po` in UnicodeData, not a letter); U+3008–U+301B;
-        // U+301C; U+301D–U+301F; U+3020; U+3031–U+3035 (`Lm`); U+3036 CIRCLED POSTAL MARK (`So`); U+303C MASU MARK (`So`); U+303E–U+303F: not Rust whitespace
+        // U+3003 / U+3004 / U+3006 (3006 is `Lo` in UnicodeData; FEAT-D257 wrongly said `Po`—still mapped
+        // as a non–Rust-whitespace separator); U+3008–U+301B;
+        // U+301C; U+301D (`Ps`) and U+301E–U+301F (both `Pe` in UnicodeData); U+3020; U+3031–U+3035 (`Lm`); U+3036 CIRCLED POSTAL MARK (`So`); U+303C MASU MARK (`So`); U+303E–U+303F: not Rust whitespace
         // (see `collapse_whitespace` comment). Mixed
         // CJK-layout or romanized HTML can otherwise glue Latin tokens for `split_whitespace()`.
         for sep in (0x3003u32..=0x301B)
@@ -3798,9 +3808,8 @@ mod tests {
         // U+FF40 grave intentionally omitted (see `collapse_whitespace` comment).
         for sep in [
             '\u{FF02}', '\u{FF03}', '\u{FF04}', '\u{FF05}', '\u{FF06}', '\u{FF08}', '\u{FF09}',
-            '\u{FF0A}',
-            '\u{FF0B}', '\u{FF0D}', '\u{FF0E}', '\u{FF1C}', '\u{FF1D}', '\u{FF1E}', '\u{FF20}',
-            '\u{FF3B}', '\u{FF3C}', '\u{FF3D}', '\u{FF5B}', '\u{FF5C}', '\u{FF5D}',
+            '\u{FF0A}', '\u{FF0B}', '\u{FF0D}', '\u{FF0E}', '\u{FF1C}', '\u{FF1D}', '\u{FF1E}',
+            '\u{FF20}', '\u{FF3B}', '\u{FF3C}', '\u{FF3D}', '\u{FF5B}', '\u{FF5C}', '\u{FF5D}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
