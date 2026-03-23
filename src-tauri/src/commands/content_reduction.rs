@@ -127,6 +127,14 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || lower.contains("context length exceeded")
         || lower.contains("maximum context length")
         || lower.contains("exceeds the model's context window")
+        || lower.contains("exceeds the model context")
+        || lower.contains("exceeded the model context")
+        || lower.contains("exceed the model context")
+        || lower.contains("model context exceeded")
+        || lower.contains("model context limit exceeded")
+        || lower.contains("exceeds the model's maximum context")
+        || lower.contains("exceeded the model's maximum context")
+        || lower.contains("exceed the model's maximum context")
         || lower.contains("exceeds the context window")
         || lower.contains("context window exceeded")
         || lower.contains("exceeded the context limit")
@@ -137,6 +145,9 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || lower.contains("fit in the context")
         || lower.contains("larger than the context")
         || lower.contains("outside the context window")
+        || lower.contains("outside of the context window")
+        || lower.contains("beyond the context window")
+        || lower.contains("over the context window")
         || lower.contains("ran out of context")
         || lower.contains("context size exceeded")
         || lower.contains("exceeded context size")
@@ -245,6 +256,67 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || lower.contains("overflow")
                 || lower.contains("too long")
                 || lower.contains("too large")))
+        // camelCase JSON / gateway errors (to_lowercase → "maxcontext" / "contextlength")
+        || (lower.contains("maxcontext")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")
+                || lower.contains("larger")
+                || lower.contains("greater")))
+        || (lower.contains("contextlength")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")))
+        || (lower.contains("n_ctx_per_seq")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")
+                || lower.contains("larger")
+                || lower.contains("greater")
+                || lower.contains("too small")))
+        // snake_case JSON / config (distinct from prose "context window")
+        || (lower.contains("context_window")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")
+                || lower.contains("larger")
+                || lower.contains("greater")
+                || lower.contains("too small")))
+        || (lower.contains("context_limit")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")))
+        || (lower.contains("contextlimit")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")))
+        || lower.contains("exceed the maximum context")
+        || lower.contains("exceeded maximum context")
+        || lower.contains("maximum context is exceeded")
+        || lower.contains("context token limit exceeded")
+        || lower.contains("exceeds the context token limit")
+        || lower.contains("exceeded the context token limit")
+        // Word order / filler between "exceed" and "maximum … context" (e.g. "model", "allowed")
+        || (lower.contains("maximum context")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")
+                || lower.contains("larger")
+                || lower.contains("greater")))
+        || (lower.contains("max context")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too long")
+                || lower.contains("too large")
+                || lower.contains("larger")
+                || lower.contains("greater")))
 }
 
 /// Check whether an Ollama error indicates message role/ordering conflict.
@@ -680,6 +752,81 @@ mod tests {
         assert!(is_context_overflow_error(
             "json error: context_length too large for model slot"
         ));
+        assert!(is_context_overflow_error(
+            "API error: maxContext exceeded for this completion request"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: contextLength exceeds server maximum (8192)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama.cpp: n_ctx_per_seq too small for encoded prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "error: exceeds the model context limit (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "API error: exceeded the model context for this request"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: model context exceeded by encoded prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "json: context_window exceeds the configured maximum"
+        ));
+        assert!(is_context_overflow_error(
+            "options: context_window too small for prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: context_limit exceeds the configured maximum"
+        ));
+        assert!(is_context_overflow_error(
+            "json error: contextlimit overflow for this request"
+        ));
+        assert!(is_context_overflow_error(
+            "error: cannot exceed the maximum context for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: exceeded maximum context (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "model error: maximum context is exceeded by encoded prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "API error: context token limit exceeded (8192)"
+        ));
+        assert!(is_context_overflow_error(
+            "error: encoded prompt exceeds the context token limit"
+        ));
+        assert!(is_context_overflow_error(
+            "server: exceeded the context token limit for slot 0"
+        ));
+        assert!(is_context_overflow_error(
+            "error: encoded prompt exceeds the model's maximum context (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: input exceeded the model's maximum context for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: batch would exceed the model's maximum context"
+        ));
+        assert!(is_context_overflow_error(
+            "error: prompt extends beyond the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "llama.cpp: generation ran over the context window boundary"
+        ));
+        assert!(is_context_overflow_error(
+            "error: tokens fall outside of the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "error: input exceeds model maximum context (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: cannot exceed the allowed maximum context for this slot"
+        ));
+        assert!(is_context_overflow_error(
+            "API error: encoded prompt is too large for max context"
+        ));
     }
 
     #[test]
@@ -737,6 +884,42 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "request fields: context_length, temperature, stream"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: maxContext=8192 num_ctx=8192 (startup ok)"
+        ));
+        assert!(!is_context_overflow_error(
+            "docs: contextLength optional in request schema"
+        ));
+        assert!(!is_context_overflow_error(
+            "diagnostic: n_ctx_per_seq=4096 batch ok"
+        ));
+        assert!(!is_context_overflow_error(
+            "defaults: context_window=8192 num_ctx=8192 (ok)"
+        ));
+        assert!(!is_context_overflow_error(
+            "docs: context_window optional in request schema"
+        ));
+        assert!(!is_context_overflow_error(
+            "note: tune model context for your workload (no error)"
+        ));
+        assert!(!is_context_overflow_error(
+            "options: context_limit=8192 num_ctx=8192 (ok)"
+        ));
+        assert!(!is_context_overflow_error(
+            "request fields: context_limit, temperature, stream"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: contextLimit=8192 (startup ok)"
+        ));
+        assert!(!is_context_overflow_error(
+            "API token limit exceeded: upgrade your plan"
+        ));
+        assert!(!is_context_overflow_error(
+            "docs: default maximum context is 8192 tokens (informational)"
+        ));
+        assert!(!is_context_overflow_error(
+            "hint: tune max context in Modelfile for longer threads (no error)"
         ));
     }
 
