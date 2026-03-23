@@ -279,8 +279,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // not Rust whitespace; Medefaidrin–Latin or Unicode-sample HTML can glue Latin tokens
                 // without ASCII space. Medefaidrin letters (Ll/Lu) stay unmapped—word-internal risk. Mongolian
                 // U+1800–U+180E (BIRGA through vowel separator) are Po/Pd/Mn/Cf and not Rust
-                // whitespace—sentence punctuation (U+1800–U+1805, U+1807–U+180A), TODO soft hyphen
-                // (U+1806, Pd), free variation selectors (U+180B–U+180D, Mn), vowel separator
+                // whitespace—sentence punctuation (U+1800–U+1805, U+1807–U+180A), MONGOLIAN TODO SOFT HYPHEN
+                // (U+1806, Pd; Unicode name contains the substring "TODO", not a source-code TODO), free variation
+                // selectors (U+180B–U+180D, Mn), vowel separator
                 // (U+180E, Cf)—so mixed or pasted Mongolian/Manchu HTML can glue Latin tokens.
                 // Middle dot (U+00B7, Po), Greek ano teleia (U+0387, Po), Katakana middle dot
                 // (U+30FB, Po), and halfwidth Katakana middle dot (U+FF65, Po) are not Rust
@@ -371,8 +372,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // Po), and astrological / editorial marks (U+0FD0–U+0FD4, U+0FD9–U+0FDA, Po) are not Rust whitespace—only intersyllabic
                 // tsheg (U+0F0B) was covered before; mixed Tibetan–Latin or Unicode-sample HTML can otherwise glue Latin tokens. U+0F13
                 // (caret So) stays unmapped. Sinhala kunddaliya (U+0DF4, Po), Limbu tokma / exclamation / question (U+1940, U+1944,
-                // U+1945, Po), Meetei Mayek cheikhei / ahang khuda (U+AAF0, U+AAF1, Po), and Meetei Mayek cheikhei (U+ABEB, Po) are not
-                // Rust whitespace; mixed-script or Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic section
+                // U+1945, Po), Meetei Mayek Extensions cheikhan / ahang khuda (U+AAF0–U+AAF1, Po), and Meetei Mayek cheikhei (U+ABEB, Po) are not
+                // Rust whitespace; U+AAF3–U+AAF4 (Meetei Mayek syllable heavy / half tone, Lm) and U+AAF5–U+AAF6 (Mc/Mn) stay
+                // unmapped—modifier-like, word-internal risk. U+AAF2 MEETEI MAYEK ANJI (`Lo`) stays unmapped—letter-like; historical FEAT-D218 treated it as `Po`
+                // (FEAT-D221). Mixed-script or Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic section
                 // mark, wordspace, full stop, comma, semicolon, colon, preface colon, question mark, and paragraph separator
                 // (U+1360–U+1368, Po) are not Rust whitespace; mixed Ethiopic–Latin or Unicode-sample HTML can glue Latin tokens.
                 // Ethiopic digit numerics U+1369+ (`No`) stay unmapped—numeric / word-internal risk. Khmer signs khan through koomuut
@@ -468,6 +471,12 @@ fn collapse_whitespace(text: &str) -> String {
                 // slash U+2044, undertie, Tironian et, reversed pilcrow, four-dot punctuation, etc.;
                 // Po/Pc/Ps/Pe/Sm) are not Rust whitespace—U+205F (medium mathematical space) is, so it
                 // stops before U+2061. Pasted UI copy or scholarly HTML can glue Latin tokens here.
+                // Superscripts and Subscripts: super/subscript plus / minus / equals (U+207A–U+207C,
+                // U+208A–U+208C, Sm) and super/subscript parentheses (U+207D–U+207E, U+208D–U+208E,
+                // Ps/Pe) are not Rust whitespace; math or Unicode-sample HTML can place them between
+                // Latin tokens without ASCII space. Superscript / subscript digit numerics (U+2070–U+2079,
+                // U+2080–U+2089, No), superscript letters U+2071 / U+207F (Lm), and unassigned U+208F (Cn)
+                // stay unmapped—numeric / word-internal risk.
                 // One dot leader / two dot leader / horizontal
                 // ellipsis / hyphenation point (U+2024–U+2027, Po) are not Rust whitespace either;
                 // TOC-style leaders or UI copy like "more…" can glue Latin tokens without ASCII space.
@@ -536,9 +545,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // Arabic Mathematical Alphabetic Symbols: operator MEEM WITH HAH WITH TATWEEL (U+1EEF0, Sm) and
                 // HAH WITH DAL (U+1EEF1, Sm) are not Rust whitespace; MathML- or Unicode-sample HTML can place them
                 // between Latin tokens without ASCII space. The rest of U+1EE00–U+1EEFF is Lo or unassigned (Cn)—excluded.
-                // Vithkuqi comma through question mark (U+1057B–U+1057F, Po) are not Rust whitespace; Albanian Vithkuqi
-                // or Unicode-sample HTML can place them between Latin tokens without ASCII space. U+10570–U+1057A (Lo)
-                // stay unmapped—letters, word-internal risk.
+                // Vithkuqi: historical FEAT-D117 mapped U+1057B–U+1057F as sentence `Po`; current UnicodeData has an
+                // unassigned gap at U+1057B (`Cn`) and U+1057C–U+1057F as capital letters (`Lu`)—same spirit as
+                // FEAT-D212 / FEAT-D213; they stay unmapped. Caucasian Albanian citation mark U+1056F (`Po`) remains mapped.
                 // Warang Citi U+118C8–U+118CF are SMALL LETTER E through SMALL LETTER UC (Ll) in Unicode 14+—not
                 // punctuation; they stay unmapped so Warang Citi syllables are not torn apart (historical FEAT-D111 arm removed, FEAT-D212).
                 // Devanagari Extended-A head marks and bhale signs (U+11B00–U+11B09, Po) are not Rust whitespace;
@@ -1028,6 +1037,8 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2024}'..='\u{2027}'
                 | '\u{2030}'..='\u{203B}'
                 | '\u{203C}'..='\u{205E}'
+                | '\u{207A}'..='\u{207E}'
+                | '\u{208A}'..='\u{208E}'
                 | '\u{2E00}'..='\u{2E5D}'
                 | '\u{169B}'
                 | '\u{169C}'
@@ -1043,7 +1054,6 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1039F}'
                 | '\u{103D0}'
                 | '\u{1056F}'
-                | '\u{1057B}'..='\u{1057F}'
                 | '\u{10857}'
                 | '\u{10877}'
                 | '\u{10878}'
@@ -2143,8 +2153,9 @@ mod tests {
 
     #[test]
     fn mongolian_punctuation_separates_words() {
-        // U+1800–U+1805 (Mongolian/Manchu sentence punctuation, Po), U+1806 (TODO soft hyphen, Pd),
-        // U+1807–U+180A (Sibe boundary / Manchu stops / NIRUGU, Po): not Rust whitespace, so
+        // U+1800–U+1805 (Mongolian/Manchu sentence punctuation, Po), U+1806 MONGOLIAN TODO SOFT HYPHEN (Pd;
+        // Unicode name contains "TODO"), U+1807–U+180A (Sibe boundary / Manchu stops / NIRUGU, Po): not Rust
+        // whitespace, so
         // `hello᠁world`-style text stays one token without normalization.
         for sep in [
             '\u{1800}', '\u{1801}', '\u{1802}', '\u{1803}', '\u{1804}', '\u{1805}', '\u{1806}',
@@ -2354,22 +2365,19 @@ mod tests {
     }
 
     #[test]
-    fn vithkuqi_sentence_punctuation_separate_words() {
-        // Vithkuqi U+1057B COMMA through U+1057F QUESTION MARK (all Po).
-        for sep in '\u{1057B}'..='\u{1057F}' {
+    fn vithkuqi_capital_letters_and_gap_u1057b_stay_unmapped() {
+        // UnicodeData: U+10570–U+1057A and U+1057C–U+1057F are Vithkuqi capital letters (`Lu`); U+1057B is unassigned (`Cn`).
+        // Mapping them to ASCII space splits script text (historical FEAT-D117 mismatch, FEAT-D220).
+        for sep in ['\u{10570}', '\u{1057B}', '\u{1057C}', '\u{1057F}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
-                cleaned.contains("hello world"),
-                "expected {:?} normalized before collapse, got {:?}",
-                sep,
+                !cleaned.contains("hello world"),
+                "U+{:04X} must stay unmapped, got {:?}",
+                sep as u32,
                 cleaned
             );
-            assert!(
-                !cleaned.contains(sep),
-                "cleaned output still contains {:?}",
-                sep
-            );
+            assert!(cleaned.contains(sep), "expected {:?} in {:?}", sep, cleaned);
         }
     }
 
@@ -2704,6 +2712,50 @@ mod tests {
                 "U+{:04X} should separate words, got {:?}",
                 cp,
                 cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn superscripts_and_subscripts_math_delimiters_separate_words() {
+        // U+207A–U+207C super plus/minus/equals (Sm), U+207D/U+207E super parens (Ps/Pe); U+208A–
+        // U+208C sub plus/minus/equals (Sm), U+208D/U+208E sub parens (Ps/Pe)—not Rust whitespace.
+        for cp in (0x207Au32..=0x207E).chain(0x208A..=0x208E) {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "U+{:04X} should separate words, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn superscripts_subscripts_digit_numerics_and_letter_marks_stay_unmapped() {
+        // U+2070 / U+2079 (No), U+2071 / U+207F (Lm), U+2080 / U+2089 (No), U+208F (Cn) must not widen the math-delimiter arms.
+        for cp in [0x2070u32, 0x2071, 0x2079, 0x207F, 0x2080, 0x2089, 0x208F] {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
             );
         }
     }
@@ -4156,9 +4208,15 @@ mod tests {
     #[test]
     fn sinhala_limbu_meetei_sentence_punctuation_separate_words() {
         // U+0DF4 SINHALA PUNCTUATION KUNDDALIYA (Po). Limbu U+1940 SIGN TOKMA, U+1944 EXCLAMATION MARK, U+1945 QUESTION MARK (Po).
-        // Meetei Mayek U+AAF0 CHEIKHEI, U+AAF1 AHANG KHUDA (Po). None are Rust whitespace.
+        // Meetei Mayek Extensions U+AAF0 CHEIKHAN, U+AAF1 AHANG KHUDAM (Po). None are Rust whitespace.
+        // U+AAF2 MEETEI MAYEK ANJI is `Lo`—see `meetei_mayek_anji_lo_u_aaf2_stays_unmapped`.
         for sep in [
-            '\u{0DF4}', '\u{1940}', '\u{1944}', '\u{1945}', '\u{AAF0}', '\u{AAF1}',
+            '\u{0DF4}',
+            '\u{1940}',
+            '\u{1944}',
+            '\u{1945}',
+            '\u{AAF0}',
+            '\u{AAF1}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -4174,6 +4232,57 @@ mod tests {
                 sep as u32
             );
         }
+    }
+
+    #[test]
+    fn meetei_mayek_heavy_half_tone_lm_aaf3_aaf4_stay_unmapped() {
+        // U+AAF3 SYLLABLE HEAVY TONE and U+AAF4 SYLLABLE HALF TONE (`Lm`) must not split tokens like U+AAF0–U+AAF1 `Po`.
+        for cp in [0xAAF3u32, 0xAAF4] {
+            let sep = char::from_u32(cp).unwrap();
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} must stay unmapped, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                cleaned.contains(sep),
+                "U+{:04X} should pass through, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn meetei_mayek_anji_lo_u_aaf2_stays_unmapped() {
+        // UnicodeData: U+AAF2 MEETEI MAYEK ANJI (`Lo`), not `Po`; mapping it split script text (historical FEAT-D218 mismatch, FEAT-D221).
+        let sep = '\u{AAF2}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+AAF2 must stay unmapped, got {:?}",
+            cleaned
+        );
+        assert!(
+            cleaned.contains(sep),
+            "U+AAF2 should pass through, got {:?}",
+            cleaned
+        );
+        assert_eq!(
+            cleaned.split_whitespace().count(),
+            1,
+            "U+AAF2 must not become a word break"
+        );
     }
 
     #[test]
