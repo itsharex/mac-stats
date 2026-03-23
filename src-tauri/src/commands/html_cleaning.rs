@@ -200,18 +200,21 @@ fn collapse_whitespace(text: &str) -> String {
                 // symbol (U+03F6, Sm) is not Rust whitespace; MathML or Greek math typography can sit
                 // between Latin tokens without ASCII space (outside the U+2200–U+22FF Mathematical
                 // Operators arm). U+03F5 GREEK LUNATE EPSILON SYMBOL (Ll) stays unmapped—letter-like,
-                // word-internal risk. Arabic comma / semicolon /
+                // word-internal risk. Arabic comma / semicolon / end of text mark (U+061D, Po) /
                 // question / full stop (U+060C, U+061B, U+061F, U+06D4, Po) and Arabic percent /
                 // decimal / thousands / five-pointed-star (U+066A–U+066D, Po) are not Rust whitespace; RTL or
                 // bilingual numeric HTML can glue Latin tokens for `split_whitespace()`. Arabic-indic per mille /
                 // per ten thousand (U+0609, U+060A, Po), Afghani sign (U+060B, Sc), date separator (U+060D, Po),
-                // and triple-dot punctuation (U+061E, Po) are not Rust whitespace either; RTL financial or
-                // editorial HTML can glue Latin tokens without ASCII space.
+                // poetic verse sign / misra (U+060E, U+060F, So), and triple-dot punctuation (U+061E, Po) are not Rust
+                // whitespace either; RTL financial, Quranic-notation, or editorial HTML can glue Latin tokens without ASCII
+                // space. Arabic-indic cube / fourth root and ray (U+0606–U+0608, Sm) stay unmapped (math-internal risk);
+                // honorific and combining marks U+0610+ (Mn) stay unmapped.
                 // Arabic Presentation Forms-A: ornate left / right parentheses (U+FD3E, U+FD3F, Pe/Ps), RIAL
-                // SIGN (U+FDFC, Sc), and ARABIC LIGATURE BISMILLAH AR-RAHMAN AR-RAHEEM (U+FDFD, So) are not Rust
-                // whitespace; Persian / Arabic typography or Unicode-sample HTML can place them between Latin tokens
-                // without ASCII space. Quranic annotation dot symbols U+FBB2–U+FBC1 (Sk) stay unmapped—modifier-like,
-                // word-internal risk (same spirit as omitting many combining marks).
+                // SIGN (U+FDFC, Sc), BISMILLAH ligature (U+FDFD, So), honorific / salutation ligatures (U+FD40–U+FD4F,
+                // U+FDCF, U+FDFE, U+FDFF, So) are not Rust whitespace; Persian / Arabic typography or Unicode-sample HTML
+                // can place them between Latin tokens without ASCII space. Letter ligatures U+FD50+ (Lo), Koranic stop
+                // signs U+FDF0–U+FDFB (Lo), and Quranic annotation dot symbols U+FBB2–U+FBC1 (Sk) stay unmapped—word-internal
+                // or modifier-like risk (same spirit as omitting many combining marks).
                 // Armenian exclamation / comma / question / abbreviation mark (U+055C–U+055F, Po) and
                 // full stop / hyphen (U+0589–U+058A, Po/Pd) are not Rust whitespace; bilingual or
                 // Unicode-sample HTML can glue Latin tokens. U+055A (ARMENIAN APOSTROPHE) and U+055B
@@ -412,8 +415,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // Lisu punctuation comma / full stop (U+A4FE, U+A4FF, Po) and Vai comma / full stop / question / exclamation
                 // (U+A60C–U+A60F, Po) are not Rust whitespace; Fraser- or Vai–Latin bilingual or Unicode-sample HTML can glue
                 // Latin tokens without ASCII space.
-                // Canadian Syllabics full stop (U+166E, Po) is not Rust whitespace; U+166D CHI SIGN (So) stays unmapped—
-                // syllabics-internal risk. Bamum sentence punctuation (U+A6F2–U+A6F7, Po), Mro danda / double danda
+                // Canadian Syllabics hyphen (U+1400, Pd) is not Rust whitespace; Aboriginal–Latin or Unicode-sample HTML
+                // can glue Latin tokens without ASCII space (same spirit as Unicode dash punctuation U+2010–U+2015). Full stop
+                // (U+166E, Po) is not Rust whitespace; U+166D CHI SIGN (So) stays unmapped—syllabics-internal risk. Bamum
+                // sentence punctuation (U+A6F2–U+A6F7, Po), Mro danda / double danda
                 // (U+16A6E–U+16A6F, Po), and New Tai Lue signs lae / laev (U+19DE–U+19DF, So) are not Rust whitespace;
                 // Aboriginal / Bamum / Mro / New Tai Lue–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
                 // Buginese pallawa and end-of-section (U+1A1E, U+1A1F, Po) are not Rust whitespace; Buginese–Latin or
@@ -710,8 +715,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // whitespace; U+114C7 OM (Lo) stays unmapped. Modi danda / double danda /
                 // abbreviation (U+11641–U+11643, Po) are not Rust whitespace. Khudawadi has no Po
                 // sentence punctuation in the chart (virama / nukta are Mn); omitted like other
-                // virama risks. Ahom small section / section / rulai (U+1173C–U+1173E, Po) are not
-                // Rust whitespace. Dogra abbreviation sign (U+1183B, Po) is not Rust whitespace.
+                // virama risks. Ahom small section / section / rulai (U+1173C–U+1173E, Po) and SYMBOL VI
+                // (U+1173F, So) are not Rust whitespace; extends FEAT-D96 contiguous Po run with the block’s
+                // sole So. Ahom letters (Lo, e.g. U+11700) stay unmapped—word-internal risk. Dogra
+                // abbreviation sign (U+1183B, Po) is not Rust whitespace.
                 // Dives Akuru double danda / gap filler / end of text (U+11944–U+11946, Po) are not
                 // Rust whitespace. Nandinagari sign siddham (U+119E2, Po) is not Rust whitespace.
                 // Bhaiksuki danda / double danda / word separator / gap fillers (U+11C41–U+11C45, Po)
@@ -923,15 +930,22 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{060B}'
                 | '\u{060C}'
                 | '\u{060D}'
+                | '\u{060E}'
+                | '\u{060F}'
                 | '\u{061B}'
+                | '\u{061D}'
                 | '\u{061E}'
                 | '\u{061F}'
                 | '\u{06D4}'
                 | '\u{066A}'..='\u{066D}'
                 | '\u{FD3E}'
                 | '\u{FD3F}'
+                | '\u{FD40}'..='\u{FD4F}'
+                | '\u{FDCF}'
                 | '\u{FDFC}'
                 | '\u{FDFD}'
+                | '\u{FDFE}'
+                | '\u{FDFF}'
                 | '\u{055C}'..='\u{055F}'
                 | '\u{0589}'
                 | '\u{058A}'
@@ -970,6 +984,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{1CC0}'..='\u{1CC7}'
                 | '\u{A4FE}'..='\u{A4FF}'
                 | '\u{A60C}'..='\u{A60F}'
+                | '\u{1400}'
                 | '\u{166E}'
                 | '\u{A6F2}'..='\u{A6F7}'
                 | '\u{16A6E}'..='\u{16A6F}'
@@ -1173,7 +1188,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{11641}'..='\u{11643}'
                 | '\u{11660}'..='\u{1166C}'
                 | '\u{116B9}'..='\u{116BC}'
-                | '\u{1173C}'..='\u{1173E}'
+                | '\u{1173C}'..='\u{1173F}'
                 | '\u{1183B}'
                 | '\u{11944}'..='\u{11946}'
                 | '\u{119E2}'
@@ -1977,8 +1992,8 @@ mod tests {
     #[test]
     fn latin1_greek_and_arabic_script_punctuation_separate_words() {
         // U+00A1 / U+00BF (inverted ! / ?), U+00AB / U+00BB (guillemets), U+037E (Greek question
-        // mark), U+03F6 (Greek reversed lunate epsilon symbol, Sm), U+060C / U+061B / U+061F / U+06D4 (Arabic comma, semicolon, question, full stop),
-        // U+066A–U+066D (Arabic percent, decimal sep, thousands sep, five pointed star): Po / Pi / Pf; not Rust
+        // mark), U+03F6 (Greek reversed lunate epsilon symbol, Sm), U+060C / U+060E / U+060F / U+061B / U+061D / U+061F / U+06D4 (Arabic comma, poetic verse / misra So, semicolon, end of text mark, question, full stop),
+        // U+066A–U+066D (Arabic percent, decimal sep, thousands sep, five pointed star): Po / Pi / Pf / So; not Rust
         // whitespace—mixed European, Greek, or Arabic/Latin HTML can glue tokens without ASCII space.
         for sep in [
             '\u{00A1}',
@@ -1988,7 +2003,10 @@ mod tests {
             '\u{037E}',
             '\u{03F6}',
             '\u{060C}',
+            '\u{060E}',
+            '\u{060F}',
             '\u{061B}',
+            '\u{061D}',
             '\u{061F}',
             '\u{06D4}',
             '\u{066A}',
@@ -2007,6 +2025,22 @@ mod tests {
                 !cleaned.contains(sep),
                 "cleaned output still contains {sep:?}"
             );
+        }
+    }
+
+    #[test]
+    fn arabic_indic_cube_root_sm_u0606_and_sallallahou_mn_u0610_stay_unmapped() {
+        // U+0606–U+0608 (Sm) and U+0610+ (Mn) sit between mapped Arabic supplementary punctuation; must not split like U+060E/U+060F.
+        for sep in ['\u{0606}', '\u{0610}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} must stay unmapped, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(cleaned.contains(sep), "expected {:?} in {:?}", sep, cleaned);
         }
     }
 
@@ -3053,10 +3087,19 @@ mod tests {
     #[test]
     fn tifinagh_separator_and_arabic_supplementary_punctuation_separate_words() {
         // Tifinagh U+2D70 SEPARATOR MARK (Po). Arabic U+0609 / U+060A per mille / per ten thousand (Po),
-        // U+060B AFGHANI SIGN (Sc), U+060D DATE SEPARATOR (Po), U+061E TRIPLE DOT PUNCTUATION (Po),
+        // U+060B AFGHANI SIGN (Sc), U+060D DATE SEPARATOR (Po), U+060E POETIC VERSE SIGN / U+060F SIGN MISRA (So), U+061D END OF TEXT MARK (Po), U+061E TRIPLE DOT PUNCTUATION (Po),
         // U+066D FIVE POINTED STAR (Po). None are Rust whitespace.
         for sep in [
-            '\u{2D70}', '\u{0609}', '\u{060A}', '\u{060B}', '\u{060D}', '\u{061E}', '\u{066D}',
+            '\u{2D70}',
+            '\u{0609}',
+            '\u{060A}',
+            '\u{060B}',
+            '\u{060D}',
+            '\u{060E}',
+            '\u{060F}',
+            '\u{061D}',
+            '\u{061E}',
+            '\u{066D}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -3079,6 +3122,30 @@ mod tests {
         // Arabic Presentation Forms-A: ornate parentheses U+FD3E / U+FD3F (Pe/Ps), RIAL SIGN U+FDFC (Sc),
         // BISMILLAH ligature U+FDFD (So). None are Rust whitespace.
         for sep in ['\u{FD3E}', '\u{FD3F}', '\u{FDFC}', '\u{FDFD}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                sep as u32
+            );
+        }
+    }
+
+    #[test]
+    fn arabic_presentation_forms_honorific_so_ligatures_fd40_fd4f_fdcf_fdfe_fdff_separate_words() {
+        // U+FD40–U+FD4F, U+FDCF, U+FDFE, U+FDFF: honorific / salutation ligatures (all So); not Rust whitespace.
+        let mut seps: Vec<char> = ('\u{FD40}'..='\u{FD4F}').collect();
+        seps.push('\u{FDCF}');
+        seps.push('\u{FDFE}');
+        seps.push('\u{FDFF}');
+        for sep in seps {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
             assert!(
@@ -3182,6 +3249,29 @@ mod tests {
         // U+FBB2–U+FBC1 ARABIC SYMBOL DOT / TWO DOTS / … / RING / SMALL TAH (Sk)—annotation-like; must not widen
         // to the whole Arabic Presentation Forms-A block (mostly Lo).
         for cp in 0xFBB2u32..=0xFBC1 {
+            let c = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{c}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains(c),
+                "U+{:04X} should pass through collapse_whitespace, got {:?}",
+                cp,
+                cleaned
+            );
+            assert_eq!(
+                cleaned.split_whitespace().count(),
+                1,
+                "U+{:04X} must not become a word break",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn arabic_presentation_forms_koranic_stop_lo_and_triple_ligatures_stay_unmapped() {
+        // U+FDF0–U+FDFB Koranic stop / honorific fragments (Lo); U+FD50+ triple ligatures (Lo)—must not map as the So
+        // honorific arm U+FD40..=U+FD4F.
+        for cp in [0xFDF0u32, 0xFDF2, 0xFD50] {
             let c = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{c}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -3845,9 +3935,10 @@ mod tests {
 
     #[test]
     fn canadian_syllabics_full_stop_bamum_mro_and_new_tai_lue_signs_separate_words() {
-        // U+166E CANADIAN SYLLABICS FULL STOP (Po). Bamum U+A6F2 NJAEMLI through U+A6F7 QUESTION MARK (Po).
-        // Mro U+16A6E DANDA, U+16A6F DOUBLE DANDA (Po). New Tai Lue U+19DE SIGN LAE, U+19DF SIGN LAEV (So). None are Rust whitespace.
-        let mut seps: Vec<char> = vec!['\u{166E}'];
+        // U+1400 CANADIAN SYLLABICS HYPHEN (Pd). U+166E CANADIAN SYLLABICS FULL STOP (Po). Bamum U+A6F2 NJAEMLI through
+        // U+A6F7 QUESTION MARK (Po). Mro U+16A6E DANDA, U+16A6F DOUBLE DANDA (Po). New Tai Lue U+19DE SIGN LAE, U+19DF
+        // SIGN LAEV (So). None are Rust whitespace.
+        let mut seps: Vec<char> = vec!['\u{1400}', '\u{166E}'];
         seps.extend('\u{A6F2}'..='\u{A6F7}');
         seps.extend('\u{16A6E}'..='\u{16A6F}');
         seps.extend('\u{19DE}'..='\u{19DF}');
@@ -5766,9 +5857,9 @@ mod tests {
 
     #[test]
     fn ahom_dogra_dives_akuru_nandinagari_bhaiksuki_sentence_punctuation_separate_words() {
-        // Ahom U+1173C–U+1173E; Dogra U+1183B; Dives Akuru U+11944–U+11946; Nandinagari U+119E2;
-        // Bhaiksuki U+11C41–U+11C45 (all Po).
-        for cp in (0x1173Cu32..=0x1173E)
+        // Ahom U+1173C–U+1173E (Po) and U+1173F SYMBOL VI (So); Dogra U+1183B; Dives Akuru U+11944–U+11946;
+        // Nandinagari U+119E2; Bhaiksuki U+11C41–U+11C45 (all Po).
+        for cp in (0x1173Cu32..=0x1173F)
             .chain(std::iter::once(0x1183B))
             .chain(0x11944..=0x11946)
             .chain(std::iter::once(0x119E2))
@@ -5789,6 +5880,23 @@ mod tests {
                 cp
             );
         }
+    }
+
+    #[test]
+    fn ahom_letter_ka_lo_u11700_stays_unmapped() {
+        // U+11700 AHOM LETTER KA (`Lo`)—word-internal risk; must not split Latin tokens like Ahom Po/So U+1173C–U+1173F.
+        let sep = '\u{11700}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+11700 Lo should not split tokens like Ahom U+1173C–U+1173F, got {:?}",
+            cleaned
+        );
+        assert!(
+            cleaned.contains(sep),
+            "expected raw U+11700 preserved in output"
+        );
     }
 
     #[test]
