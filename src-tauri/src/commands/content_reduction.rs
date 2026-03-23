@@ -123,6 +123,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
     let lower = err.to_lowercase();
     lower.contains("context overflow")
         || lower.contains("prompt too long")
+        || lower.contains("prompt is too long")
         || lower.contains("context length exceeded")
         || lower.contains("maximum context length")
         || lower.contains("exceeds the model's context window")
@@ -139,8 +140,58 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || lower.contains("exceeded context size")
         || lower.contains("prompt has more tokens than")
         || lower.contains("exceeds available context")
-        || (lower.contains("longer than") && lower.contains("context"))
+        || lower.contains("context limit exceeded")
+        || lower.contains("exceeds context length")
+        || lower.contains("requested tokens exceed")
         || (lower.contains("too long") && lower.contains("context"))
+        || (lower.contains("too large") && lower.contains("context"))
+        || (lower.contains("cannot fit") && lower.contains("context"))
+        || (lower.contains("does not fit") && lower.contains("context"))
+        || (lower.contains("doesn't fit") && lower.contains("context"))
+        || (lower.contains("unable to fit") && lower.contains("context"))
+        || (lower.contains("won't fit") && lower.contains("context"))
+        || (lower.contains("longer than") && lower.contains("context"))
+        || lower.contains("exceeds maximum context")
+        || lower.contains("maximum context exceeded")
+        || lower.contains("insufficient context")
+        || lower.contains("prompt exceeds the context")
+        || (lower.contains("greater than") && lower.contains("context"))
+        || (lower.contains("n_ctx")
+            && (lower.contains("exceed")
+                || lower.contains("overflow")
+                || lower.contains("too small")))
+        || (lower.contains("num_ctx")
+            && (lower.contains("exceed")
+                || lower.contains("larger")
+                || lower.contains("greater")
+                || lower.contains("longer")))
+        || lower.contains("exceeds maximum sequence length")
+        || lower.contains("maximum sequence length exceeded")
+        || lower.contains("sequence length exceeds")
+        || lower.contains("input sequence is too long")
+        || (lower.contains("total tokens exceed")
+            && (lower.contains("context")
+                || lower.contains("model")
+                || lower.contains("maximum")
+                || lower.contains("sequence")
+                || lower.contains("n_ctx")))
+        || lower.contains("prompt length exceeds")
+        || (lower.contains("too many tokens") && lower.contains("context"))
+        || lower.contains("max context exceeded")
+        || lower.contains("exceeds max context")
+        || lower.contains("beyond the context")
+        || lower.contains("not enough context")
+        || (lower.contains("context buffer")
+            && (lower.contains("overflow")
+                || lower.contains("exceed")
+                || lower.contains("full")))
+        || ((lower.contains("prompt tokens exceed") || lower.contains("input tokens exceed"))
+            && (lower.contains("context")
+                || lower.contains("model")
+                || lower.contains("maximum")
+                || lower.contains("sequence")
+                || lower.contains("n_ctx")
+                || lower.contains("window")))
 }
 
 /// Check whether an Ollama error indicates message role/ordering conflict.
@@ -399,6 +450,105 @@ mod tests {
         assert!(is_context_overflow_error(
             "the encoded prompt is longer than the context length"
         ));
+        assert!(is_context_overflow_error(
+            "llama runner: context limit exceeded (max 8192)"
+        ));
+        assert!(is_context_overflow_error(
+            "error: input exceeds context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "requested tokens exceed the maximum context window"
+        ));
+        assert!(is_context_overflow_error(
+            "the prompt is too large for the allocated context"
+        ));
+        assert!(is_context_overflow_error(
+            "error: batch cannot fit in context; reduce prompt size"
+        ));
+        assert!(is_context_overflow_error(
+            "model error: prompt does not fit — context is full"
+        ));
+        assert!(is_context_overflow_error(
+            "error: the prompt is too long for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: input exceeds maximum context (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "maximum context exceeded by encoded prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "insufficient context: increase n_ctx or shorten the prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "error: prompt exceeds the context window size"
+        ));
+        assert!(is_context_overflow_error(
+            "batch unable to fit in context; try a smaller prompt"
+        ));
+        assert!(is_context_overflow_error(
+            "the prompt doesn't fit in the allocated context buffer"
+        ));
+        assert!(is_context_overflow_error(
+            "generation won't fit in remaining context"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: encoded prompt is greater than the context length"
+        ));
+        assert!(is_context_overflow_error(
+            "error: n_ctx exceeded — prompt requires more tokens than allocated"
+        ));
+        assert!(is_context_overflow_error(
+            "llama.cpp: n_ctx overflow while processing batch"
+        ));
+        assert!(is_context_overflow_error(
+            "model options: num_ctx too small; prompt is longer than num_ctx"
+        ));
+        assert!(is_context_overflow_error(
+            "error: requested num_ctx is larger than the model allows"
+        ));
+        assert!(is_context_overflow_error(
+            "error: exceeds maximum sequence length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "maximum sequence length exceeded (8192 tokens)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: sequence length exceeds n_ctx"
+        ));
+        assert!(is_context_overflow_error(
+            "input sequence is too long for the configured context"
+        ));
+        assert!(is_context_overflow_error(
+            "error: total tokens exceed model limit"
+        ));
+        assert!(is_context_overflow_error(
+            "prompt length exceeds maximum allowed tokens"
+        ));
+        assert!(is_context_overflow_error(
+            "too many tokens in prompt for the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "error: max context exceeded (model limit 4096)"
+        ));
+        assert!(is_context_overflow_error(
+            "llama runner: input exceeds max context for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "generation stopped: prompt extends beyond the context window"
+        ));
+        assert!(is_context_overflow_error(
+            "error: not enough context remaining for completion"
+        ));
+        assert!(is_context_overflow_error(
+            "kv cache error: context buffer overflow during prefill"
+        ));
+        assert!(is_context_overflow_error(
+            "prompt tokens exceed the model's maximum context window"
+        ));
+        assert!(is_context_overflow_error(
+            "input tokens exceed n_ctx; reduce prompt or raise num_ctx"
+        ));
     }
 
     #[test]
@@ -409,6 +559,30 @@ mod tests {
         assert!(!is_context_overflow_error("connection refused"));
         assert!(!is_context_overflow_error("rate limit exceeded"));
         assert!(!is_context_overflow_error("timeout"));
+        assert!(!is_context_overflow_error(
+            "cannot fit model weights into GPU memory"
+        ));
+        assert!(!is_context_overflow_error("request too large"));
+        assert!(!is_context_overflow_error("unable to fit in GPU memory"));
+        assert!(!is_context_overflow_error("the file won't fit on disk"));
+        assert!(!is_context_overflow_error(
+            "diagnostic: n_ctx=8192 num_ctx=8192 (ok)"
+        ));
+        assert!(!is_context_overflow_error(
+            "hint: set num_ctx in Modelfile to match the model card"
+        ));
+        assert!(!is_context_overflow_error(
+            "too many tokens in request (rate limited)"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: total tokens exceed your monthly quota"
+        ));
+        assert!(!is_context_overflow_error(
+            "API error: prompt tokens exceed per-minute billing cap"
+        ));
+        assert!(!is_context_overflow_error(
+            "network buffer full; retry later"
+        ));
     }
 
     fn make_msg(role: &str, content: &str) -> crate::ollama::ChatMessage {
