@@ -217,6 +217,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // Unicode-sample HTML can glue Latin tokens. U+055A (ARMENIAN APOSTROPHE) and U+055B
                 // (EMPHASIS MARK, Po) are omitted—apostrophe- or stress-like marks can sit word-internally
                 // in Armenian (same spirit as omitting U+2019 for Latin contractions).
+                // Armenian right- / left-facing eternity signs (U+058D, U+058E, So) and dram sign (U+058F, Sc) are not
+                // Rust whitespace; Armenian–Latin or Unicode-sample HTML can place them between Latin tokens without ASCII
+                // space. Unassigned U+058B–U+058C (Cn) are excluded—only U+058D..=U+058F are mapped.
                 // Devanagari danda / double danda (U+0964, U+0965, Po) and abbreviation sign (U+0970, Po) are not Rust
                 // whitespace; mixed Latin–Devanagari or Unicode-sample HTML can place them between Latin tokens without ASCII
                 // space. Devanagari digits U+0966–U+096F (Nd) and high spacing dot (U+0971, Lm) stay unmapped—numeric /
@@ -266,8 +269,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // script or Unicode-sample HTML can glue Latin tokens without ASCII space. Adlam
                 // initial exclamation / question (U+1E95E, U+1E95F, Po) are not Rust whitespace;
                 // Adlam–Latin or Unicode-sample HTML can glue Latin tokens without ASCII space.
-                // Medefaidrin comma / full stop / exclamation oh (U+16E97, U+16E98, U+16E9A, Po) are
-                // not Rust whitespace; U+16E99 SYMBOL AIVA (So) stays unmapped. Mongolian
+                // Medefaidrin comma / full stop / symbol aiva / exclamation oh (U+16E97–U+16E9A, Po) are
+                // not Rust whitespace; Medefaidrin–Latin or Unicode-sample HTML can glue Latin tokens
+                // without ASCII space. Medefaidrin letters (Ll/Lu) stay unmapped—word-internal risk. Mongolian
                 // U+1800–U+180E (BIRGA through vowel separator) are Po/Pd/Mn/Cf and not Rust
                 // whitespace—sentence punctuation (U+1800–U+1805, U+1807–U+180A), TODO soft hyphen
                 // (U+1806, Pd), free variation selectors (U+180B–U+180D, Mn), vowel separator
@@ -337,12 +341,13 @@ fn collapse_whitespace(text: &str) -> String {
                 // (Cn) stay unmapped. Kangxi Radicals (Unicode block U+2F00–U+2FDF): assigned So U+2F00–U+2FD5 (214 radicals);
                 // not Rust whitespace. Unassigned tail U+2FD6–U+2FDF (Cn) and inter-block gap U+2FE0–U+2FEF (Cn) stay unmapped.
                 // Ideographic Description Characters U+2FF0–U+2FFF (all assigned scalars So, including overlap/surround/overlay/rotation U+2FFC–U+2FFF);
-                // not Rust whitespace. Kanbun (Unicode block U+3190–U+319F): linking and reverse
+                // not Rust whitespace. Unicode 17 adds IDEOGRAPHIC DESCRIPTION CHARACTER SUBTRACTION U+31EF (`So`)—mapped on the
+                // same arm as U+2FF0–U+2FFF. Kanbun (Unicode block U+3190–U+319F): linking and reverse
                 // marks U+3190–U+3191 (So) and top/earth/man annotation marks U+3196–U+319F (So) are not Rust whitespace;
                 // classical Japanese kanbun or Unicode-sample HTML can glue Latin tokens without ASCII space. Ideographic
                 // annotation digit marks U+3192–U+3195 (No) stay unmapped—numeric risk. Bopomofo Extended U+31A0–U+31BF (Lo)
-                // stays unmapped. CJK Strokes U+31C0–U+31E3 (all So as assigned): not Rust whitespace; stroke nomenclature or
-                // font-chart HTML can sit between Latin tokens without ASCII space. Gap U+31E4–U+31EF unassigned—excluded.
+                // stays unmapped. CJK Strokes U+31C0–U+31E5 (all So as assigned in Unicode 17): not Rust whitespace; stroke nomenclature or
+                // font-chart HTML can sit between Latin tokens without ASCII space. Inner gap U+31E6–U+31EE unassigned (`Cn`)—excluded.
                 // Katakana Phonetic Extensions U+31F0–U+31FF (Lo)—excluded. Enclosed CJK Letters and Months (Unicode block
                 // U+3200–U+32FF): assigned So parenthesized / circled Hangul, parenthesized / circled CJK ideograph labels,
                 // ideographic telegraph month symbols, circled katakana, squared Latin abbreviations (e.g. PTE, Hz, eV), era
@@ -361,8 +366,10 @@ fn collapse_whitespace(text: &str) -> String {
                 // tsheg (U+0F0B) was covered before; mixed Tibetan–Latin or Unicode-sample HTML can otherwise glue Latin tokens. U+0F13
                 // (caret So) stays unmapped. Sinhala kunddaliya (U+0DF4, Po), Limbu tokma / exclamation / question (U+1940, U+1944,
                 // U+1945, Po), Meetei Mayek cheikhei / ahang khuda (U+AAF0, U+AAF1, Po), and Meetei Mayek cheikhei (U+ABEB, Po) are not
-                // Rust whitespace; mixed-script or Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic full stop
-                // (U+1362, Po) is not Rust whitespace; mixed-script HTML can glue Latin tokens. Khmer signs khan through koomuut
+                // Rust whitespace; mixed-script or Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic section
+                // mark, wordspace, full stop, comma, semicolon, colon, preface colon, question mark, and paragraph separator
+                // (U+1360–U+1368, Po) are not Rust whitespace; mixed Ethiopic–Latin or Unicode-sample HTML can glue Latin tokens.
+                // Ethiopic digit numerics U+1369+ (`No`) stay unmapped—numeric / word-internal risk. Khmer signs khan through koomuut
                 // (U+17D4–U+17DA, Po) and KHMER CURRENCY SYMBOL RIEL (U+17DB, Sc) are not Rust whitespace;
                 // Khmer Symbols PATHAMASAT through DAP-PRAM ROC (U+19E0–U+19FF, So) are not Rust whitespace;
                 // Khmer digits U+17E0–U+17E9 (Nd) and LEK ATTAK numerics U+17F0–U+17F9 (No) stay unmapped—numeric-internal risk.
@@ -533,8 +540,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // Latin tokens without ASCII space.
                 // Kirat Rai sign yupi, danda, double danda (U+16D6D–U+16D6F, Po) are not Rust whitespace;
                 // U+16D6B SIGN VIRAMA and U+16D6C SIGN SAAT (Lm) stay unmapped—modifier-like, word-internal risk.
-                // Ethiopic wordspace (U+1361, Po) is not Rust whitespace. Ethiopic Supplement tonal marks
-                // U+1390–U+1399 (YIZET through KURT; all So) are not Rust whitespace; Ethiopic-layout or
+                // Ethiopic section mark through paragraph separator (U+1360–U+1368, Po) are not Rust whitespace; extends FEAT-D48
+                // wordspace (U+1361) / full stop (U+1362) with section mark (U+1360) and clause punctuation (U+1363–U+1368). Ethiopic
+                // Supplement tonal marks U+1390–U+1399 (YIZET through KURT; all So) are not Rust whitespace; Ethiopic-layout or
                 // Unicode-sample HTML can glue Latin tokens without ASCII space. Ethiopic Supplement syllables
                 // U+1380–U+138F (Lo) stay unmapped—word-internal risk. Unassigned tail U+139A–U+139F (Cn) excluded.
                 // Braille Patterns (U+2800–U+28FF;
@@ -631,6 +639,9 @@ fn collapse_whitespace(text: &str) -> String {
                 // Yi Radicals U+A490–U+A4C6 (all So as assigned); not Rust whitespace. Yi-script indexes or Unicode-sample HTML
                 // can place radical glyphs between Latin tokens without ASCII space. Unassigned tail U+A4C7–U+A4CF (Cn) and Lisu
                 // letters U+A4D0+ (Lo)—excluded.
+                // Cyrillic CYRILLIC THOUSANDS SIGN (U+0482, So) is not Rust whitespace; Church Slavonic or Unicode-sample HTML
+                // can place it between Latin tokens without ASCII space—distinct from Cyrillic letters (Lu/Ll) in the block.
+                // Combining titlo stack U+0483–U+0489 (Mn/Me) stay unmapped—word-internal risk.
                 // Cyrillic Extended-B: Slavonic asterisk U+A673 and Cyrillic kavyka U+A67E (Po); not Rust whitespace. Church
                 // Slavonic or Unicode-sample HTML can place them between Latin tokens without ASCII space. Combining marks
                 // U+A672 (Me), U+A674 / U+A67D (Mn), and letter modifier U+A67F (Lm)—excluded.
@@ -679,8 +690,8 @@ fn collapse_whitespace(text: &str) -> String {
                 // space. Brahmi danda / double danda and punctuation dot through lotus (U+11047–
                 // U+1104D, Po) are not Rust whitespace; epigraphic or Unicode-sample HTML can glue
                 // Latin tokens without ASCII space. Ideographic description characters (U+2FF0–
-                // U+2FFF, So) are not Rust whitespace; Han-component notation or pasted CJK-scholarly
-                // HTML can glue Latin tokens. Chakma section mark and sentence punctuation (U+11140–
+                // U+2FFF, So) and U+31EF IDEOGRAPHIC DESCRIPTION CHARACTER SUBTRACTION (`So`) are not Rust whitespace;
+                // Han-component notation or pasted CJK-scholarly HTML can glue Latin tokens. Chakma section mark and sentence punctuation (U+11140–
                 // U+11143, Po) are not Rust whitespace; U+11144–U+11147 (Lo/Mc) stay unmapped.
                 // Sharada danda / double danda / abbreviation / separator / sutra mark (U+111C5–U+111C8,
                 // U+111CD, Po), sign siddham (U+111DB, Po), and continuation / section marks (U+111DD–
@@ -759,9 +770,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{16FE3}'
                 | '\u{1E14F}'
                 | '\u{1E2FE}'..='\u{1E2FF}'
-                | '\u{16E97}'
-                | '\u{16E98}'
-                | '\u{16E9A}'
+                | '\u{16E97}'..='\u{16E9A}'
                 | '\u{1E95E}'..='\u{1E95F}'
                 | '\u{08E2}'
                 | '\u{0890}'..='\u{0891}'
@@ -820,7 +829,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2F00}'..='\u{2FD5}'
                 | '\u{3190}'..='\u{3191}'
                 | '\u{3196}'..='\u{319F}'
-                | '\u{31C0}'..='\u{31E3}'
+                | '\u{31C0}'..='\u{31E5}'
                 | '\u{3200}'..='\u{321E}'
                 | '\u{322A}'..='\u{3247}'
                 | '\u{3250}'
@@ -908,6 +917,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{2400}'..='\u{243F}'
                 | '\u{037E}'
                 | '\u{03F6}'
+                | '\u{0482}'
                 | '\u{0609}'
                 | '\u{060A}'
                 | '\u{060B}'
@@ -925,6 +935,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{055C}'..='\u{055F}'
                 | '\u{0589}'
                 | '\u{058A}'
+                | '\u{058D}'..='\u{058F}'
                 | '\u{0964}'
                 | '\u{0965}'
                 | '\u{0970}'
@@ -986,7 +997,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{A8FC}'
                 | '\u{AA77}'..='\u{AA79}'
                 | '\u{ABEB}'
-                | '\u{1362}'
+                | '\u{1360}'..='\u{1368}'
                 | '\u{1390}'..='\u{1399}'
                 | '\u{2010}'..='\u{2015}'
                 | '\u{2016}'..='\u{2018}'
@@ -1046,7 +1057,6 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{11BE1}'
                 | '\u{16AF5}'
                 | '\u{16D6D}'..='\u{16D6F}'
-                | '\u{1361}'
                 | '\u{2440}'..='\u{245F}'
                 | '\u{2460}'..='\u{24FF}'
                 | '\u{1F000}'..='\u{1F02F}'
@@ -1180,6 +1190,7 @@ fn collapse_whitespace(text: &str) -> String {
                 | '\u{12FF1}'..='\u{12FF2}'
                 | '\u{13430}'..='\u{13455}'
                 | '\u{2FF0}'..='\u{2FFF}'
+                | '\u{31EF}'
                 | '\u{1D173}'..='\u{1D17A}'
                 | '\u{FE00}'..='\u{FE0F}'
                 | '\u{E0100}'..='\u{E01EF}'
@@ -1599,11 +1610,9 @@ mod tests {
     #[test]
     fn adlam_initial_punctuation_and_medefaidrin_sentence_marks_separate_words() {
         // Adlam U+1E95E–U+1E95F (INITIAL EXCLAMATION / QUESTION; Po)—not Rust whitespace.
-        // Medefaidrin U+16E97–U+16E98, U+16E9A (COMMA, FULL STOP, EXCLAMATION OH; Po)—not Rust
-        // whitespace. U+16E99 SYMBOL AIVA (So) omitted.
-        for cp in [0x16E97u32, 0x16E98, 0x16E9A]
-            .into_iter()
-            .chain(0x1E95Eu32..=0x1E95F)
+        // Medefaidrin U+16E97–U+16E9A (COMMA, FULL STOP, SYMBOL AIVA, EXCLAMATION OH; Po)—not Rust
+        // whitespace (FEAT-D204 extends FEAT-D92 contiguous run).
+        for cp in (0x16E97u32..=0x16E9A).chain(0x1E95Eu32..=0x1E95F)
         {
             let sep = char::from_u32(cp).unwrap();
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -1620,6 +1629,33 @@ mod tests {
                 cp
             );
         }
+    }
+
+    #[test]
+    fn medefaidrin_letter_ll_u16e6d_stays_unmapped() {
+        // U+16E6D MEDEFAIDRIN SMALL LETTER A (Ll) must not split tokens like U+16E97–U+16E9A `Po`.
+        let cp = 0x16E6D_u32;
+        let sep = char::from_u32(cp).unwrap();
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+{:04X} must stay unmapped, got {:?}",
+            cp,
+            cleaned
+        );
+        assert!(
+            cleaned.contains(sep),
+            "U+{:04X} should pass through, got {:?}",
+            cp,
+            cleaned
+        );
+        assert_eq!(
+            cleaned.split_whitespace().count(),
+            1,
+            "U+{:04X} must not become a word break",
+            cp
+        );
     }
 
     #[test]
@@ -1894,10 +1930,19 @@ mod tests {
     #[test]
     fn armenian_script_punctuation_separates_words() {
         // U+055C–U+055F (exclamation, comma, question, abbreviation mark; Po) and U+0589 / U+058A
-        // (full stop, hyphen; Po/Pd)—not Rust whitespace. U+055A apostrophe and U+055B emphasis
+        // (full stop, hyphen; Po/Pd)—not Rust whitespace. U+058D–U+058F: eternity signs (`So`) and dram (`Sc`)
+        // extend FEAT-D72; not Rust whitespace. U+055A apostrophe and U+055B emphasis
         // stay unmapped (word-internal risk, like U+2019).
         for sep in [
-            '\u{055C}', '\u{055D}', '\u{055E}', '\u{055F}', '\u{0589}', '\u{058A}',
+            '\u{055C}',
+            '\u{055D}',
+            '\u{055E}',
+            '\u{055F}',
+            '\u{0589}',
+            '\u{058A}',
+            '\u{058D}',
+            '\u{058E}',
+            '\u{058F}',
         ] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -1913,6 +1958,20 @@ mod tests {
                 sep as u32
             );
         }
+    }
+
+    #[test]
+    fn armenian_modifier_letter_half_ring_lm_u0559_stays_unmapped() {
+        // U+0559 ARMENIAN MODIFIER LETTER LEFT HALF RING (`Lm`)—modifier-like, word-internal risk; not mapped like Po sentence marks.
+        let sep = '\u{0559}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            !cleaned.contains("hello world"),
+            "U+0559 Lm should not split tokens like eternity/dram signs, got {:?}",
+            cleaned
+        );
+        assert!(cleaned.contains(sep), "expected raw U+0559 preserved in output");
     }
 
     #[test]
@@ -1963,6 +2022,39 @@ mod tests {
             cleaned
         );
         assert!(cleaned.contains(sep), "expected {:?} in {:?}", sep, cleaned);
+    }
+
+    #[test]
+    fn cyrillic_thousands_sign_so_u0482_separate_words() {
+        // U+0482 CYRILLIC THOUSANDS SIGN (`So`): not Rust whitespace; extends FEAT-D178 Slavonic/Cyrillic coverage.
+        let sep = '\u{0482}';
+        let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+        let cleaned = clean_html(&html);
+        assert!(
+            cleaned.contains("hello world"),
+            "expected U+0482 normalized before collapse, got {:?}",
+            cleaned
+        );
+        assert!(
+            !cleaned.contains(sep),
+            "cleaned output still contains U+0482"
+        );
+    }
+
+    #[test]
+    fn cyrillic_combining_titlo_mn_u0483_and_capital_letter_lo_u0410_stay_unmapped() {
+        // U+0483 COMBINING CYRILLIC TITLO (Mn) and U+0410 CYRILLIC CAPITAL LETTER A (Lo)—must not split like U+0482 So.
+        for cp in [0x0483_u32, 0x0410] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
     }
 
     #[test]
@@ -3446,7 +3538,7 @@ mod tests {
     #[test]
     fn hebrew_maqaf_paseq_tibetan_tsheg_ethiopic_stop_separate_words() {
         // U+05BE (Hebrew maqaf, Pd), U+05C0 (Hebrew paseq, Po), U+05C6 (Hebrew nun hafukha, Po),
-        // U+0F0B (Tibetan tsheg, Po), U+1362 (Ethiopic full stop, Po)—none are Rust whitespace; RTL or Ethiopic-layout HTML
+        // U+0F0B (Tibetan tsheg, Po), U+1362 (Ethiopic full stop, Po; contiguous Ethiopic clause punctuation is U+1360–U+1368)—none are Rust whitespace; RTL or Ethiopic-layout HTML
         // can glue Latin tokens for `split_whitespace()` without ASCII space.
         for sep in ['\u{05BE}', '\u{05C0}', '\u{05C6}', '\u{0F0B}', '\u{1362}'] {
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -3937,17 +4029,41 @@ mod tests {
     }
 
     #[test]
-    fn ethiopic_wordspace_separates_words() {
-        // U+1361 ETHIOPIC WORDSPACE is Po, not Rust whitespace; Ethiopic-layout HTML can sit between
-        // Latin tokens without a real ASCII space.
-        let html = "<html><body><p>hello\u{1361}world</p></body></html>";
-        let cleaned = clean_html(html);
-        assert!(
-            cleaned.contains("hello world"),
-            "expected Ethiopic wordspace normalized before collapse, got {:?}",
-            cleaned
-        );
-        assert!(!cleaned.contains('\u{1361}'));
+    fn ethiopic_section_wordspace_and_sentence_punctuation_u1360_through_u1368_separate_words() {
+        // U+1360 SECTION MARK through U+1368 PARAGRAPH SEPARATOR (all Po)—not Rust whitespace; extends FEAT-D48
+        // wordspace (U+1361) / full stop (U+1362). U+1369+ Ethiopic digit numerics (`No`) stay unmapped.
+        for cp in 0x1360u32..=0x1368 {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                cleaned.contains("hello world"),
+                "expected U+{:04X} normalized before collapse, got {:?}",
+                cp,
+                cleaned
+            );
+            assert!(
+                !cleaned.contains(sep),
+                "cleaned output still contains U+{:04X}",
+                cp
+            );
+        }
+    }
+
+    #[test]
+    fn ethiopic_digit_one_no_u1369_and_number_ten_no_u1372_stay_unmapped() {
+        // U+1369 ETHIOPIC DIGIT ONE and U+1372 ETHIOPIC NUMBER TEN (`No`)—numeric / word-internal risk; must not split Latin tokens.
+        for sep in ['\u{1369}', '\u{1372}'] {
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} No should not split tokens like Ethiopic Po U+1360–U+1368, got {:?}",
+                sep as u32,
+                cleaned
+            );
+            assert!(cleaned.contains(sep), "expected raw U+{:04X} preserved in output", sep as u32);
+        }
     }
 
     #[test]
@@ -4167,10 +4283,10 @@ mod tests {
 
     #[test]
     fn kanbun_so_marks_and_cjk_strokes_separate_words() {
-        // Kanbun: So U+3190–U+3191, U+3196–U+319F; CJK Strokes U+31C0–U+31E3 (all So). Not Rust whitespace.
+        // Kanbun: So U+3190–U+3191, U+3196–U+319F; CJK Strokes U+31C0–U+31E5 (all So as assigned in Unicode 17). Not Rust whitespace.
         let cps = (0x3190u32..=0x3191)
             .chain(0x3196..=0x319F)
-            .chain(0x31C0..=0x31E3);
+            .chain(0x31C0..=0x31E5);
         for cp in cps {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
@@ -4191,8 +4307,24 @@ mod tests {
 
     #[test]
     fn kanbun_no_numerics_bopomofo_ext_and_strokes_gap_stay_unmapped() {
-        // Kanbun No U+3192–U+3195; Bopomofo Extended Lo U+31A0–U+31BF; unassigned U+31E4–U+31EF; Katakana Phonetic Ext Lo U+31F0.
-        for cp in [0x3192u32, 0x3195, 0x31A0, 0x31BF, 0x31E4, 0x31EF, 0x31F0] {
+        // Kanbun No U+3192–U+3195; Bopomofo Extended Lo U+31A0–U+31BF; CJK Strokes inner gap U+31E6–U+31EE (`Cn`); Katakana Phonetic Ext Lo U+31F0.
+        for cp in [0x3192u32, 0x3195, 0x31A0, 0x31BF, 0x31E6, 0x31EE, 0x31F0] {
+            let sep = char::from_u32(cp).expect("valid scalar");
+            let html = format!("<html><body><p>hello{sep}world</p></body></html>");
+            let cleaned = clean_html(&html);
+            assert!(
+                !cleaned.contains("hello world"),
+                "U+{:04X} should not map to ASCII space between Latin tokens, got {:?}",
+                cp,
+                cleaned
+            );
+        }
+    }
+
+    #[test]
+    fn cjk_strokes_inner_gap_u31e6_through_u31ee_stay_unmapped() {
+        // Unicode 17 assigns CJK Strokes U+31C0–U+31E5; U+31E6–U+31EE remain unassigned (`Cn`) and must not split Latin tokens.
+        for cp in 0x31E6u32..=0x31EE {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
@@ -5884,9 +6016,9 @@ mod tests {
 
     #[test]
     fn ideographic_description_characters_separate_words() {
-        // U+2FF0–U+2FFF: ideographic description characters are So, not Rust whitespace; rare
+        // U+2FF0–U+2FFF and Unicode 17 U+31EF (IDEOGRAPHIC DESCRIPTION CHARACTER SUBTRACTION): So, not Rust whitespace; rare
         // mixed or pedagogical HTML can place them between Latin letters without an ASCII space.
-        for cp in 0x2FF0u32..=0x2FFF {
+        for cp in (0x2FF0u32..=0x2FFF).chain(std::iter::once(0x31EF)) {
             let sep = char::from_u32(cp).expect("valid scalar");
             let html = format!("<html><body><p>hello{sep}world</p></body></html>");
             let cleaned = clean_html(&html);
