@@ -223,6 +223,36 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `dimensions exceed` does not match inside `microdimensions exceed` / `metadimensions exceed`, and
 /// `dimension exceed` does not match inside `subdimension exceed` (left-boundary rejects
 /// `predimension exceed` and `redimension exceed`);
+/// `tensors exceed` does not match inside `microtensors exceed` / `metatensors exceed`, and
+/// `tensor exceed` does not match inside `subtensor exceed` (left-boundary rejects `pretensor exceed`
+/// and `retensor exceed`);
+/// `activations exceed` does not match inside `microactivations exceed` / `metaactivations exceed`, and
+/// `activation exceed` does not match inside `subactivation exceed` (left-boundary rejects
+/// `preactivation exceed` and `reactivation exceed`);
+/// `gradients exceed` does not match inside `microgradients exceed` / `metagradients exceed`, and
+/// `gradient exceed` does not match inside `subgradient exceed` (left-boundary rejects
+/// `pregradient exceed` and `regradient exceed`);
+/// `weights exceed` does not match inside `microweights exceed` / `metaweights exceed`, and
+/// `weight exceed` does not match inside `subweight exceed` (left-boundary rejects `preweight exceed`
+/// and `reweight exceed`);
+/// `biases exceed` does not match inside `microbiases exceed` / `metabiases exceed`, and
+/// `bias exceed` does not match inside `subbias exceed` (left-boundary rejects `prebias exceed`
+/// and `rebias exceed`);
+/// `layers exceed` does not match inside `microlayers exceed` / `metalayers exceed`, and
+/// `layer exceed` does not match inside `sublayer exceed` (left-boundary rejects `prelayer exceed`
+/// and `relayer exceed`);
+/// `heads exceed` does not match inside `microheads exceed` / `metaheads exceed`, and
+/// `head exceed` does not match inside `subhead exceed` (left-boundary rejects `prehead exceed`
+/// and `rehead exceed`);
+/// `positions exceed` does not match inside `micropositions exceed` / `metapositions exceed`, and
+/// `position exceed` does not match inside `subposition exceed` (left-boundary rejects
+/// `preposition exceed` and `reposition exceed`);
+/// `embeddings exceed` does not match inside `microembeddings exceed` / `metaembeddings exceed`, and
+/// `embedding exceed` does not match inside `subembedding exceed` (left-boundary rejects
+/// `preembedding exceed` and `reembedding exceed`);
+/// `logits exceed` does not match inside `micrologits exceed` / `metalogits exceed`, and
+/// `logit exceed` does not match inside `sublogit exceed` (left-boundary rejects `prelogit exceed`
+/// and `relogit exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -1404,6 +1434,169 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "dimensions exceed")
             || contains_phrase_after_ident_boundary(&lower, "dimensions exceeded")
             || contains_phrase_after_ident_boundary(&lower, "dimension exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "tensor(s) exceed(s/ed)" (FEAT-D363). Parallel to `dimensions exceed` /
+        // `dimension exceed`. `tensor exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `tensors exceed` (the `s` after `tensor`).
+        // Ident-boundary so `microtensors exceed` / `metatensors exceed` / `subtensor exceed`
+        // do not false-positive; `pretensor exceed` and `retensor exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "tensors exceed")
+            || contains_phrase_after_ident_boundary(&lower, "tensors exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "tensor exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "activation(s) exceed(s/ed)" (FEAT-D364). Parallel to `tensors exceed` /
+        // `tensor exceed`. `activation exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `activations exceed` (the `s` after `activation`).
+        // Ident-boundary so `microactivations exceed` / `metaactivations exceed` / `subactivation exceed`
+        // do not false-positive; `preactivation exceed` and `reactivation exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "activations exceed")
+            || contains_phrase_after_ident_boundary(&lower, "activations exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "activation exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "gradient(s) exceed(s/ed)" (FEAT-D365). Parallel to `activations exceed` /
+        // `activation exceed`. `gradient exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `gradients exceed` (the `s` after `gradient`).
+        // Ident-boundary so `microgradients exceed` / `metagradients exceed` / `subgradient exceed`
+        // do not false-positive; `pregradient exceed` and `regradient exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "gradients exceed")
+            || contains_phrase_after_ident_boundary(&lower, "gradients exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "gradient exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "weight(s) exceed(s/ed)" (FEAT-D366). Parallel to `gradients exceed` /
+        // `gradient exceed`. `weight exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `weights exceed` (the `s` after `weight`).
+        // Ident-boundary so `microweights exceed` / `metaweights exceed` / `subweight exceed`
+        // do not false-positive; `preweight exceed` and `reweight exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "weights exceed")
+            || contains_phrase_after_ident_boundary(&lower, "weights exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "weight exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "bias(es) exceed(s/ed)" (FEAT-D367). Parallel to `weights exceed` /
+        // `weight exceed`. `bias exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `biases exceed` (the `s` after `bias`).
+        // Ident-boundary so `microbiases exceed` / `metabiases exceed` / `subbias exceed`
+        // do not false-positive; `prebias exceed` and `rebias exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "biases exceed")
+            || contains_phrase_after_ident_boundary(&lower, "biases exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "bias exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "layer(s) exceed(s/ed)" (FEAT-D368). Parallel to `biases exceed` /
+        // `bias exceed`. `layer exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `layers exceed` (the `s` after `layer`).
+        // Ident-boundary so `microlayers exceed` / `metalayers exceed` / `sublayer exceed`
+        // do not false-positive; `prelayer exceed` and `relayer exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "layers exceed")
+            || contains_phrase_after_ident_boundary(&lower, "layers exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "layer exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "head(s) exceed(s/ed)" (FEAT-D369). Parallel to `layers exceed` /
+        // `layer exceed`. `head exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `heads exceed` (the `s` after `head`).
+        // Ident-boundary so `microheads exceed` / `metaheads exceed` / `subhead exceed`
+        // do not false-positive; `prehead exceed` and `rehead exceed` are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "heads exceed")
+            || contains_phrase_after_ident_boundary(&lower, "heads exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "head exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "position(s) exceed(s/ed)" (FEAT-D370). Parallel to `heads exceed` /
+        // `head exceed`. `position exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `positions exceed` (the `s` after
+        // `position`). Ident-boundary so `micropositions exceed` / `metapositions exceed` /
+        // `subposition exceed` do not false-positive; `preposition exceed` and `reposition exceed`
+        // are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "positions exceed")
+            || contains_phrase_after_ident_boundary(&lower, "positions exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "position exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "embedding(s) exceed(s/ed)" (FEAT-D371). Parallel to `positions exceed` /
+        // `position exceed`. `embedding exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `embeddings exceed` (the `s` after
+        // `embedding`). Ident-boundary so `microembeddings exceed` / `metaembeddings exceed` /
+        // `subembedding exceed` do not false-positive; `preembedding exceed` and `reembedding exceed`
+        // are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "embeddings exceed")
+            || contains_phrase_after_ident_boundary(&lower, "embeddings exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "embedding exceed"))
+            && (lower.contains("context window")
+                || lower.contains("context length")
+                || lower.contains("context limit")
+                || lower.contains("context size")
+                || lower.contains("max context")
+                || lower.contains("maximum context")
+                || lower.contains("available context")
+                || lower.contains("model's context")))
+        // Plural / singular "logit(s) exceed(s/ed)" (FEAT-D372). Parallel to `embeddings exceed` /
+        // `embedding exceed`. `logit exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `logits exceed` (the `s` after
+        // `logit`). Ident-boundary so `micrologits exceed` / `metalogits exceed` /
+        // `sublogit exceed` do not false-positive; `prelogit exceed` and `relogit exceed`
+        // are rejected the same way.
+        || ((contains_phrase_after_ident_boundary(&lower, "logits exceed")
+            || contains_phrase_after_ident_boundary(&lower, "logits exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "logit exceed"))
             && (lower.contains("context window")
                 || lower.contains("context length")
                 || lower.contains("context limit")
@@ -3646,6 +3839,366 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "debug: redimension exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: tensors exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: tensors exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: tensor exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: tensor exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: tensors exceed per-request graph node limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: tensors exceeded max operand count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: tensor exceed max rank on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microtensors exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metatensors exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subtensor exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: pretensor exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: retensor exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: activations exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: activations exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: activation exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: activation exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: activations exceed per-layer buffer limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: activations exceeded max feature map count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: activation exceed max channel width on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microactivations exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaactivations exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subactivation exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: preactivation exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: reactivation exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: gradients exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: gradients exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: gradient exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: gradient exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: gradients exceed per-step clip limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: gradients exceeded max backward-pass depth on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: gradient exceed max Jacobian rows on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microgradients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metagradients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subgradient exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: pregradient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: regradient exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: weights exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: weights exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: weight exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: weight exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: weights exceed per-layer L2 clip limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: weights exceeded max trainable parameter count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: weight exceed max shard rows on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microweights exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaweights exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subweight exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: preweight exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: reweight exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: biases exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: biases exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: bias exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: bias exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: biases exceed per-layer offset limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: biases exceeded max initializer count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: bias exceed max row width on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microbiases exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metabiases exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subbias exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: prebias exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: rebias exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: layers exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: layers exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: layer exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: layer exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: layers exceed per-stack depth limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: layers exceeded max module count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: layer exceed max channel width on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microlayers exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metalayers exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: sublayer exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: prelayer exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: relayer exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: heads exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: heads exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: head exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: head exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: heads exceed per-attention fan-in limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: heads exceeded max parallel workers on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: head exceed max replica count on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microheads exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaheads exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subhead exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: prehead exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "debug: rehead exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: positions exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: positions exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: position exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: position exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: positions exceed max sequence index for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: positions exceeded allowed KV slots on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: position exceed max slot width on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micropositions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metapositions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "grammar: subposition exceed rule depth (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: preposition exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: reposition exceed grid bounds (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: embeddings exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: embeddings exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: embedding exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: embedding exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: embeddings exceed rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: embeddings exceeded max vector dimensions on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: embedding exceed max batch width on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microembeddings exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaembeddings exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: subembedding exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: preembedding exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "index: reembedding exceed cache budget (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: logits exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: logits exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: logit exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "proxy: logit exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: logits exceed rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: logits exceeded max vocabulary width on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "http: logit exceed max batch dim on this route (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micrologits exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metalogits exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "graph: sublogit exceed op cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: prelogit exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "index: relogit exceed cache budget (no model context configured)"
         ));
         assert!(!is_context_overflow_error(
             "config: microrecords exceed the model's context window on this request"
