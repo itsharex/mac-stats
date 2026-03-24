@@ -292,6 +292,21 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `voxels exceed` does not match inside `microvoxels exceed` / `metavoxels exceed`, and
 /// `voxel exceed` does not match inside `subvoxel exceed` (left-boundary rejects `prevoxel exceed`
 /// and `revoxel exceed`);
+/// `particles exceed` does not match inside `microparticles exceed` / `metaparticles exceed`, and
+/// `particle exceed` does not match inside `subparticle exceed` (left-boundary rejects `preparticle exceed`
+/// and `reparticle exceed`);
+/// `molecules exceed` does not match inside `micromolecules exceed` / `metamolecules exceed`, and
+/// `molecule exceed` does not match inside `submolecule exceed` (left-boundary rejects `premolecule exceed`
+/// and `remolecule exceed`);
+/// `atoms exceed` does not match inside `microatoms exceed` / `metaatoms exceed`, and
+/// `atom exceed` does not match inside `subatom exceed` (left-boundary rejects `preatom exceed`
+/// and `reatom exceed`);
+/// `ions exceed` does not match inside `microions exceed` / `metaions exceed`, and
+/// `ion exceed` does not match inside `subion exceed` (left-boundary rejects `preion exceed`
+/// and `reion exceed`);
+/// `electrons exceed` does not match inside `microelectrons exceed` / `metaelectrons exceed`, and
+/// `electron exceed` does not match inside `subelectron exceed` (left-boundary rejects
+/// `preelectron exceed` and `reelectron exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -1487,6 +1502,62 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "voxels exceed")
             || contains_phrase_after_ident_boundary(&lower, "voxels exceeded")
             || contains_phrase_after_ident_boundary(&lower, "voxel exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "particle(s) exceed(s/ed)" (FEAT-D404). Parallel to `voxels exceed` /
+        // `voxel exceed`. `particle exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `particles exceed` (the `s` after `particle`).
+        // Ident-boundary so `microparticles exceed` / `metaparticles exceed` / `subparticle exceed` do not
+        // false-positive; `preparticle exceed` and `reparticle exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `particles exceed` rate
+        // limits, per-emitter / simulation caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "particles exceed")
+            || contains_phrase_after_ident_boundary(&lower, "particles exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "particle exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "molecule(s) exceed(s/ed)" (FEAT-D405). Parallel to `particles exceed` /
+        // `particle exceed`. `molecule exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `molecules exceed` (the `s` after `molecule`).
+        // Ident-boundary so `micromolecules exceed` / `metamolecules exceed` / `submolecule exceed` do not
+        // false-positive; `premolecule exceed` and `remolecule exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `molecules exceed` rate
+        // limits, per-reaction / structure caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "molecules exceed")
+            || contains_phrase_after_ident_boundary(&lower, "molecules exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "molecule exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "atom(s) exceed(s/ed)" (FEAT-D406). Parallel to `molecules exceed` /
+        // `molecule exceed`. `atom exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `atoms exceed` (the `s` after `atom`).
+        // Ident-boundary so `microatoms exceed` / `metaatoms exceed` / `subatom exceed` do not
+        // false-positive; `preatom exceed` and `reatom exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `atoms exceed` rate
+        // limits, per-structure / basis-set caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "atoms exceed")
+            || contains_phrase_after_ident_boundary(&lower, "atoms exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "atom exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "ion(s) exceed(s/ed)" (FEAT-D407). Parallel to `atoms exceed` /
+        // `atom exceed`. `ion exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `ions exceed` (the `s` after `ion`).
+        // Ident-boundary so `microions exceed` / `metaions exceed` / `subion exceed` do not
+        // false-positive; `preion exceed` and `reion exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `ions exceed` rate
+        // limits, per-species / plasma caps, etc. without slot wording. `million exceed` does not
+        // match `ion exceed` (the `l` before `ion` breaks the left boundary).
+        || ((contains_phrase_after_ident_boundary(&lower, "ions exceed")
+            || contains_phrase_after_ident_boundary(&lower, "ions exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "ion exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "electron(s) exceed(s/ed)" (FEAT-D408). Parallel to `ions exceed` /
+        // `ion exceed`. `electron exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `electrons exceed` (the `s` after `electron`).
+        // Ident-boundary so `microelectrons exceed` / `metaelectrons exceed` / `subelectron exceed` do not
+        // false-positive; `preelectron exceed` and `reelectron exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `electrons exceed` rate
+        // limits, per-orbital / beam caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "electrons exceed")
+            || contains_phrase_after_ident_boundary(&lower, "electrons exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "electron exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
@@ -3496,6 +3567,174 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "supervoxel exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: particles exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: particles exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: particle exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: particle exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: particles exceed per-emitter rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: particles exceeded daily simulation cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: particle exceed max burst count on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microparticles exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaparticles exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subparticle exceed LOD budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superparticle exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: molecules exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: molecules exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: molecule exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: molecule exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: molecules exceed per-reaction rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: molecules exceeded daily structure cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: molecule exceed max bond count on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micromolecules exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metamolecules exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: submolecule exceed valence budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supermolecule exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: atoms exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: atoms exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: atom exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: atom exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: atoms exceed per-basis rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: atoms exceeded daily structure cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: atom exceed max valence on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microatoms exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaatoms exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subatom exceed shell budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superatom exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: ions exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: ions exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: ion exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: ion exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: ions exceed per-species rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: ions exceeded daily plasma cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: ion exceed max charge on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subion exceed mobility budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superion exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: million exceed per-client rate limits for this endpoint"
+        ));
+        assert!(is_context_overflow_error(
+            "API: electrons exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: electrons exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: electron exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: electron exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: electrons exceed per-beam rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: electrons exceeded daily cathode cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: electron exceed max spin slots on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microelectrons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaelectrons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subelectron exceed mobility budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superelectron exceed the model's context window on this request"
         ));
         assert!(is_context_overflow_error(
             "API: bytes exceed the model's context window on this request"

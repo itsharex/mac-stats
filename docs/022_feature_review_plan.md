@@ -473,3 +473,44 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] Runtime smoke: **no second `mac_stats` started** — `pgrep -fl mac_stats` showed existing `./target/release/mac_stats -vv` (**PID 41093**). Tail of `~/.mac-stats/debug.log` shows **4 monitors** UP/saved and normal scheduler/task idle noise (avoids duplicate menu-bar instances per **AGENTS.md**). A **restart** is required to load this commit’s `content_reduction.rs` into the running process.
 - [x] Code review (`content_reduction.rs`): five new `||` groups in `is_context_overflow_error` for **FEAT-D399** (`faces` / `face exceed`), **D400** (`triangles` / `triangle exceed`), **D401** (`polygons` / `polygon exceed`), **D402** (`meshes` / `mesh exceed`), **D403** (`voxels` / `voxel exceed`) — each `contains_phrase_after_ident_boundary` + `explicit_context_slot_after_ident_boundary` (same FEAT-D295 slot list as **vertices**). Tests: positives with model-context phrasing; negatives for rate/geometry caps without slot, **`micro*`**/**`meta*`**/**`sub*`** compounds, and **`surface` / `supertriangle` / `superpolygon` / `supermesh` / `supervoxel exceed`** (no false positives on embedded singular substring). Intent: user-facing overflow message unchanged.
 - [x] Docs: `CHANGELOG.md` **[0.1.58]** **Changed** bullets for **FEAT-D399–D403** align with code; **Agent workflow docs** bullet checklist range updated to **FEAT-D389–D403**. `006-feature-coder/FEATURE-CODER.md` table head rows **FEAT-D399–D403**; **When empty** high id **FEAT-D403**. `005-openclaw-reviewer/005-openclaw-reviewer.md` independent re-run **2026-03-24T21:20:02Z** — doc-only, same OpenClaw `HEAD` **d25b4a2**.
+
+### Feature coder follow-up (FEAT-D404 `particles exceed` / `particle exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D403** (`voxels` / `voxel exceed`) for **`particles exceed`** / **`particles exceeded`** / **`particle exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests (no new `#[test]`); **`superparticle exceed`** negative mirrors **`supervoxel exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D404**; **When empty** high id **FEAT-D405+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D404**; **Agent workflow docs** checklist range **FEAT-D389–D404**.
+
+### Feature coder follow-up (FEAT-D405 `molecules exceed` / `molecule exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D404** (`particles` / `particle exceed`) for **`molecules exceed`** / **`molecules exceeded`** / **`molecule exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests (no new `#[test]`); **`supermolecule exceed`** negative mirrors **`superparticle exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D405**; **When empty** high id **FEAT-D406+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D405**; **Agent workflow docs** checklist range **FEAT-D389–D405**.
+
+### Feature coder follow-up (FEAT-D406 `atoms exceed` / `atom exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D405** (`molecules` / `molecule exceed`) for **`atoms exceed`** / **`atoms exceeded`** / **`atom exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests (no new `#[test]`); **`superatom exceed`** negative mirrors **`supermolecule exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D406**; **When empty** high id **FEAT-D407+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D406**; **Agent workflow docs** checklist range **FEAT-D389–D406**.
+
+### Feature coder follow-up (FEAT-D407 `ions exceed` / `ion exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D406** (`atoms` / `atom exceed`) for **`ions exceed`** / **`ions exceeded`** / **`ion exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests (no new `#[test]`); **`superion exceed`** negative mirrors **`superatom exceed`**; **`million exceed`** negative documents ident-boundary vs embedded **`ion exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D407**; **When empty** high id **FEAT-D408+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D407**; **Agent workflow docs** checklist range **FEAT-D389–D407**.
+
+### Feature coder follow-up (FEAT-D408 `electrons exceed` / `electron exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D407** (`ions` / `ion exceed`) for **`electrons exceed`** / **`electrons exceeded`** / **`electron exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests (no new `#[test]`); **`superelectron exceed`** negative mirrors **`superion exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D408**; **When empty** high id **FEAT-D409+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D408**; **Agent workflow docs** checklist range **FEAT-D389–D408**.
+
+### Closing reviewer smoke test 2026-03-24 (`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md` — FEAT-D404–D408)
+
+- [x] Entry: **`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md`** — §9 integration checklist consulted; bar matched prior **Closing reviewer smoke test** blocks: `cargo check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`; **`git diff`** reconciled with **`CHANGELOG.md`** **[0.1.58]** and **`006-feature-coder/FEATURE-CODER.md`** (**FEAT-D404–D408**). No **`pkill -f mac_stats`** (existing instance left running per **AGENTS.md** uptime rule).
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy --all-targets -- -D warnings` — zero warnings.
+- [x] `cargo test` — **685** tests pass (`mac_stats` lib). **FEAT-D404–D408** extend existing `is_context_overflow_error` tests only — **no new `#[test]` functions**, so count unchanged vs. prior 2026-03-24 closing block.
+- [x] `cargo build --release` succeeds (**v0.1.58**).
+- [x] Runtime smoke: **no second `mac_stats` started** — `pgrep -fl mac_stats` showed existing `./target/release/mac_stats -vv` (**PID 41093**). Tail of **`~/.mac-stats/debug.log`**: **4 monitors** UP/saved, Discord/Ollama activity. **Restart** mac-stats to load this commit’s **`content_reduction.rs`** into the running process.
+- [x] Code review (`content_reduction.rs`): five new `||` groups **FEAT-D404** (`particles` / `particle exceed`) through **FEAT-D408** (`electrons` / `electron exceed`), each after the prior chemistry/geometry row, pattern **`contains_phrase_after_ident_boundary`** + **`explicit_context_slot_after_ident_boundary`** (same FEAT-D295 explicit context-slot list). Negatives: **`superparticle` / `supermolecule` / `superatom` / `superion` / `superelectron exceed`**; **`million exceed`** documents **`ion exceed`** ident boundary.
+- [x] Docs alignment: **`CHANGELOG.md`** **[0.1.58]** **Changed** bullets **D404–D408** and **Agent workflow docs** line through **FEAT-D408** match the diff; **`006-feature-coder/FEATURE-CODER.md`** table head + **When empty** **FEAT-D409+** match; **`005-openclaw-reviewer/005-openclaw-reviewer.md`** independent re-run **2026-03-24T21:47:31Z** (doc-only, OpenClaw `HEAD` **d25b4a2**).
