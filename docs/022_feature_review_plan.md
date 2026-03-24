@@ -514,3 +514,44 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] Runtime smoke: **no second `mac_stats` started** — `pgrep -fl mac_stats` showed existing `./target/release/mac_stats -vv` (**PID 41093**). Tail of **`~/.mac-stats/debug.log`**: **4 monitors** UP/saved, Discord/Ollama activity. **Restart** mac-stats to load this commit’s **`content_reduction.rs`** into the running process.
 - [x] Code review (`content_reduction.rs`): five new `||` groups **FEAT-D404** (`particles` / `particle exceed`) through **FEAT-D408** (`electrons` / `electron exceed`), each after the prior chemistry/geometry row, pattern **`contains_phrase_after_ident_boundary`** + **`explicit_context_slot_after_ident_boundary`** (same FEAT-D295 explicit context-slot list). Negatives: **`superparticle` / `supermolecule` / `superatom` / `superion` / `superelectron exceed`**; **`million exceed`** documents **`ion exceed`** ident boundary.
 - [x] Docs alignment: **`CHANGELOG.md`** **[0.1.58]** **Changed** bullets **D404–D408** and **Agent workflow docs** line through **FEAT-D408** match the diff; **`006-feature-coder/FEATURE-CODER.md`** table head + **When empty** **FEAT-D409+** match; **`005-openclaw-reviewer/005-openclaw-reviewer.md`** independent re-run **2026-03-24T21:47:31Z** (doc-only, OpenClaw `HEAD` **d25b4a2**).
+
+### Feature coder follow-up (FEAT-D409 `protons exceed` / `proton exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D408** (`electrons` / `electron exceed`) for **`protons exceed`** / **`protons exceeded`** / **`proton exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests; **`superproton exceed`** negative mirrors **`superelectron exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D409**; **When empty** high id **FEAT-D410+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D409**; **Agent workflow docs** checklist range **FEAT-D389–D409**.
+
+### Feature coder follow-up (FEAT-D410 `neutrons exceed` / `neutron exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D409** (`protons` / `proton exceed`) for **`neutrons exceed`** / **`neutrons exceeded`** / **`neutron exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests; **`superneutron exceed`** negative mirrors **`superproton exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D410**; **When empty** high id **FEAT-D411+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D410**; **Agent workflow docs** checklist range **FEAT-D389–D410**.
+
+### Feature coder follow-up (FEAT-D411 `quarks exceed` / `quark exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D410** (`neutrons` / `neutron exceed`) for **`quarks exceed`** / **`quarks exceeded`** / **`quark exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests; **`superquark exceed`** negative mirrors **`superneutron exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D411**; **When empty** high id **FEAT-D412+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D411**; **Agent workflow docs** checklist range **FEAT-D389–D411**.
+
+### Feature coder follow-up (FEAT-D412 `gluons exceed` / `gluon exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D411** (`quarks` / `quark exceed`) for **`gluons exceed`** / **`gluons exceeded`** / **`gluon exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests; **`supergluon exceed`** negative mirrors **`superquark exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D412**; **When empty** high id **FEAT-D413+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D412**; **Agent workflow docs** checklist range **FEAT-D389–D412**.
+
+### Feature coder follow-up (FEAT-D413 `bosons exceed` / `boson exceed`)
+
+- [x] `content_reduction.rs`: one new `||` group after **FEAT-D412** (`gluons` / `gluon exceed`) for **`bosons exceed`** / **`bosons exceeded`** / **`boson exceed`** + **`explicit_context_slot_after_ident_boundary`**; module rustdoc extended. Assertions in existing overflow tests; **`superboson exceed`** negative mirrors **`supergluon exceed`**.
+- [x] `006-feature-coder/FEATURE-CODER.md`: **Recently closed** row **FEAT-D413**; **When empty** high id **FEAT-D414+**.
+- [x] `CHANGELOG.md` **[0.1.58]** **Changed** bullet for **FEAT-D413**; **Agent workflow docs** checklist range **FEAT-D389–D413**.
+
+### Closing reviewer smoke test 2026-03-24 (`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md` — FEAT-D409–D413)
+
+- [x] Entry: **`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md`** — §9 integration checklist consulted; bar matched prior blocks: `cargo check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`; **`git diff`** reconciled with **`CHANGELOG.md`** **[0.1.58]** (**Changed** **FEAT-D409–D413** + **Agent workflow docs** through **FEAT-D413**), **`006-feature-coder/FEATURE-CODER.md`** (open-table rows **D409–D413**, **When empty** **FEAT-D414+**), and feature-follow-up subsections above. No **`pkill -f mac_stats`** (uptime rule in **AGENTS.md**).
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy --all-targets -- -D warnings` — zero warnings.
+- [x] `cargo test` — **685** tests pass (`mac_stats` lib); **1** ignored in a separate target (unchanged pattern).
+- [x] `cargo build --release` succeeds (**v0.1.58**).
+- [x] Runtime smoke: **no second `mac_stats` started** — `pgrep -fl mac_stats` showed existing `./target/release/mac_stats -vv` (**PID 41093**). Tail of **`~/.mac-stats/debug.log`**: **4 monitors** UP/saved. **Restart** mac-stats to load this commit’s **`content_reduction.rs`** into the long-running process.
+- [x] Code review (`content_reduction.rs`): five new `||` groups **FEAT-D409** (`protons` / `proton exceed`) through **FEAT-D413** (`bosons` / `boson exceed`), same **`contains_phrase_after_ident_boundary`** + **`explicit_context_slot_after_ident_boundary`** pattern as **D404–D408**; rustdoc extended; negatives **`superproton`** … **`superboson exceed`** aligned with prior **`super* exceed`** rows.
+- [x] Docs alignment: **`005-openclaw-reviewer/005-openclaw-reviewer.md`** independent re-run **2026-03-24T22:16:48Z** (OpenClaw `HEAD` **d25b4a2**, doc-only).
