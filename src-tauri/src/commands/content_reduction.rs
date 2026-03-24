@@ -322,6 +322,21 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `bosons exceed` does not match inside `microbosons exceed` / `metabosons exceed`, and
 /// `boson exceed` does not match inside `subboson exceed` (left-boundary rejects
 /// `preboson exceed` and `reboson exceed`);
+/// `leptons exceed` does not match inside `microleptons exceed` / `metaleptons exceed`, and
+/// `lepton exceed` does not match inside `sublepton exceed` (left-boundary rejects
+/// `prelepton exceed` and `relepton exceed`);
+/// `hadrons exceed` does not match inside `microhadrons exceed` / `metahadrons exceed`, and
+/// `hadron exceed` does not match inside `subhadron exceed` (left-boundary rejects
+/// `prehadron exceed` and `rehadron exceed`);
+/// `photons exceed` does not match inside `microphotons exceed` / `metaphotons exceed`, and
+/// `photon exceed` does not match inside `subphoton exceed` (left-boundary rejects
+/// `prephoton exceed` and `rephoton exceed`);
+/// `phonons exceed` does not match inside `microphonons exceed` / `metaphonons exceed`, and
+/// `phonon exceed` does not match inside `subphonon exceed` (left-boundary rejects
+/// `prephonon exceed` and `rephonon exceed`);
+/// `excitons exceed` does not match inside `microexcitons exceed` / `metaexcitons exceed`, and
+/// `exciton exceed` does not match inside `subexciton exceed` (left-boundary rejects
+/// `preexciton exceed` and `reexciton exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -1628,6 +1643,61 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "bosons exceed")
             || contains_phrase_after_ident_boundary(&lower, "bosons exceeded")
             || contains_phrase_after_ident_boundary(&lower, "boson exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "lepton(s) exceed(s/ed)" (FEAT-D414). Parallel to `bosons exceed` /
+        // `boson exceed`. `lepton exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `leptons exceed` (the `s` after `lepton`).
+        // Ident-boundary so `microleptons exceed` / `metaleptons exceed` / `sublepton exceed` do not
+        // false-positive; `prelepton exceed` and `relepton exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `leptons exceed` rate
+        // limits, per-generation / family caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "leptons exceed")
+            || contains_phrase_after_ident_boundary(&lower, "leptons exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "lepton exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "hadron(s) exceed(s/ed)" (FEAT-D415). Parallel to `leptons exceed` /
+        // `lepton exceed`. `hadron exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `hadrons exceed` (the `s` after `hadron`).
+        // Ident-boundary so `microhadrons exceed` / `metahadrons exceed` / `subhadron exceed` do not
+        // false-positive; `prehadron exceed` and `rehadron exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `hadrons exceed` rate
+        // limits, per-jet / multiplicity caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "hadrons exceed")
+            || contains_phrase_after_ident_boundary(&lower, "hadrons exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "hadron exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "photon(s) exceed(s/ed)" (FEAT-D416). Parallel to `hadrons exceed` /
+        // `hadron exceed`. `photon exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `photons exceed` (the `s` after `photon`).
+        // Ident-boundary so `microphotons exceed` / `metaphotons exceed` / `subphoton exceed` do not
+        // false-positive; `prephoton exceed` and `rephoton exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `photons exceed` rate
+        // limits, per-beam / fluence caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "photons exceed")
+            || contains_phrase_after_ident_boundary(&lower, "photons exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "photon exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "phonon(s) exceed(s/ed)" (FEAT-D417). Parallel to `photons exceed` /
+        // `photon exceed`. `phonon exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `phonons exceed` (the `s` after `phonon`).
+        // Ident-boundary so `microphonons exceed` / `metaphonons exceed` / `subphonon exceed` do not
+        // false-positive; `prephonon exceed` and `rephonon exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `phonons exceed` rate
+        // limits, per-branch / thermal-occupancy caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "phonons exceed")
+            || contains_phrase_after_ident_boundary(&lower, "phonons exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "phonon exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "exciton(s) exceed(s/ed)" (FEAT-D418). Parallel to `phonons exceed` /
+        // `phonon exceed`. `exciton exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `excitons exceed` (the `s` after `exciton`).
+        // Ident-boundary so `microexcitons exceed` / `metaexcitons exceed` / `subexciton exceed` do not
+        // false-positive; `preexciton exceed` and `reexciton exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `excitons exceed` rate
+        // limits, per-well / occupancy caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "excitons exceed")
+            || contains_phrase_after_ident_boundary(&lower, "excitons exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "exciton exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
@@ -3970,6 +4040,171 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "superboson exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: leptons exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: leptons exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: lepton exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: lepton exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: leptons exceed per-target rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: leptons exceeded daily family cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: lepton exceed max weak vertices on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microleptons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaleptons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: sublepton exceed coupling budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superlepton exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: hadrons exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: hadrons exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: hadron exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: hadron exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: hadrons exceed per-target rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: hadrons exceeded daily jet-multiplicity cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: hadron exceed max fragmentation on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microhadrons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metahadrons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subhadron exceed coupling budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superhadron exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: photons exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: photons exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: photon exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: photon exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: photons exceed per-target rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: photons exceeded daily fluence cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: photon exceed max beam occupancy on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microphotons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaphotons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subphoton exceed coupling budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superphoton exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: phonons exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: phonons exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: phonon exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: phonon exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: phonons exceed per-target rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: phonons exceeded daily branch-occupancy cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: phonon exceed max mode occupancy on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microphonons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaphonons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subphonon exceed coupling budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superphonon exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: excitons exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: excitons exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: exciton exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: exciton exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: excitons exceed per-target rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: excitons exceeded daily well-occupancy cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: exciton exceed max pair density on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microexcitons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaexcitons exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subexciton exceed coupling budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superexciton exceed the model's context window on this request"
         ));
         assert!(is_context_overflow_error(
             "API: bytes exceed the model's context window on this request"
