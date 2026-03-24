@@ -259,6 +259,9 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `logprobs exceed` does not match inside `micrologprobs exceed` / `metalogprobs exceed`, and
 /// `logprob exceed` does not match inside `sublogprob exceed` (left-boundary rejects `prelogprob exceed`
 /// and `relogprob exceed`);
+/// `arrays exceed` does not match inside `microarrays exceed` / `metaarrays exceed`, and
+/// `array exceed` does not match inside `subarray exceed` (left-boundary rejects `prearray exceed`
+/// and `rearray exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -314,7 +317,15 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `context budget`, `conversation` + `too long` + `context`, `too long`/`too large`/fit phrasing + `context`,
 /// `context buffer`/`configured context`/`context capacity`/`allocated context`, `truncated` + context slots,
 /// `kv cache`/`prefill` + `context`, etc. use the same left-boundary rule so `microcontext` alone does not
-/// satisfy a bare `context` conjunct (FEAT-D388).
+/// satisfy a bare `context` conjunct (FEAT-D388). The FEAT-D295 explicit context-slot OR list
+/// (`context window`, `max context`, `model's context`, etc.) and the loose `total tokens exceed` /
+/// token-arm slot disjuncts use the same boundary rule so `microcontext window` does not satisfy the slot
+/// (FEAT-D389). Bounded JSON-key arms use ident-boundary on overflow verbs (`exceed`, `overflow`, …)
+/// so `microexceed` inside a compound does not satisfy the second conjunct; word-order arms for
+/// `maximum context` / `max context` / `maximum allowed context` / `context length limit` and
+/// FEAT-D309–D319 `calls`/`batches`/…/`cells` exceed phrases use the same rule (FEAT-D390).
+/// The FEAT-D295-guarded `message`/`messages`/`input`/`inputs` … `too long` phrases use the same
+/// boundary rule so that conjunct does not use plain substring `contains` on those phrases (FEAT-D391).
 fn contains_phrase_after_ident_boundary(haystack: &str, phrase: &str) -> bool {
     fn ident_continue(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_'
@@ -405,6 +416,34 @@ fn contains_tokens_exceed_subphrase_at_boundary(haystack: &str, phrase: &str) ->
     false
 }
 
+/// Explicit context-slot phrases for FEAT-D295-style guards (not bare `model`).
+/// Ident-boundary on each phrase so `microcontext window` / `micromaximum context` do not satisfy
+/// the slot (FEAT-D389).
+fn explicit_context_slot_after_ident_boundary(lower: &str) -> bool {
+    contains_phrase_after_ident_boundary(lower, "context window")
+        || contains_phrase_after_ident_boundary(lower, "context length")
+        || contains_phrase_after_ident_boundary(lower, "context limit")
+        || contains_phrase_after_ident_boundary(lower, "context size")
+        || contains_phrase_after_ident_boundary(lower, "max context")
+        || contains_phrase_after_ident_boundary(lower, "maximum context")
+        || contains_phrase_after_ident_boundary(lower, "available context")
+        || contains_phrase_after_ident_boundary(lower, "model's context")
+}
+
+/// Loose `context` / model-related slot under `total tokens exceed` / token arms (FEAT-D389).
+fn token_overflow_slot_conjunct_after_ident_boundary(lower: &str, include_window: bool) -> bool {
+    let base = contains_phrase_after_ident_boundary(lower, "context")
+        || contains_phrase_after_ident_boundary(lower, "model")
+        || contains_phrase_after_ident_boundary(lower, "maximum")
+        || contains_phrase_after_ident_boundary(lower, "sequence")
+        || contains_phrase_after_ident_boundary(lower, "n_ctx");
+    if include_window {
+        base || contains_phrase_after_ident_boundary(lower, "window")
+    } else {
+        base
+    }
+}
+
 /// Check whether an Ollama error string indicates a context-window overflow.
 pub(crate) fn is_context_overflow_error(err: &str) -> bool {
     let lower = err.to_lowercase();
@@ -482,24 +521,20 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || (contains_phrase_after_ident_boundary(&lower, "greater than")
             && contains_phrase_after_ident_boundary(&lower, "context"))
         || (contains_bounded_token(&lower, "n_ctx")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too small")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too small")))
         || (contains_bounded_token(&lower, "num_ctx")
-            && (lower.contains("exceed")
-                || lower.contains("larger")
-                || lower.contains("greater")
-                || lower.contains("longer")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")
+                || contains_phrase_after_ident_boundary(&lower, "longer")))
         || contains_phrase_after_ident_boundary(&lower, "exceeds maximum sequence length")
         || contains_phrase_after_ident_boundary(&lower, "maximum sequence length exceeded")
         || contains_phrase_after_ident_boundary(&lower, "sequence length exceeds")
         || contains_phrase_after_ident_boundary(&lower, "input sequence is too long")
         || (contains_phrase_after_ident_boundary(&lower, "total tokens exceed")
-            && (lower.contains("context")
-                || lower.contains("model")
-                || lower.contains("maximum")
-                || lower.contains("sequence")
-                || lower.contains("n_ctx")))
+            && token_overflow_slot_conjunct_after_ident_boundary(&lower, false))
         || contains_phrase_after_ident_boundary(&lower, "prompt length exceeds")
         || (contains_phrase_after_ident_boundary(&lower, "too many tokens")
             && contains_phrase_after_ident_boundary(&lower, "context"))
@@ -513,12 +548,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || contains_phrase_after_ident_boundary(&lower, "full")))
         || ((contains_prompt_tokens_exceed_after_boundary_excluding_compound_total(&lower)
             || contains_phrase_after_ident_boundary(&lower, "input tokens exceed"))
-            && (lower.contains("context")
-                || lower.contains("model")
-                || lower.contains("maximum")
-                || lower.contains("sequence")
-                || lower.contains("n_ctx")
-                || lower.contains("window")))
+            && token_overflow_slot_conjunct_after_ident_boundary(&lower, true))
         || contains_phrase_after_ident_boundary(&lower, "exceeds the configured context")
         || (contains_phrase_after_ident_boundary(&lower, "configured context")
             && (contains_phrase_after_ident_boundary(&lower, "overflow")
@@ -563,57 +593,57 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || contains_phrase_after_ident_boundary(&lower, "overflow")
                 || contains_phrase_after_ident_boundary(&lower, "too long")))
         || (contains_bounded_token(&lower, "max_context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
         || (contains_bounded_token(&lower, "context_length")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")))
         // camelCase JSON / gateway errors (to_lowercase → "maxcontext" / "contextlength")
         || (contains_bounded_token(&lower, "maxcontext")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
         || (contains_bounded_token(&lower, "contextlength")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")))
         || (contains_bounded_token(&lower, "n_ctx_per_seq")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")
-                || lower.contains("too small")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")
+                || contains_phrase_after_ident_boundary(&lower, "too small")))
         // snake_case JSON / config (distinct from prose "context window")
         || (contains_bounded_token(&lower, "context_window")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")
-                || lower.contains("too small")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")
+                || contains_phrase_after_ident_boundary(&lower, "too small")))
         || (contains_bounded_token(&lower, "context_limit")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")))
         || (contains_bounded_token(&lower, "contextlimit")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")))
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")))
         || contains_phrase_after_ident_boundary(&lower, "exceed the maximum context")
         || contains_phrase_after_ident_boundary(&lower, "exceeded maximum context")
         || contains_phrase_after_ident_boundary(&lower, "maximum context is exceeded")
@@ -621,42 +651,42 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || contains_phrase_after_ident_boundary(&lower, "exceeds the context token limit")
         || contains_phrase_after_ident_boundary(&lower, "exceeded the context token limit")
         // Word order / filler between "exceed" and "maximum … context" (e.g. "model", "allowed")
-        || (lower.contains("maximum context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
-        || (lower.contains("max context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
+        || (contains_phrase_after_ident_boundary(&lower, "maximum context")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
+        || (contains_phrase_after_ident_boundary(&lower, "max context")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
         // "allowed" between max/imum and context breaks contiguous `maximum context` / `max context` substrings.
-        || (lower.contains("maximum allowed context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
-        || (lower.contains("max allowed context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
-        || (lower.contains("context length limit")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")
-                || lower.contains("too large")
-                || lower.contains("larger")
-                || lower.contains("greater")))
+        || (contains_phrase_after_ident_boundary(&lower, "maximum allowed context")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
+        || (contains_phrase_after_ident_boundary(&lower, "max allowed context")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
+        || (contains_phrase_after_ident_boundary(&lower, "context length limit")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")
+                || contains_phrase_after_ident_boundary(&lower, "too large")
+                || contains_phrase_after_ident_boundary(&lower, "larger")
+                || contains_phrase_after_ident_boundary(&lower, "greater")))
         // OpenAI-style / JSON `code` values and similar (bounded so `old_context_length_exceeded` etc. do not match)
         || contains_bounded_token(&lower, "context_budget_exceeded")
         || contains_bounded_token(&lower, "context_length_exceeded")
@@ -676,28 +706,14 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         // `messages exceed` at a boundary; parallel to `requests exceed` (FEAT-D353).
         || ((contains_phrase_after_ident_boundary(&lower, "messages exceed")
             || contains_phrase_after_ident_boundary(&lower, "messages exceeded"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Singular "message exceed(s/ed)" (parallel to plural `messages exceed`, FEAT-D298).
         // `message exceed` matches present/past via `exceed` prefix of `exceeds` / `exceeded`.
         // Does not substring-match plural `messages exceed` (the `s` after `message` breaks
         // `message` + space + `exceed`). Ident-boundary (FEAT-D358): `submessage exceed` /
         // `micromessage exceeds` do not false-positive.
         || (contains_phrase_after_ident_boundary(&lower, "message exceed")
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural "inputs exceed …" (present / past). Wording like `inputs exceed the context window`
         // does not contain the substring `exceeds the context window` (bare `exceed` before the slot).
         // Same context-slot guard as `messages exceed` (FEAT-D295).
@@ -705,27 +721,13 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         // `inputs exceed` at a boundary; parallel to `messages exceed` (FEAT-D358).
         || ((contains_phrase_after_ident_boundary(&lower, "inputs exceed")
             || contains_phrase_after_ident_boundary(&lower, "inputs exceeded"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Singular "input exceed(s/ed)" (parallel to plural `inputs exceed`, FEAT-D300).
         // `input exceed` matches present/past via `exceed` prefix of `exceeds` / `exceeded`.
         // Does not substring-match `inputs exceed` (letter `s` between `input` and `exceed`).
         // Ident-boundary (FEAT-D375): `subinput exceed` / `preinput exceed` / `reinput exceed` likewise.
         || (contains_phrase_after_ident_boundary(&lower, "input exceed")
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "content(s) exceed(s/ed)" (FEAT-D303; ident-boundary FEAT-D379). Parallel
         // to `inputs exceed` / `outputs exceed`. `content exceed` matches present/past via `exceed`
         // prefix of `exceeds` / `exceeded` and does not substring-match plural `contents exceed` (the
@@ -736,14 +738,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "contents exceed")
             || contains_phrase_after_ident_boundary(&lower, "contents exceeded")
             || contains_phrase_after_ident_boundary(&lower, "content exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "output(s) exceed(s/ed)" (FEAT-D305; ident-boundary FEAT-D376). Parallel
         // to `inputs exceed` / `content exceed`. `output exceed` matches present/past via `exceed`
         // prefix of `exceeds` / `exceeded` and does not substring-match `outputs exceed` (the `s`
@@ -753,14 +748,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "outputs exceed")
             || contains_phrase_after_ident_boundary(&lower, "outputs exceeded")
             || contains_phrase_after_ident_boundary(&lower, "output exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "response(s) exceed(s/ed)" (FEAT-D306; ident-boundary FEAT-D378). Parallel
         // to `outputs exceed` / `inputs exceed`. `response exceed` matches present/past via `exceed`
         // prefix of `exceeds` / `exceeded` and does not substring-match `responses exceed` (the `s`
@@ -770,14 +758,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "responses exceed")
             || contains_phrase_after_ident_boundary(&lower, "responses exceeded")
             || contains_phrase_after_ident_boundary(&lower, "response exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "request(s) exceed(s/ed)" (FEAT-D307; ident-boundary FEAT-D353). Parallel
         // to `responses exceed` / `inputs exceed`. `request exceed` matches present/past via `exceed`
         // prefix of `exceeds` / `exceeded` and does not substring-match `requests exceed` (the `s`
@@ -786,14 +767,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "requests exceed")
             || contains_phrase_after_ident_boundary(&lower, "requests exceeded")
             || contains_phrase_after_ident_boundary(&lower, "request exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "quer(y/ies) exceed(s/ed)" (FEAT-D308; ident-boundary FEAT-D380). Parallel
         // to `requests exceed` / `inputs exceed`. `query exceed` matches present/past via `exceed`
         // prefix of `exceeds` / `exceeded` and does not substring-match plural `queries exceed` (no
@@ -803,84 +777,42 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "queries exceed")
             || contains_phrase_after_ident_boundary(&lower, "queries exceeded")
             || contains_phrase_after_ident_boundary(&lower, "query exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "call(s) exceed(s/ed)" (FEAT-D309). Parallel to `queries exceed` /
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "call(s) exceed(s/ed)" (FEAT-D309; ident-boundary FEAT-D390). Parallel to `queries exceed` /
         // `requests exceed`. `call exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `calls exceed` (the `s` after `call`).
-        || ((lower.contains("calls exceed")
-            || lower.contains("calls exceeded")
-            || lower.contains("call exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "batch(es) exceed(s/ed)" (FEAT-D310). Parallel to `calls exceed` /
+        || ((contains_phrase_after_ident_boundary(&lower, "calls exceed")
+            || contains_phrase_after_ident_boundary(&lower, "calls exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "call exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "batch(es) exceed(s/ed)" (FEAT-D310; ident-boundary FEAT-D390). Parallel to `calls exceed` /
         // `queries exceed`. `batch exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `batches exceed` (the `es` after `batch`).
-        || ((lower.contains("batches exceed")
-            || lower.contains("batches exceeded")
-            || lower.contains("batch exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+        || ((contains_phrase_after_ident_boundary(&lower, "batches exceed")
+            || contains_phrase_after_ident_boundary(&lower, "batches exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "batch exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "token(s) exceed(s/ed)" (FEAT-D311; FEAT-D377: ident-boundary + skip when
         // the prior token is `prompt` / `input` / `total` so `micrototal prompt tokens exceed` is not
         // matched here via embedded `tokens exceed`). Parallel to `batches exceed` / `batch exceed`.
         || ((contains_tokens_exceed_subphrase_at_boundary(&lower, "tokens exceed")
             || contains_tokens_exceed_subphrase_at_boundary(&lower, "tokens exceeded")
             || contains_phrase_after_ident_boundary(&lower, "token exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "item(s) exceed(s/ed)" (FEAT-D312). Parallel to `tokens exceed` /
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "item(s) exceed(s/ed)" (FEAT-D312; ident-boundary FEAT-D390). Parallel to `tokens exceed` /
         // `token exceed`. `item exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `items exceed` (the `s` after `item`).
-        || ((lower.contains("items exceed")
-            || lower.contains("items exceeded")
-            || lower.contains("item exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "entr(y/ies) exceed(s/ed)" (FEAT-D313). Parallel to `items exceed` /
+        || ((contains_phrase_after_ident_boundary(&lower, "items exceed")
+            || contains_phrase_after_ident_boundary(&lower, "items exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "item exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "entr(y/ies) exceed(s/ed)" (FEAT-D313; ident-boundary FEAT-D390). Parallel to `items exceed` /
         // `item exceed`. `entry exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `entries exceed` (`entr` + `ies` vs `entry`).
-        || ((lower.contains("entries exceed")
-            || lower.contains("entries exceeded")
-            || lower.contains("entry exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+        || ((contains_phrase_after_ident_boundary(&lower, "entries exceed")
+            || contains_phrase_after_ident_boundary(&lower, "entries exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "entry exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "record(s) exceed(s/ed)" (FEAT-D314; ident-boundary FEAT-D351). Parallel
         // to `entries exceed` / `entry exceed`. `record exceed` matches present/past via `exceed`
         // prefix of `exceeds` / `exceeded` and does not substring-match plural `records exceed`
@@ -890,84 +822,42 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "records exceed")
             || contains_phrase_after_ident_boundary(&lower, "records exceeded")
             || contains_phrase_after_ident_boundary(&lower, "record exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "chunk(s) exceed(s/ed)" (FEAT-D315). Parallel to `records exceed` /
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "chunk(s) exceed(s/ed)" (FEAT-D315; ident-boundary FEAT-D390). Parallel to `records exceed` /
         // `record exceed`. `chunk exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `chunks exceed` (the `s` after `chunk`).
-        || ((lower.contains("chunks exceed")
-            || lower.contains("chunks exceeded")
-            || lower.contains("chunk exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "document(s) exceed(s/ed)" (FEAT-D316). Parallel to `chunks exceed` /
+        || ((contains_phrase_after_ident_boundary(&lower, "chunks exceed")
+            || contains_phrase_after_ident_boundary(&lower, "chunks exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "chunk exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "document(s) exceed(s/ed)" (FEAT-D316; ident-boundary FEAT-D390). Parallel to `chunks exceed` /
         // `chunk exceed`. `document exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `documents exceed` (the `s` after `document`).
-        || ((lower.contains("documents exceed")
-            || lower.contains("documents exceeded")
-            || lower.contains("document exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "file(s) exceed(s/ed)" (FEAT-D317). Parallel to `documents exceed` /
+        || ((contains_phrase_after_ident_boundary(&lower, "documents exceed")
+            || contains_phrase_after_ident_boundary(&lower, "documents exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "document exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "file(s) exceed(s/ed)" (FEAT-D317; ident-boundary FEAT-D390). Parallel to `documents exceed` /
         // `document exceed`. `file exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `files exceed` (the `s` after `file`).
-        || ((lower.contains("files exceed")
-            || lower.contains("files exceeded")
-            || lower.contains("file exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "line(s) exceed(s/ed)" (FEAT-D318). Parallel to `files exceed` /
+        || ((contains_phrase_after_ident_boundary(&lower, "files exceed")
+            || contains_phrase_after_ident_boundary(&lower, "files exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "file exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "line(s) exceed(s/ed)" (FEAT-D318; ident-boundary FEAT-D390). Parallel to `files exceed` /
         // `file exceed`. `line exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `lines exceed` (the `s` after `line`).
-        || ((lower.contains("lines exceed")
-            || lower.contains("lines exceeded")
-            || lower.contains("line exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
-        // Plural / singular "cell(s) exceed(s/ed)" (FEAT-D319). Parallel to `lines exceed` /
+        || ((contains_phrase_after_ident_boundary(&lower, "lines exceed")
+            || contains_phrase_after_ident_boundary(&lower, "lines exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "line exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "cell(s) exceed(s/ed)" (FEAT-D319; ident-boundary FEAT-D390). Parallel to `lines exceed` /
         // `line exceed`. `cell exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `cells exceed` (the `s` after `cell`).
-        || ((lower.contains("cells exceed")
-            || lower.contains("cells exceeded")
-            || lower.contains("cell exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+        || ((contains_phrase_after_ident_boundary(&lower, "cells exceed")
+            || contains_phrase_after_ident_boundary(&lower, "cells exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "cell exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "row(s) exceed(s/ed)" (FEAT-D320). Parallel to `cells exceed` /
         // `cell exceed`. `row exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `rows exceed` (the `s` after `row`).
@@ -976,14 +866,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "rows exceed")
             || contains_phrase_after_ident_boundary(&lower, "rows exceeded")
             || contains_phrase_after_ident_boundary(&lower, "row exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "column(s) exceed(s/ed)" (FEAT-D321). Parallel to `rows exceed` /
         // `row exceed`. `column exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `columns exceed` (the `s` after `column`).
@@ -991,14 +874,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "columns exceed")
             || contains_phrase_after_ident_boundary(&lower, "columns exceeded")
             || contains_phrase_after_ident_boundary(&lower, "column exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "table(s) exceed(s/ed)" (FEAT-D322). Parallel to `columns exceed` /
         // `column exceed`. `table exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `tables exceed` (the `s` after `table`).
@@ -1006,14 +882,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "tables exceed")
             || contains_phrase_after_ident_boundary(&lower, "tables exceeded")
             || contains_phrase_after_ident_boundary(&lower, "table exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "block(s) exceed(s/ed)" (FEAT-D323). Parallel to `tables exceed` /
         // `table exceed`. `block exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `blocks exceed` (the `s` after `block`).
@@ -1021,14 +890,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "blocks exceed")
             || contains_phrase_after_ident_boundary(&lower, "blocks exceeded")
             || contains_phrase_after_ident_boundary(&lower, "block exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "segment(s) exceed(s/ed)" (FEAT-D324). Parallel to `blocks exceed` /
         // `block exceed`. `segment exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `segments exceed` (the `s` after `segment`).
@@ -1036,14 +898,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "segments exceed")
             || contains_phrase_after_ident_boundary(&lower, "segments exceeded")
             || contains_phrase_after_ident_boundary(&lower, "segment exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "section(s) exceed(s/ed)" (FEAT-D325). Parallel to `segments exceed` /
         // `segment exceed`. `section exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `sections exceed` (the `s` after `section`).
@@ -1051,14 +906,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "sections exceed")
             || contains_phrase_after_ident_boundary(&lower, "sections exceeded")
             || contains_phrase_after_ident_boundary(&lower, "section exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "paragraph(s) exceed(s/ed)" (FEAT-D326). Parallel to `sections exceed` /
         // `section exceed`. `paragraph exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `paragraphs exceed` (the `s` after `paragraph`).
@@ -1066,14 +914,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "paragraphs exceed")
             || contains_phrase_after_ident_boundary(&lower, "paragraphs exceeded")
             || contains_phrase_after_ident_boundary(&lower, "paragraph exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "sentence(s) exceed(s/ed)" (FEAT-D327). Parallel to `paragraphs exceed` /
         // `paragraph exceed`. `sentence exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `sentences exceed` (the `s` after `sentence`).
@@ -1081,14 +922,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "sentences exceed")
             || contains_phrase_after_ident_boundary(&lower, "sentences exceeded")
             || contains_phrase_after_ident_boundary(&lower, "sentence exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "word(s) exceed(s/ed)" (FEAT-D328). Parallel to `sentences exceed` /
         // `sentence exceed`. `word exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `words exceed` (the `s` after `word`).
@@ -1096,14 +930,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "words exceed")
             || contains_phrase_after_ident_boundary(&lower, "words exceeded")
             || contains_phrase_after_ident_boundary(&lower, "word exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "character(s) exceed(s/ed)" (FEAT-D329). Parallel to `words exceed` /
         // `word exceed`. `character exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `characters exceed` (the `s` after `character`).
@@ -1112,14 +939,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "characters exceed")
             || contains_phrase_after_ident_boundary(&lower, "characters exceeded")
             || contains_phrase_after_ident_boundary(&lower, "character exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "byte(s) exceed(s/ed)" (FEAT-D330). Parallel to `characters exceed` /
         // `character exceed`. `byte exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `bytes exceed` (the `s` after `byte`).
@@ -1127,14 +947,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "bytes exceed")
             || contains_phrase_after_ident_boundary(&lower, "bytes exceeded")
             || contains_phrase_after_ident_boundary(&lower, "byte exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "bit(s) exceed(s/ed)" (FEAT-D331). Parallel to `bytes exceed` /
         // `byte exceed`. `bit exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `bits exceed` (the `s` after `bit`).
@@ -1143,14 +956,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "bits exceed")
             || contains_phrase_after_ident_boundary(&lower, "bits exceeded")
             || contains_phrase_after_ident_boundary(&lower, "bit exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "field(s) exceed(s/ed)" (FEAT-D332). Parallel to `bits exceed` /
         // `bit exceed`. `field exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `fields exceed` (the `s` after `field`).
@@ -1159,14 +965,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "fields exceed")
             || contains_phrase_after_ident_boundary(&lower, "fields exceeded")
             || contains_phrase_after_ident_boundary(&lower, "field exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "value(s) exceed(s/ed)" (FEAT-D333). Parallel to `fields exceed` /
         // `field exceed`. `value exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `values exceed` (the `s` after `value`).
@@ -1175,14 +974,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "values exceed")
             || contains_phrase_after_ident_boundary(&lower, "values exceeded")
             || contains_phrase_after_ident_boundary(&lower, "value exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "key(s) exceed(s/ed)" (FEAT-D334). Parallel to `values exceed` /
         // `value exceed`. `key exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `keys exceed` (the `s` after `key`).
@@ -1191,14 +983,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "keys exceed")
             || contains_phrase_after_ident_boundary(&lower, "keys exceeded")
             || contains_phrase_after_ident_boundary(&lower, "key exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "propert(y/ies) exceed(s/ed)" (FEAT-D335). Parallel to `keys exceed` /
         // `key exceed`. `property exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `properties exceed` (the `s` after
@@ -1207,14 +992,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "properties exceed")
             || contains_phrase_after_ident_boundary(&lower, "properties exceeded")
             || contains_phrase_after_ident_boundary(&lower, "property exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "schema(s) exceed(s/ed)" (FEAT-D336). Parallel to `properties exceed` /
         // `property exceed`. `schema exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `schemas exceed` (the `s` after `schema`).
@@ -1223,14 +1001,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "schemas exceed")
             || contains_phrase_after_ident_boundary(&lower, "schemas exceeded")
             || contains_phrase_after_ident_boundary(&lower, "schema exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "parameter(s) exceed(s/ed)" (FEAT-D337). Parallel to `schemas exceed` /
         // `schema exceed`. `parameter exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `parameters exceed` (the `s` after
@@ -1239,14 +1010,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "parameters exceed")
             || contains_phrase_after_ident_boundary(&lower, "parameters exceeded")
             || contains_phrase_after_ident_boundary(&lower, "parameter exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "argument(s) exceed(s/ed)" (FEAT-D338). Parallel to `parameters exceed` /
         // `parameter exceed`. `argument exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `arguments exceed` (the `s` after
@@ -1255,14 +1019,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "arguments exceed")
             || contains_phrase_after_ident_boundary(&lower, "arguments exceeded")
             || contains_phrase_after_ident_boundary(&lower, "argument exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "variable(s) exceed(s/ed)" (FEAT-D339). Parallel to `arguments exceed` /
         // `argument exceed`. `variable exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `variables exceed` (the `s` after
@@ -1271,14 +1028,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "variables exceed")
             || contains_phrase_after_ident_boundary(&lower, "variables exceeded")
             || contains_phrase_after_ident_boundary(&lower, "variable exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "header(s) exceed(s/ed)" (FEAT-D340). Parallel to `variables exceed` /
         // `variable exceed`. `header exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `headers exceed` (the `s` after `header`).
@@ -1287,14 +1037,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "headers exceed")
             || contains_phrase_after_ident_boundary(&lower, "headers exceeded")
             || contains_phrase_after_ident_boundary(&lower, "header exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "cookie(s) exceed(s/ed)" (FEAT-D341). Parallel to `headers exceed` /
         // `header exceed`. `cookie exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `cookies exceed` (the `s` after `cookie`).
@@ -1303,14 +1046,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "cookies exceed")
             || contains_phrase_after_ident_boundary(&lower, "cookies exceeded")
             || contains_phrase_after_ident_boundary(&lower, "cookie exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "bod(y/ies) exceed(s/ed)" (FEAT-D342). Parallel to `cookies exceed` /
         // `cookie exceed`. `body exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `bodies exceed` (the `s` after `body`).
@@ -1319,14 +1055,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "bodies exceed")
             || contains_phrase_after_ident_boundary(&lower, "bodies exceeded")
             || contains_phrase_after_ident_boundary(&lower, "body exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "part(s) exceed(s/ed)" (FEAT-D343). Parallel to `bodies exceed` /
         // `body exceed`. `part exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `parts exceed` (the `s` after `part`).
@@ -1335,14 +1064,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "parts exceed")
             || contains_phrase_after_ident_boundary(&lower, "parts exceeded")
             || contains_phrase_after_ident_boundary(&lower, "part exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "piece(s) exceed(s/ed)" (FEAT-D344). Parallel to `parts exceed` /
         // `part exceed`. `piece exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `pieces exceed` (the `s` after `piece`).
@@ -1351,14 +1073,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "pieces exceed")
             || contains_phrase_after_ident_boundary(&lower, "pieces exceeded")
             || contains_phrase_after_ident_boundary(&lower, "piece exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "shard(s) exceed(s/ed)" (FEAT-D345). Parallel to `pieces exceed` /
         // `piece exceed`. `shard exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `shards exceed` (the `s` after `shard`).
@@ -1367,14 +1082,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "shards exceed")
             || contains_phrase_after_ident_boundary(&lower, "shards exceeded")
             || contains_phrase_after_ident_boundary(&lower, "shard exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "fragment(s) exceed(s/ed)" (FEAT-D346). Parallel to `shards exceed` /
         // `shard exceed`. `fragment exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `fragments exceed` (the `s` after `fragment`).
@@ -1383,14 +1091,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "fragments exceed")
             || contains_phrase_after_ident_boundary(&lower, "fragments exceeded")
             || contains_phrase_after_ident_boundary(&lower, "fragment exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "packet(s) exceed(s/ed)" (FEAT-D347). Parallel to `fragments exceed` /
         // `fragment exceed`. `packet exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `packets exceed` (the `s` after `packet`).
@@ -1399,14 +1100,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "packets exceed")
             || contains_phrase_after_ident_boundary(&lower, "packets exceeded")
             || contains_phrase_after_ident_boundary(&lower, "packet exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "frame(s) exceed(s/ed)" (FEAT-D348). Parallel to `packets exceed` /
         // `packet exceed`. `frame exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `frames exceed` (the `s` after `frame`).
@@ -1415,14 +1109,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "frames exceed")
             || contains_phrase_after_ident_boundary(&lower, "frames exceeded")
             || contains_phrase_after_ident_boundary(&lower, "frame exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "sample(s) exceed(s/ed)" (FEAT-D349). Parallel to `frames exceed` /
         // `frame exceed`. `sample exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `samples exceed` (the `s` after `sample`).
@@ -1431,14 +1118,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "samples exceed")
             || contains_phrase_after_ident_boundary(&lower, "samples exceeded")
             || contains_phrase_after_ident_boundary(&lower, "sample exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "observation(s) exceed(s/ed)" (FEAT-D350). Parallel to `samples exceed` /
         // `sample exceed`. `observation exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `observations exceed` (the `s` after `observation`).
@@ -1447,14 +1127,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "observations exceed")
             || contains_phrase_after_ident_boundary(&lower, "observations exceeded")
             || contains_phrase_after_ident_boundary(&lower, "observation exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "event(s) exceed(s/ed)" (FEAT-D352). Parallel to `observations exceed` /
         // `observation exceed`. `event exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `events exceed` (the `s` after `event`).
@@ -1464,14 +1137,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "events exceed")
             || contains_phrase_after_ident_boundary(&lower, "events exceeded")
             || contains_phrase_after_ident_boundary(&lower, "event exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "trace(s) exceed(s/ed)" (FEAT-D354). Parallel to `events exceed` /
         // `event exceed`. `trace exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `traces exceed` (the `s` after `trace`).
@@ -1480,14 +1146,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "traces exceed")
             || contains_phrase_after_ident_boundary(&lower, "traces exceeded")
             || contains_phrase_after_ident_boundary(&lower, "trace exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "span(s) exceed(s/ed)" (FEAT-D355). Parallel to `traces exceed` /
         // `trace exceed`. `span exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `spans exceed` (the `s` after `span`).
@@ -1496,14 +1155,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "spans exceed")
             || contains_phrase_after_ident_boundary(&lower, "spans exceeded")
             || contains_phrase_after_ident_boundary(&lower, "span exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "attribute(s) exceed(s/ed)" (FEAT-D356). Parallel to `spans exceed` /
         // `span exceed`. `attribute exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `attributes exceed` (the `s` after
@@ -1513,14 +1165,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "attributes exceed")
             || contains_phrase_after_ident_boundary(&lower, "attributes exceeded")
             || contains_phrase_after_ident_boundary(&lower, "attribute exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "link(s) exceed(s/ed)" (FEAT-D357). Parallel to `attributes exceed` /
         // `attribute exceed`. `link exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `links exceed` (the `s` after `link`).
@@ -1529,14 +1174,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "links exceed")
             || contains_phrase_after_ident_boundary(&lower, "links exceeded")
             || contains_phrase_after_ident_boundary(&lower, "link exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "scope(s) exceed(s/ed)" (FEAT-D359). Parallel to `links exceed` /
         // `link exceed`. `scope exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `scopes exceed` (the `s` after `scope`).
@@ -1545,14 +1183,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "scopes exceed")
             || contains_phrase_after_ident_boundary(&lower, "scopes exceeded")
             || contains_phrase_after_ident_boundary(&lower, "scope exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "resource(s) exceed(s/ed)" (FEAT-D360). Parallel to `scopes exceed` /
         // `scope exceed`. `resource exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `resources exceed` (the `s` after `resource`).
@@ -1561,14 +1192,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "resources exceed")
             || contains_phrase_after_ident_boundary(&lower, "resources exceeded")
             || contains_phrase_after_ident_boundary(&lower, "resource exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "metric(s) exceed(s/ed)" (FEAT-D361). Parallel to `resources exceed` /
         // `resource exceed`. `metric exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `metrics exceed` (the `s` after `metric`).
@@ -1577,14 +1201,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "metrics exceed")
             || contains_phrase_after_ident_boundary(&lower, "metrics exceeded")
             || contains_phrase_after_ident_boundary(&lower, "metric exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "dimension(s) exceed(s/ed)" (FEAT-D362). Parallel to `metrics exceed` /
         // `metric exceed`. `dimension exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `dimensions exceed` (the `s` after `dimension`).
@@ -1593,14 +1210,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "dimensions exceed")
             || contains_phrase_after_ident_boundary(&lower, "dimensions exceeded")
             || contains_phrase_after_ident_boundary(&lower, "dimension exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "tensor(s) exceed(s/ed)" (FEAT-D363). Parallel to `dimensions exceed` /
         // `dimension exceed`. `tensor exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `tensors exceed` (the `s` after `tensor`).
@@ -1609,14 +1219,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "tensors exceed")
             || contains_phrase_after_ident_boundary(&lower, "tensors exceeded")
             || contains_phrase_after_ident_boundary(&lower, "tensor exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "activation(s) exceed(s/ed)" (FEAT-D364). Parallel to `tensors exceed` /
         // `tensor exceed`. `activation exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `activations exceed` (the `s` after `activation`).
@@ -1625,14 +1228,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "activations exceed")
             || contains_phrase_after_ident_boundary(&lower, "activations exceeded")
             || contains_phrase_after_ident_boundary(&lower, "activation exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "gradient(s) exceed(s/ed)" (FEAT-D365). Parallel to `activations exceed` /
         // `activation exceed`. `gradient exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `gradients exceed` (the `s` after `gradient`).
@@ -1641,14 +1237,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "gradients exceed")
             || contains_phrase_after_ident_boundary(&lower, "gradients exceeded")
             || contains_phrase_after_ident_boundary(&lower, "gradient exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "weight(s) exceed(s/ed)" (FEAT-D366). Parallel to `gradients exceed` /
         // `gradient exceed`. `weight exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `weights exceed` (the `s` after `weight`).
@@ -1657,14 +1246,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "weights exceed")
             || contains_phrase_after_ident_boundary(&lower, "weights exceeded")
             || contains_phrase_after_ident_boundary(&lower, "weight exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "bias(es) exceed(s/ed)" (FEAT-D367). Parallel to `weights exceed` /
         // `weight exceed`. `bias exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `biases exceed` (the `s` after `bias`).
@@ -1673,14 +1255,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "biases exceed")
             || contains_phrase_after_ident_boundary(&lower, "biases exceeded")
             || contains_phrase_after_ident_boundary(&lower, "bias exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "layer(s) exceed(s/ed)" (FEAT-D368). Parallel to `biases exceed` /
         // `bias exceed`. `layer exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `layers exceed` (the `s` after `layer`).
@@ -1689,14 +1264,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "layers exceed")
             || contains_phrase_after_ident_boundary(&lower, "layers exceeded")
             || contains_phrase_after_ident_boundary(&lower, "layer exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "head(s) exceed(s/ed)" (FEAT-D369). Parallel to `layers exceed` /
         // `layer exceed`. `head exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `heads exceed` (the `s` after `head`).
@@ -1705,14 +1273,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "heads exceed")
             || contains_phrase_after_ident_boundary(&lower, "heads exceeded")
             || contains_phrase_after_ident_boundary(&lower, "head exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "position(s) exceed(s/ed)" (FEAT-D370). Parallel to `heads exceed` /
         // `head exceed`. `position exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `positions exceed` (the `s` after
@@ -1722,14 +1283,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "positions exceed")
             || contains_phrase_after_ident_boundary(&lower, "positions exceeded")
             || contains_phrase_after_ident_boundary(&lower, "position exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "embedding(s) exceed(s/ed)" (FEAT-D371). Parallel to `positions exceed` /
         // `position exceed`. `embedding exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `embeddings exceed` (the `s` after
@@ -1739,14 +1293,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "embeddings exceed")
             || contains_phrase_after_ident_boundary(&lower, "embeddings exceeded")
             || contains_phrase_after_ident_boundary(&lower, "embedding exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "logit(s) exceed(s/ed)" (FEAT-D372). Parallel to `embeddings exceed` /
         // `embedding exceed`. `logit exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `logits exceed` (the `s` after
@@ -1756,14 +1303,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "logits exceed")
             || contains_phrase_after_ident_boundary(&lower, "logits exceeded")
             || contains_phrase_after_ident_boundary(&lower, "logit exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "probabilit(y|ies) exceed(s/ed)" (FEAT-D373). Parallel to `logits exceed` /
         // `logit exceed`. `probability exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `probabilities exceed` (no `probability` + space
@@ -1773,14 +1313,7 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "probabilities exceed")
             || contains_phrase_after_ident_boundary(&lower, "probabilities exceeded")
             || contains_phrase_after_ident_boundary(&lower, "probability exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // Plural / singular "logprob(s) exceed(s/ed)" (FEAT-D374). Parallel to `probabilities exceed` /
         // `probability exceed`. `logprob exceed` matches present/past via `exceed` prefix of `exceeds` /
         // `exceeded` and does not substring-match plural `logprobs exceed` (the `s` after
@@ -1790,34 +1323,45 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "logprobs exceed")
             || contains_phrase_after_ident_boundary(&lower, "logprobs exceeded")
             || contains_phrase_after_ident_boundary(&lower, "logprob exceed"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "string(s) exceed(s/ed)" (FEAT-D392). Parallel to `bytes exceed` /
+        // `byte exceed`. `string exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `strings exceed` (the `s` after `string`).
+        // Ident-boundary so `microstrings exceed` / `metastrings exceed` / `substring exceed`
+        // do not false-positive on `strings exceed` / `string exceed` (embedded `string exceed`
+        // in `substring exceed` is rejected: ident continuation before `string`). Same explicit
+        // context-slot phrases as `messages exceed`. Negatives: HTTP `strings exceed` rate limits,
+        // max-string / UTF-8 caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "strings exceed")
+            || contains_phrase_after_ident_boundary(&lower, "strings exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "string exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "array(s) exceed(s/ed)" (FEAT-D393). Parallel to `strings exceed` /
+        // `string exceed`. `array exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `arrays exceed` (the `s` after `array`).
+        // Ident-boundary so `microarrays exceed` / `metaarrays exceed` / `subarray exceed` do not
+        // false-positive; `prearray exceed` and `rearray exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `arrays exceed` rate
+        // limits, max-depth / dimension caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "arrays exceed")
+            || contains_phrase_after_ident_boundary(&lower, "arrays exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "array exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
         // copy does not match non-slot errors. Plural `inputs are/were` (FEAT-D302) parallels
         // `messages are/were` and does not substring-match singular `input is/was`.
-        || ((lower.contains("message is too long")
-            || lower.contains("messages are too long")
-            || lower.contains("message was too long")
-            || lower.contains("messages were too long")
-            || lower.contains("input is too long")
-            || lower.contains("input was too long")
-            || lower.contains("inputs are too long")
-            || lower.contains("inputs were too long"))
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("context size")
-                || lower.contains("max context")
-                || lower.contains("maximum context")
-                || lower.contains("available context")
-                || lower.contains("model's context")))
+        // Ident-boundary (FEAT-D391): `submessage is too long` / `micromessage is too long` /
+        // `subinput is too long` do not embed the phrases at a word boundary.
+        || ((contains_phrase_after_ident_boundary(&lower, "message is too long")
+            || contains_phrase_after_ident_boundary(&lower, "messages are too long")
+            || contains_phrase_after_ident_boundary(&lower, "message was too long")
+            || contains_phrase_after_ident_boundary(&lower, "messages were too long")
+            || contains_phrase_after_ident_boundary(&lower, "input is too long")
+            || contains_phrase_after_ident_boundary(&lower, "input was too long")
+            || contains_phrase_after_ident_boundary(&lower, "inputs are too long")
+            || contains_phrase_after_ident_boundary(&lower, "inputs were too long"))
+            && explicit_context_slot_after_ident_boundary(&lower))
 }
 
 /// Check whether an Ollama error indicates message role/ordering conflict.
@@ -2412,6 +1956,9 @@ mod tests {
             "validation: cannot exceed max allowed context on this endpoint"
         ));
         assert!(is_context_overflow_error(
+            "gateway: shard overflow relative to maximum context on this model"
+        ));
+        assert!(is_context_overflow_error(
             "gateway: context length limit exceeded for the chat completion"
         ));
         assert!(is_context_overflow_error(
@@ -2657,6 +2204,26 @@ mod tests {
         assert!(is_context_overflow_error(
             "gateway: column exceeded the context window"
         ));
+    }
+
+    /// FEAT-D391: the `message`/`inputs` … `too long` + explicit-slot conjunct uses
+    /// `contains_phrase_after_ident_boundary`, not substring `contains`, on each phrase.
+    #[test]
+    fn message_input_too_long_phrases_use_ident_boundary_on_conjunct() {
+        let s1 = "fixture: submessage is too long (pipeline note)";
+        let l1 = s1.to_lowercase();
+        assert!(l1.contains("message is too long"));
+        assert!(!contains_phrase_after_ident_boundary(&l1, "message is too long"));
+
+        let l2 = "micromessage is too long".to_lowercase();
+        assert!(l2.contains("message is too long"));
+        assert!(!contains_phrase_after_ident_boundary(&l2, "message is too long"));
+
+        let l3 = "metainputs are too long".to_lowercase();
+        assert!(l3.contains("inputs are too long"));
+        assert!(!contains_phrase_after_ident_boundary(&l3, "inputs are too long"));
+
+        assert!(!is_context_overflow_error(s1));
     }
 
     #[test]
@@ -2941,6 +2508,15 @@ mod tests {
             "queue: remessage exceed the model's context window on this request"
         ));
         assert!(!is_context_overflow_error(
+            "layout: messages exceed UI bounds (microcontext window width)"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: total tokens exceed microcontext row counter (telemetry)"
+        ));
+        assert!(!is_context_overflow_error(
+            "API: prompt tokens exceed microwindow title length (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
             "config: microinputs exceed the model's context window on this request"
         ));
         assert!(!is_context_overflow_error(
@@ -3056,6 +2632,60 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "HTTP: files exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microcalls exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metabatches exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "routing: subcall exceed header cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "storage: precall exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "queue: recall exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microitems exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaentries exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "routing: subentry exceed header cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microchunks exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metadocuments exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "routing: subdocument exceed header cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microfiles exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metelines exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "routing: subline exceed header cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microcells exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: micromaximum context exceeded in synthetic metric (not ollama)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: micromax context row in dashboard grid (not llm window)"
+        ));
+        assert!(!is_context_overflow_error(
+            "stats: microcontext length limit exceeded in column name (telemetry)"
         ));
         assert!(!is_context_overflow_error(
             "billing: tokens exceeded daily usage cap (no model context configured)"
@@ -3344,6 +2974,66 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "parser: noncharacter exceed token class limit (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: strings exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: strings exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: string exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: string exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: strings exceed per-field length limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: strings exceeded daily ingest cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "codec: string exceed max UTF-8 width on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: substring exceed lexer token budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microstrings exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metastrings exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: arrays exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: arrays exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: array exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: array exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: arrays exceed per-batch element limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: arrays exceeded daily request cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: array exceed max nesting depth on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microarrays exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaarrays exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subarray exceed lexer recursion budget (no model context configured)"
         ));
         assert!(is_context_overflow_error(
             "API: bytes exceed the model's context window on this request"
