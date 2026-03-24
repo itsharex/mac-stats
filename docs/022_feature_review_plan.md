@@ -442,7 +442,7 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 
 ### Closing reviewer smoke test 2026-03-24 (is_context_overflow_error FEAT-D389–D393 + docs)
 
-**Note:** Requested prompt path `004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md` is **not present** in this repo; review followed §9 / prior closing-reviewer blocks in this file.
+**Note:** At the time of this run, `004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md` was **not present**; review followed §9 / prior closing-reviewer blocks in this file. A stub prompt file was added later the same day (see next block).
 
 - [x] `cargo check` — zero errors.
 - [x] `cargo clippy --all-targets -- -D warnings` — zero warnings.
@@ -451,3 +451,14 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] `./target/release/mac_stats -vv` starts; 4 monitors loaded, 8 agents, Ollama connected (qwen3:latest), Discord gateway starting, scheduler 2 entries. After review, **`pkill -f mac_stats` had been used** (stopped all matching processes); **release binary restarted** (`nohup ./target/release/mac_stats -vv`) and PID verified — operator should confirm no unintended downtime if other instances were meant to stay up.
 - [x] Code review (`content_reduction.rs`): `explicit_context_slot_after_ident_boundary()` and `token_overflow_slot_conjunct_after_ident_boundary()` centralize FEAT-D295-style context-slot detection with ident-boundary matching; `is_context_overflow_error` arms updated for FEAT-D389–D390 (slots, JSON keys, word-order anchors, plural/singular resource `exceed` lists), FEAT-D391 (`message`/`input` … `too long` conjuncts), FEAT-D392 (`strings`/`string exceed`), FEAT-D393 (`arrays`/`array exceed`). Large diff is mostly mechanical replacement of `lower.contains` with boundary-aware helpers; `does_not_match_unrelated_errors` / targeted tests extended. User-facing overflow sanitization unchanged in intent.
 - [x] Docs: `CHANGELOG.md` **[0.1.58]** section bullets for D389–D393 align with code; `006-feature-coder/FEATURE-CODER.md` has FEAT-D389–D393 under **Recently closed** and “When empty” high id **FEAT-D393**; `005-openclaw-reviewer/005-openclaw-reviewer.md` independent re-run stamp **2026-03-24T20:12:10Z** (doc-only).
+
+### Closing reviewer smoke test 2026-03-24 (FEAT-D394–D398 objects/elements/nodes/edges/vertices + workflow docs)
+
+- [x] Entry: `004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md` — **present** (stub; points at §9 and latest smoke block in this file).
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy --all-targets -- -D warnings` — zero warnings.
+- [x] `cargo test` — **685** tests pass (`mac_stats` lib crate).
+- [x] `cargo build --release` succeeds (v0.1.58).
+- [x] Brief `./target/release/mac_stats -vv` smoke: 4 monitors loaded, menu bar / status item init, welcome banner; **review process started and stopped this instance** after ~3s — restart mac-stats if you rely on continuous menu-bar / Discord uptime.
+- [x] Code review (`content_reduction.rs`): new `is_context_overflow_error` arms for FEAT-D394–D398 — plural/singular **`objects` / `elements` / `nodes` / `edges` / `vertices`** + **`exceed`/`exceeded`** via `contains_phrase_after_ident_boundary`, gated by `explicit_context_slot_after_ident_boundary` (same FEAT-D295 slot list as prior `* exceed` rows). Unit tests cover positives (API/batch/validation/gateway phrasing with model context), negatives (HTTP caps, billing/schema without slot, `micro*`/`meta*`/`sub*` compounds, **`wedge exceed`**, **`supervertex exceed`**). User-facing overflow sanitization unchanged in intent.
+- [x] Docs: `CHANGELOG.md` **[0.1.58]** **Changed** bullets for D394–D398; agent-workflow line through **FEAT-D398** and 022 checklist **FEAT-D389–D398**; `006-feature-coder/FEATURE-CODER.md` **Recently closed** + **When empty** high id **FEAT-D398**; `005-openclaw-reviewer/005-openclaw-reviewer.md` independent re-run **2026-03-24T20:51:28Z** (doc-only, same OpenClaw `HEAD` `d25b4a2`).

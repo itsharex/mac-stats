@@ -262,6 +262,21 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `arrays exceed` does not match inside `microarrays exceed` / `metaarrays exceed`, and
 /// `array exceed` does not match inside `subarray exceed` (left-boundary rejects `prearray exceed`
 /// and `rearray exceed`);
+/// `objects exceed` does not match inside `microobjects exceed` / `metaobjects exceed`, and
+/// `object exceed` does not match inside `subobject exceed` (left-boundary rejects `preobject exceed`
+/// and `reobject exceed`);
+/// `elements exceed` does not match inside `microelements exceed` / `metaelements exceed`, and
+/// `element exceed` does not match inside `subelement exceed` (left-boundary rejects `preelement exceed`
+/// and `reelement exceed`);
+/// `nodes exceed` does not match inside `micronodes exceed` / `metanodes exceed`, and
+/// `node exceed` does not match inside `subnode exceed` (left-boundary rejects `prenode exceed`
+/// and `renode exceed`);
+/// `edges exceed` does not match inside `microedges exceed` / `metaedges exceed`, and
+/// `edge exceed` does not match inside `subedge exceed` (left-boundary rejects `preedge exceed`
+/// and `reedge exceed`);
+/// `vertices exceed` does not match inside `microvertices exceed` / `metavertices exceed`, and
+/// `vertex exceed` does not match inside `subvertex exceed` (left-boundary rejects `prevertex exceed`
+/// and `revertex exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -1346,6 +1361,62 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "arrays exceed")
             || contains_phrase_after_ident_boundary(&lower, "arrays exceeded")
             || contains_phrase_after_ident_boundary(&lower, "array exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "object(s) exceed(s/ed)" (FEAT-D394). Parallel to `arrays exceed` /
+        // `array exceed`. `object exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `objects exceed` (the `s` after `object`).
+        // Ident-boundary so `microobjects exceed` / `metaobjects exceed` / `subobject exceed` do not
+        // false-positive; `preobject exceed` and `reobject exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `objects exceed` rate
+        // limits, per-object / reference caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "objects exceed")
+            || contains_phrase_after_ident_boundary(&lower, "objects exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "object exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "element(s) exceed(s/ed)" (FEAT-D395). Parallel to `objects exceed` /
+        // `object exceed`. `element exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `elements exceed` (the `s` after `element`).
+        // Ident-boundary so `microelements exceed` / `metaelements exceed` / `subelement exceed` do not
+        // false-positive; `preelement exceed` and `reelement exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `elements exceed` rate
+        // limits, max DOM / tensor element counts, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "elements exceed")
+            || contains_phrase_after_ident_boundary(&lower, "elements exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "element exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "node(s) exceed(s/ed)" (FEAT-D396). Parallel to `elements exceed` /
+        // `element exceed`. `node exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `nodes exceed` (the `s` after `node`).
+        // Ident-boundary so `micronodes exceed` / `metanodes exceed` / `subnode exceed` do not
+        // false-positive; `prenode exceed` and `renode exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `nodes exceed` rate
+        // limits, max graph / DOM node counts, cluster membership caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "nodes exceed")
+            || contains_phrase_after_ident_boundary(&lower, "nodes exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "node exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "edge(s) exceed(s/ed)" (FEAT-D397). Parallel to `nodes exceed` /
+        // `node exceed`. `edge exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `edges exceed` (the `s` after `edge`).
+        // Ident-boundary so `microedges exceed` / `metaedges exceed` / `subedge exceed` do not
+        // false-positive; `preedge exceed` and `reedge exceed` are rejected the same way. Same
+        // explicit context-slot phrases as `messages exceed`. Negatives: HTTP `edges exceed` rate
+        // limits, max graph adjacency / fan-out caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "edges exceed")
+            || contains_phrase_after_ident_boundary(&lower, "edges exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "edge exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "vert(ices|ex) exceed(s/ed)" (FEAT-D398). Parallel to `edges exceed` /
+        // `edge exceed`. `vertex exceed` matches present/past via `exceed` prefix of `exceeds` /
+        // `exceeded` and does not substring-match plural `vertices exceed` (after `vert` the plural
+        // has `ices`, not `ex` + space + `exceed`). Ident-boundary so `microvertices exceed` /
+        // `metavertices exceed` / `subvertex exceed` do not false-positive; `prevertex exceed` and
+        // `revertex exceed` are rejected the same way. Same explicit context-slot phrases as
+        // `messages exceed`. Negatives: HTTP `vertices exceed` rate limits, mesh / graph vertex
+        // caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "vertices exceed")
+            || contains_phrase_after_ident_boundary(&lower, "vertices exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "vertex exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
@@ -3034,6 +3105,162 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "parser: subarray exceed lexer recursion budget (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: objects exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: objects exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: object exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: object exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: objects exceed per-request reference limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: objects exceeded daily create cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: object exceed max property count on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microobjects exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaobjects exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subobject exceed deserialization budget (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: elements exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: elements exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: element exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: element exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: elements exceed per-batch cardinality limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: elements exceeded daily ingest cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: element exceed max tensor rank on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microelements exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaelements exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subelement exceed nesting budget (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: nodes exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: nodes exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: node exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: node exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: nodes exceed per-cluster membership limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: nodes exceeded daily provision cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: node exceed max depth on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micronodes exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metanodes exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subnode exceed traversal budget (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: edges exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: edges exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: edge exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: edge exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: edges exceed per-graph fan-out limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: edges exceeded daily relationship cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: edge exceed max adjacency on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microedges exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaedges exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subedge exceed traversal budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "wedge exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: vertices exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: vertices exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: vertex exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: vertex exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: vertices exceed per-mesh topology limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: vertices exceeded daily geometry cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: vertex exceed max valence on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microvertices exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metavertices exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subvertex exceed fan-out budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supervertex exceed the model's context window on this request"
         ));
         assert!(is_context_overflow_error(
             "API: bytes exceed the model's context window on this request"
