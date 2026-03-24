@@ -296,7 +296,25 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `prompt length exceeds` does not match inside `microprompt length exceeds`;
 /// `prompt too long` / `prompt is too long` do not match inside `microprompt too long` / `microprompt is too long`;
 /// `prompt has more tokens than` does not match inside `microprompt has more tokens than`;
-/// `prompt exceeds the context` does not match inside `microprompt exceeds the context`.
+/// `prompt exceeds the context` does not match inside `microprompt exceeds the context`;
+/// `context overflow` does not match inside `microcontext overflow`;
+/// `context length exceeded` does not match inside `microcontext length exceeded`;
+/// `maximum context length` does not match inside `micromaximum context length`;
+/// `exceeds the model's context window` / `exceeds the context window` / `context window exceeded` /
+/// `exceeded the context limit` (and parallel `model context` / `model's maximum context` phrases)
+/// do not match when the same substrings are embedded after an ASCII ident continuation
+/// (e.g. `microexceeds the model's context window`, `micromodel context exceeded`);
+/// `requested more tokens than` / `fit in the context` / `larger than the context` /
+/// preposition + `context window` phrases (`outside` / `beyond` / `over`, with optional `the`) /
+/// `beyond the context`, and `ran out of context` / `running out of context` do not match when embedded after ident
+/// continuation (e.g. `microrequested more tokens than`, `microfit in the context window`, `microbeyond the context window`);
+/// fixed prose phrases such as `context size exceeded`, `exceeds available context`, `past the context`,
+/// `context exhausted`, `exceed the maximum context`, context token limit wording, and `exceeds this model's context`
+/// likewise do not match when embedded after ident continuation (FEAT-D387). Compound `… && …` arms for
+/// `context budget`, `conversation` + `too long` + `context`, `too long`/`too large`/fit phrasing + `context`,
+/// `context buffer`/`configured context`/`context capacity`/`allocated context`, `truncated` + context slots,
+/// `kv cache`/`prefill` + `context`, etc. use the same left-boundary rule so `microcontext` alone does not
+/// satisfy a bare `context` conjunct (FEAT-D388).
 fn contains_phrase_after_ident_boundary(haystack: &str, phrase: &str) -> bool {
     fn ident_continue(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_'
@@ -390,70 +408,79 @@ fn contains_tokens_exceed_subphrase_at_boundary(haystack: &str, phrase: &str) ->
 /// Check whether an Ollama error string indicates a context-window overflow.
 pub(crate) fn is_context_overflow_error(err: &str) -> bool {
     let lower = err.to_lowercase();
-    lower.contains("context overflow")
+    contains_phrase_after_ident_boundary(&lower, "context overflow")
         || contains_phrase_after_ident_boundary(&lower, "prompt too long")
         || contains_phrase_after_ident_boundary(&lower, "prompt is too long")
-        || lower.contains("context length exceeded")
-        || lower.contains("maximum context length")
-        || lower.contains("exceeds the model's context window")
-        || lower.contains("exceeds the model context")
-        || lower.contains("exceeded the model context")
-        || lower.contains("exceed the model context")
-        || lower.contains("model context exceeded")
-        || lower.contains("model context limit exceeded")
-        || lower.contains("exceeds the model's maximum context")
-        || lower.contains("exceeded the model's maximum context")
-        || lower.contains("exceed the model's maximum context")
-        || lower.contains("exceeds the context window")
-        || lower.contains("context window exceeded")
-        || lower.contains("exceeded the context limit")
-        || lower.contains("exceeds the context limit")
-        || lower.contains("exceed the context limit")
-        || lower.contains("requested more tokens than")
+        || contains_phrase_after_ident_boundary(&lower, "context length exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "maximum context length")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the model's context window")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the model context")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded the model context")
+        || contains_phrase_after_ident_boundary(&lower, "exceed the model context")
+        || contains_phrase_after_ident_boundary(&lower, "model context exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "model context limit exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the model's maximum context")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded the model's maximum context")
+        || contains_phrase_after_ident_boundary(&lower, "exceed the model's maximum context")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the context window")
+        || contains_phrase_after_ident_boundary(&lower, "context window exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded the context limit")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the context limit")
+        || contains_phrase_after_ident_boundary(&lower, "exceed the context limit")
+        || contains_phrase_after_ident_boundary(&lower, "requested more tokens than")
         // Ident-boundary (FEAT-D377): `micrototal prompt tokens exceed` does not embed
         // `total prompt tokens exceed` at a boundary; parallel to `inputs exceed` (FEAT-D375).
         || contains_phrase_after_ident_boundary(&lower, "total prompt tokens exceed")
-        || lower.contains("fit in the context")
-        || lower.contains("larger than the context")
-        || lower.contains("outside the context window")
-        || lower.contains("outside of the context window")
-        || lower.contains("beyond the context window")
-        || lower.contains("over the context window")
+        || contains_phrase_after_ident_boundary(&lower, "fit in the context")
+        || contains_phrase_after_ident_boundary(&lower, "larger than the context")
+        || contains_phrase_after_ident_boundary(&lower, "outside the context window")
+        || contains_phrase_after_ident_boundary(&lower, "outside of the context window")
+        || contains_phrase_after_ident_boundary(&lower, "beyond the context window")
+        || contains_phrase_after_ident_boundary(&lower, "over the context window")
         // Compact wording: no `the` between preposition and `context window` (FEAT-D304;
         // distinct from FEAT-D291's `beyond the` / `over the` / `outside of the` substrings).
-        || lower.contains("beyond context window")
-        || lower.contains("over context window")
-        || lower.contains("outside context window")
-        || lower.contains("outside of context window")
-        || lower.contains("ran out of context")
-        || lower.contains("running out of context")
-        || (lower.contains("context budget")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("full")))
-        || (lower.contains("conversation")
-            && lower.contains("too long")
-            && lower.contains("context"))
-        || lower.contains("context size exceeded")
-        || lower.contains("exceeded context size")
+        || contains_phrase_after_ident_boundary(&lower, "beyond context window")
+        || contains_phrase_after_ident_boundary(&lower, "over context window")
+        || contains_phrase_after_ident_boundary(&lower, "outside context window")
+        || contains_phrase_after_ident_boundary(&lower, "outside of context window")
+        || contains_phrase_after_ident_boundary(&lower, "ran out of context")
+        || contains_phrase_after_ident_boundary(&lower, "running out of context")
+        || (contains_phrase_after_ident_boundary(&lower, "context budget")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "full")))
+        || (contains_phrase_after_ident_boundary(&lower, "conversation")
+            && contains_phrase_after_ident_boundary(&lower, "too long")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || contains_phrase_after_ident_boundary(&lower, "context size exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded context size")
         || contains_phrase_after_ident_boundary(&lower, "prompt has more tokens than")
-        || lower.contains("exceeds available context")
-        || lower.contains("context limit exceeded")
-        || lower.contains("exceeds context length")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds available context")
+        || contains_phrase_after_ident_boundary(&lower, "context limit exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds context length")
         || contains_phrase_after_ident_boundary(&lower, "requested tokens exceed")
-        || (lower.contains("too long") && lower.contains("context"))
-        || (lower.contains("too large") && lower.contains("context"))
-        || (lower.contains("cannot fit") && lower.contains("context"))
-        || (lower.contains("does not fit") && lower.contains("context"))
-        || (lower.contains("doesn't fit") && lower.contains("context"))
-        || (lower.contains("unable to fit") && lower.contains("context"))
-        || (lower.contains("won't fit") && lower.contains("context"))
-        || (lower.contains("longer than") && lower.contains("context"))
-        || lower.contains("exceeds maximum context")
-        || lower.contains("maximum context exceeded")
-        || lower.contains("insufficient context")
+        || (contains_phrase_after_ident_boundary(&lower, "too long")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "too large")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "cannot fit")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "does not fit")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "doesn't fit")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "unable to fit")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "won't fit")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || (contains_phrase_after_ident_boundary(&lower, "longer than")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || contains_phrase_after_ident_boundary(&lower, "exceeds maximum context")
+        || contains_phrase_after_ident_boundary(&lower, "maximum context exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "insufficient context")
         || contains_phrase_after_ident_boundary(&lower, "prompt exceeds the context")
-        || (lower.contains("greater than") && lower.contains("context"))
+        || (contains_phrase_after_ident_boundary(&lower, "greater than")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
         || (contains_bounded_token(&lower, "n_ctx")
             && (lower.contains("exceed")
                 || lower.contains("overflow")
@@ -474,15 +501,16 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || lower.contains("sequence")
                 || lower.contains("n_ctx")))
         || contains_phrase_after_ident_boundary(&lower, "prompt length exceeds")
-        || (lower.contains("too many tokens") && lower.contains("context"))
-        || lower.contains("max context exceeded")
-        || lower.contains("exceeds max context")
-        || lower.contains("beyond the context")
-        || lower.contains("not enough context")
-        || (lower.contains("context buffer")
-            && (lower.contains("overflow")
-                || lower.contains("exceed")
-                || lower.contains("full")))
+        || (contains_phrase_after_ident_boundary(&lower, "too many tokens")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || contains_phrase_after_ident_boundary(&lower, "max context exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds max context")
+        || contains_phrase_after_ident_boundary(&lower, "beyond the context")
+        || contains_phrase_after_ident_boundary(&lower, "not enough context")
+        || (contains_phrase_after_ident_boundary(&lower, "context buffer")
+            && (contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "full")))
         || ((contains_prompt_tokens_exceed_after_boundary_excluding_compound_total(&lower)
             || contains_phrase_after_ident_boundary(&lower, "input tokens exceed"))
             && (lower.contains("context")
@@ -491,45 +519,49 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || lower.contains("sequence")
                 || lower.contains("n_ctx")
                 || lower.contains("window")))
-        || lower.contains("exceeds the configured context")
-        || (lower.contains("configured context")
-            && (lower.contains("overflow")
-                || lower.contains("exceed")
-                || lower.contains("full")))
-        || (lower.contains("would exceed") && lower.contains("context"))
-        || lower.contains("past the context")
-        || lower.contains("reached the context limit")
-        || lower.contains("hit the context limit")
-        || lower.contains("over the context limit")
-        || (lower.contains("truncated")
-            && (lower.contains("context window")
-                || lower.contains("context length")
-                || lower.contains("context limit")
-                || lower.contains("max context")))
-        || lower.contains("context exhausted")
-        || (lower.contains("context")
-            && (lower.contains("fully exhausted") || lower.contains("completely exhausted")))
-        || lower.contains("insufficient remaining context")
-        || ((lower.contains("kv cache") || lower.contains("kv-cache"))
-            && lower.contains("is full")
-            && lower.contains("context"))
-        || lower.contains("exceeds the context size")
-        || lower.contains("context size exceeds")
-        || lower.contains("exceeded the context size")
-        || (lower.contains("context window") && lower.contains("too small"))
-        || (lower.contains("context capacity")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("full")))
-        || (lower.contains("allocated context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("full")))
-        || (lower.contains("prefill")
-            && lower.contains("context")
-            && (lower.contains("exceed")
-                || lower.contains("overflow")
-                || lower.contains("too long")))
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the configured context")
+        || (contains_phrase_after_ident_boundary(&lower, "configured context")
+            && (contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "full")))
+        || (contains_phrase_after_ident_boundary(&lower, "would exceed")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || contains_phrase_after_ident_boundary(&lower, "past the context")
+        || contains_phrase_after_ident_boundary(&lower, "reached the context limit")
+        || contains_phrase_after_ident_boundary(&lower, "hit the context limit")
+        || contains_phrase_after_ident_boundary(&lower, "over the context limit")
+        || (contains_phrase_after_ident_boundary(&lower, "truncated")
+            && (contains_phrase_after_ident_boundary(&lower, "context window")
+                || contains_phrase_after_ident_boundary(&lower, "context length")
+                || contains_phrase_after_ident_boundary(&lower, "context limit")
+                || contains_phrase_after_ident_boundary(&lower, "max context")))
+        || contains_phrase_after_ident_boundary(&lower, "context exhausted")
+        || (contains_phrase_after_ident_boundary(&lower, "context")
+            && (contains_phrase_after_ident_boundary(&lower, "fully exhausted")
+                || contains_phrase_after_ident_boundary(&lower, "completely exhausted")))
+        || contains_phrase_after_ident_boundary(&lower, "insufficient remaining context")
+        || ((contains_phrase_after_ident_boundary(&lower, "kv cache")
+            || contains_phrase_after_ident_boundary(&lower, "kv-cache"))
+            && contains_phrase_after_ident_boundary(&lower, "is full")
+            && contains_phrase_after_ident_boundary(&lower, "context"))
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the context size")
+        || contains_phrase_after_ident_boundary(&lower, "context size exceeds")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded the context size")
+        || (contains_phrase_after_ident_boundary(&lower, "context window")
+            && contains_phrase_after_ident_boundary(&lower, "too small"))
+        || (contains_phrase_after_ident_boundary(&lower, "context capacity")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "full")))
+        || (contains_phrase_after_ident_boundary(&lower, "allocated context")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "full")))
+        || (contains_phrase_after_ident_boundary(&lower, "prefill")
+            && contains_phrase_after_ident_boundary(&lower, "context")
+            && (contains_phrase_after_ident_boundary(&lower, "exceed")
+                || contains_phrase_after_ident_boundary(&lower, "overflow")
+                || contains_phrase_after_ident_boundary(&lower, "too long")))
         || (contains_bounded_token(&lower, "max_context")
             && (lower.contains("exceed")
                 || lower.contains("overflow")
@@ -582,12 +614,12 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
                 || lower.contains("overflow")
                 || lower.contains("too long")
                 || lower.contains("too large")))
-        || lower.contains("exceed the maximum context")
-        || lower.contains("exceeded maximum context")
-        || lower.contains("maximum context is exceeded")
-        || lower.contains("context token limit exceeded")
-        || lower.contains("exceeds the context token limit")
-        || lower.contains("exceeded the context token limit")
+        || contains_phrase_after_ident_boundary(&lower, "exceed the maximum context")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded maximum context")
+        || contains_phrase_after_ident_boundary(&lower, "maximum context is exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "context token limit exceeded")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds the context token limit")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded the context token limit")
         // Word order / filler between "exceed" and "maximum … context" (e.g. "model", "allowed")
         || (lower.contains("maximum context")
             && (lower.contains("exceed")
@@ -632,9 +664,9 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || contains_bounded_token(&lower, "context_window_exceeded")
         || contains_bounded_token(&lower, "max_context_exceeded")
         // Demonstrative phrasing (distinct from `the model's` already covered above)
-        || lower.contains("exceeds this model's context")
-        || lower.contains("exceeded this model's context")
-        || lower.contains("exceed this model's context")
+        || contains_phrase_after_ident_boundary(&lower, "exceeds this model's context")
+        || contains_phrase_after_ident_boundary(&lower, "exceeded this model's context")
+        || contains_phrase_after_ident_boundary(&lower, "exceed this model's context")
         // Chat-completions style: "messages exceed …" without "total tokens" wording.
         // Require explicit context-slot phrases (not bare `model`) so lines like
         // "status messages exceed limits (no model context)" do not match.
@@ -2727,6 +2759,171 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "ui: microprompt exceeds the context menu width (layout)"
+        ));
+        assert!(!is_context_overflow_error(
+            "metrics: microcontext overflow counter reset (unrelated)"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: microcontext length exceeded in field width (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: micromaximum context length in synthetic fixture (not model)"
+        ));
+        assert!(!is_context_overflow_error(
+            "fixture: microexceeds the model's context window in stress test (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "stats: microexceeds the model context in batch column (telemetry)"
+        ));
+        assert!(!is_context_overflow_error(
+            "log: microexceeded the model context in rollup row (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "cli: microexceed the model context is not a valid flag (typo)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: micromodel context exceeded in fixture name (not ollama)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: micromodel context limit was exceeded in synthetic metric (not ollama)"
+        ));
+        assert!(!is_context_overflow_error(
+            "fixture: microexceeds the context window in UI layout test (not tokens)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microcontext window exceeded in accessibility tree (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: microexceeded the context limit is not an overflow message"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: microexceeds the context limit is not an overflow message"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: microexceed the context limit is not an overflow message"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microrequested more tokens than column width in fixture (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "ui: microfit in the context panel is a layout hint (not overflow)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: microlarger than the context sidebar (not model window)"
+        ));
+        assert!(!is_context_overflow_error(
+            "a11y: microoutside the context window in devtools tree (not tokens)"
+        ));
+        assert!(!is_context_overflow_error(
+            "a11y: microoutside of the context window in fixture (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microbeyond the context window in CSS var name (not overflow)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: microbeyond the context panel width (not model window)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microover the context window in test label (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "css: microbeyond context window token in stylesheet (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "css: microover context window in shorthand (not overflow)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microoutside context window in selector (not model)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microoutside of context window in snapshot (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "metrics: microran out of context handles (unrelated)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microrunning out of context switches in parser (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microcontext size exceeded column width in fixture (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "stats: microexceeded context size metric is a dashboard label (not tokens)"
+        ));
+        assert!(!is_context_overflow_error(
+            "ui: microexceeds available context panel width (layout)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microcontext limit exceeded in CSS var (not model)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: microexceeds context length in flex line (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "gpu: microinsufficient context for draw call (not llm window)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: micronot enough context in grid track (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "ui: micropast the context sidebar edge (not overflow)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microreached the context limit in test harness (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "metrics: microhit the context limit counter label (unrelated)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: microover the context limit line in diagram (not tokens)"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: microcontext exhausted the small-string buffer (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "ui: request too long for microcontext label (layout)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microconversation is too long for variable name (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "log: truncated microcontext window in debug view (not tokens)"
+        ));
+        assert!(!is_context_overflow_error(
+            "gpu: kv cache is full but microcontext binding failed (not llm window)"
+        ));
+        assert!(!is_context_overflow_error(
+            "layout: prefill microcontext panel exceeds width (not model)"
+        ));
+        assert!(!is_context_overflow_error(
+            "scheduler: microinsufficient remaining context switches (os)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microexceeds the context size hint in UI mock (not model)"
+        ));
+        assert!(!is_context_overflow_error(
+            "stats: microcontext size exceeds column header in sheet (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "log: microexceeded the context size in rollup (telemetry)"
+        ));
+        assert!(!is_context_overflow_error(
+            "api: microcontext token limit exceeded rate (unrelated)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microexceeds the context token limit label in fixture (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "log: microexceeded the context token limit in column name (not ollama)"
+        ));
+        assert!(!is_context_overflow_error(
+            "lint: microexceeds this model's context field in schema (not window)"
+        ));
+        assert!(!is_context_overflow_error(
+            "fixture: microexceeded this model's context row in CSV (not llm)"
+        ));
+        assert!(!is_context_overflow_error(
+            "cli: microexceed this model's context flag typo (not overflow)"
         ));
         assert!(!is_context_overflow_error(
             "config: micromessages exceed the model's context window on this request"
