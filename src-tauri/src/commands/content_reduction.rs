@@ -379,6 +379,21 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `interstitials exceed` does not match inside `microinterstitials exceed` / `metainterstitials exceed`, and
 /// `interstitial exceed` does not match inside `subinterstitial exceed` (left-boundary rejects
 /// `preinterstitial exceed` and `reinterstitial exceed`);
+/// `voids exceed` does not match inside `microvoids exceed` / `metavoids exceed`, and
+/// `void exceed` does not match inside `subvoid exceed` (left-boundary rejects `prevoid exceed` and
+/// `revoid exceed`);
+/// `pores exceed` does not match inside `micropores exceed` / `metapores exceed`, and
+/// `pore exceed` does not match inside `subpore exceed` (left-boundary rejects `prepore exceed` and
+/// `repore exceed`);
+/// `inclusions exceed` does not match inside `microinclusions exceed` / `metainclusions exceed`, and
+/// `inclusion exceed` does not match inside `subinclusion exceed` (left-boundary rejects
+/// `preinclusion exceed` and `reinclusion exceed`);
+/// `clusters exceed` does not match inside `microclusters exceed` / `metaclusters exceed`, and
+/// `cluster exceed` does not match inside `subcluster exceed` (left-boundary rejects
+/// `precluster exceed` and `recluster exceed`);
+/// `grains exceed` does not match inside `micrograins exceed` / `metagrains exceed`, and
+/// `grain exceed` does not match inside `subgrain exceed` (left-boundary rejects
+/// `pregrain exceed` and `regrain exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -1903,6 +1918,71 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "interstitials exceed")
             || contains_phrase_after_ident_boundary(&lower, "interstitials exceeded")
             || contains_phrase_after_ident_boundary(&lower, "interstitial exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "voids / void exceed(s/ed)" (FEAT-D433). Parallel to
+        // `interstitials exceed` / `interstitial exceed`. `void exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `voids exceed` (the `s` after `void` breaks `void` + space + `exceed`).
+        // Ident-boundary so `microvoids exceed` / `metavoids exceed` / `subvoid exceed` do not
+        // false-positive; `prevoid exceed` and `revoid exceed` are rejected the same way; embedded
+        // `void exceed` inside `supervoid exceed` does not match. Same explicit context-slot phrases
+        // as `messages exceed`. Negatives: HTTP `voids exceed` rate limits, per-cell / free-volume
+        // caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "voids exceed")
+            || contains_phrase_after_ident_boundary(&lower, "voids exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "void exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "pores / pore exceed(s/ed)" (FEAT-D434). Parallel to
+        // `voids exceed` / `void exceed`. `pore exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `pores exceed` (the `s` after `pore` breaks `pore` + space + `exceed`).
+        // Ident-boundary so `micropores exceed` / `metapores exceed` / `subpore exceed` do not
+        // false-positive; `prepore exceed` and `repore exceed` are rejected the same way; embedded
+        // `pore exceed` inside `superpore exceed` does not match. Same explicit context-slot phrases
+        // as `messages exceed`. Negatives: HTTP `pores exceed` rate limits, per-sample / porosity
+        // caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "pores exceed")
+            || contains_phrase_after_ident_boundary(&lower, "pores exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "pore exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "inclusions / inclusion exceed(s/ed)" (FEAT-D435). Parallel to
+        // `pores exceed` / `pore exceed`. `inclusion exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `inclusions exceed` (the `s` after `inclusion` breaks `inclusion` + space + `exceed`).
+        // Ident-boundary so `microinclusions exceed` / `metainclusions exceed` / `subinclusion exceed` do not
+        // false-positive; `preinclusion exceed` and `reinclusion exceed` are rejected the same way; embedded
+        // `inclusion exceed` inside `superinclusion exceed` does not match. Same explicit context-slot phrases
+        // as `messages exceed`. Negatives: HTTP `inclusions exceed` rate limits, per-volume / second-phase
+        // caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "inclusions exceed")
+            || contains_phrase_after_ident_boundary(&lower, "inclusions exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "inclusion exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "clusters / cluster exceed(s/ed)" (FEAT-D436). Parallel to
+        // `inclusions exceed` / `inclusion exceed`. `cluster exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `clusters exceed` (the `s` after `cluster` breaks `cluster` + space + `exceed`).
+        // Ident-boundary so `microclusters exceed` / `metaclusters exceed` / `subcluster exceed` do not
+        // false-positive; `precluster exceed` and `recluster exceed` are rejected the same way; embedded
+        // `cluster exceed` inside `supercluster exceed` does not match. Same explicit context-slot phrases
+        // as `messages exceed`. Negatives: HTTP `clusters exceed` rate limits, per-graph / linkage
+        // caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "clusters exceed")
+            || contains_phrase_after_ident_boundary(&lower, "clusters exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "cluster exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "grains / grain exceed(s/ed)" (FEAT-D437). Parallel to
+        // `clusters exceed` / `cluster exceed`. `grain exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `grains exceed` (the `s` after `grain` breaks `grain` + space + `exceed`).
+        // Ident-boundary so `micrograins exceed` / `metagrains exceed` / `subgrain exceed` do not
+        // false-positive; `pregrain exceed` and `regrain exceed` are rejected the same way; embedded
+        // `grain exceed` inside `supergrain exceed` does not match. Same explicit context-slot phrases
+        // as `messages exceed`. Negatives: HTTP `grains exceed` rate limits, per-polycrystal /
+        // grain-boundary caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "grains exceed")
+            || contains_phrase_after_ident_boundary(&lower, "grains exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "grain exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
@@ -4875,6 +4955,183 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "superinterstitial exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: voids exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: voids exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: void exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: void exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: voids exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: voids exceeded daily free-volume cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: void exceed max cavity budget on this mesh field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microvoids exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metavoids exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subvoid exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supervoid exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: pores exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: pores exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: pore exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: pore exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: pores exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: pores exceeded daily porosity cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: pore exceed max throat budget on this mesh field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micropores exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metapores exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subpore exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superpore exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "spore exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: inclusions exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: inclusions exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: inclusion exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: inclusion exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: inclusions exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: inclusions exceeded daily second-phase cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: inclusion exceed max particle budget on this mesh field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microinclusions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metainclusions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subinclusion exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superinclusion exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "reinclusion exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: clusters exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: clusters exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: cluster exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: cluster exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: clusters exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: clusters exceeded daily linkage cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: cluster exceed max graph budget on this mesh field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microclusters exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaclusters exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subcluster exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supercluster exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "recluster exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: grains exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: grains exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: grain exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: grain exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: grains exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: grains exceeded daily grain-boundary cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: grain exceed max crystallite budget on this mesh field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micrograins exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metagrains exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subgrain exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supergrain exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "regrain exceed the model's context window on this request"
         ));
         assert!(is_context_overflow_error(
             "API: bytes exceed the model's context window on this request"
