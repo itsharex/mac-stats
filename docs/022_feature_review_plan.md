@@ -612,3 +612,29 @@ Open tasks for this plan are tracked in **006-feature-coder/FEATURE-CODER.md**.
 - [x] `cargo build --release` succeeds (**v0.1.59**).
 - [x] Runtime smoke: **no second `mac_stats` started** — `pgrep -fl mac_stats` showed existing `./target/release/mac_stats -vv` (**PID 41093**). Tail **`~/.mac-stats/debug.log`**: **4 monitors** UP/saved, scheduler **2** entries, idle task/session noise — healthy long-running instance. **Restart** mac-stats to load uncommitted **`content_reduction.rs`** into the running binary.
 - [x] Code review (`content_reduction.rs`): five new `||` groups **FEAT-D424** (`magnons` / `magnon exceed`) through **FEAT-D428** (`vortices` / `vortex exceed`), each **`contains_phrase_after_ident_boundary`** + **`explicit_context_slot_after_ident_boundary`** (same FEAT-D295 explicit context-slot list as prior quasiparticle rows). Rustdoc comments parallel prior rows. Negatives: **`supermagnon`** … **`supervortex exceed`**; **`canyon exceed`** negative for **`anyon exceed`** (D426). User-facing overflow sanitization unchanged in intent.
+
+### Feature coder 2026-03-25 (`006-feature-coder/FEATURE-CODER.md` — FEAT-D429)
+
+- [x] **`is_context_overflow_error`**: **`disclinations exceed`** / **`disclination exceed`** arm after **`vortices`/`vortex`** (`commands/content_reduction.rs`); module rustdoc + **`does_not_match_unrelated_errors`** positives/negatives (**`superdisclination exceed`**, **`microdisclinations exceed`**, etc.). **`006-feature-coder/FEATURE-CODER.md`**: **Recently closed** head **FEAT-D429**, **When empty** **FEAT-D430+**. **`CHANGELOG.md`** **[0.1.59]**: **Added** FEAT-D429; **Changed** agent-workflow line **FEAT-D424–D429**.
+
+### Feature coder 2026-03-25 (`006-feature-coder/FEATURE-CODER.md` — FEAT-D430)
+
+- [x] **`is_context_overflow_error`**: **`dislocations exceed`** / **`dislocation exceed`** arm after **`disclinations`/`disclination`** (`commands/content_reduction.rs`); module rustdoc + **`does_not_match_unrelated_errors`** positives/negatives (**`superdislocation exceed`**, **`microdislocations exceed`**, etc.). **`006-feature-coder/FEATURE-CODER.md`**: **Recently closed** head **FEAT-D430**, **When empty** **FEAT-D431+**. **`CHANGELOG.md`** **[0.1.59]**: **Added** FEAT-D430; **Changed** agent-workflow line **FEAT-D424–D430**.
+
+### Feature coder 2026-03-25 (`006-feature-coder/FEATURE-CODER.md` — FEAT-D431)
+
+- [x] **`is_context_overflow_error`**: **`vacancies exceed`** / **`vacancy exceed`** arm after **`dislocations`/`dislocation`** (`commands/content_reduction.rs`); module rustdoc + **`does_not_match_unrelated_errors`** positives/negatives (**`supervacancy exceed`**, **`microvacancies exceed`**, etc.). **`006-feature-coder/FEATURE-CODER.md`**: **Recently closed** head **FEAT-D431**, **When empty** **FEAT-D432+**. **`CHANGELOG.md`** **[0.1.59]**: **Added** FEAT-D431; **Changed** agent-workflow line **FEAT-D424–D431**.
+
+### Feature coder 2026-03-25 (`006-feature-coder/FEATURE-CODER.md` — FEAT-D432)
+
+- [x] **`is_context_overflow_error`**: **`interstitials exceed`** / **`interstitial exceed`** arm after **`vacancies`/`vacancy`** (`commands/content_reduction.rs`); module rustdoc + **`does_not_match_unrelated_errors`** positives/negatives (**`superinterstitial exceed`**, **`microinterstitials exceed`**, etc.). **`006-feature-coder/FEATURE-CODER.md`**: **Recently closed** head **FEAT-D432**, **When empty** **FEAT-D433+**. **`CHANGELOG.md`** **[0.1.59]**: **Added** FEAT-D432; **Changed** agent-workflow line **FEAT-D424–D432**.
+
+### Closing reviewer smoke test 2026-03-25 (`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md` — FEAT-D429–D432)
+
+- [x] Entry: **`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md`** — §9 integration checklist; bar matched latest prior block: `cargo check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`; **`git diff`** reconciled with **`CHANGELOG.md`** **[0.1.59]** (**Added** bullets **FEAT-D429–D432** for **`disclinations`/`dislocations`/`vacancies`/`interstitials`** overflow arms; **Changed** agent-workflow through **FEAT-D432**), **`006-feature-coder/FEATURE-CODER.md`** (**Recently closed** head through **FEAT-D432**, **When empty** **FEAT-D433+**), **`005-openclaw-reviewer/005-openclaw-reviewer.md`** (independent re-run **2026-03-25T00:12:11Z**, OpenClaw `HEAD` **d25b4a2**, doc-only; **Prior** preserves **2026-03-24T23:40:37Z**). No **`pkill -f mac_stats`** (**AGENTS.md** uptime rule).
+- [x] `cargo check` — zero errors.
+- [x] `cargo clippy --all-targets -- -D warnings` — zero warnings.
+- [x] `cargo test` — **685** tests pass (`mac_stats` lib); **1** doc-test ignored. **FEAT-D429–D432** add assertions inside existing **`does_not_match_unrelated_errors`** / positive cases only — **no new `#[test]` functions**, count unchanged vs. prior **2026-03-25** closing block (**FEAT-D424–D428**).
+- [x] `cargo build --release` succeeds (**v0.1.59**).
+- [x] Runtime smoke: **no second `mac_stats` started** — `pgrep -fl mac_stats` showed existing **`./target/release/mac_stats -vv` (PID 41093)**. Tail **`~/.mac-stats/debug.log`**: **4 monitors** UP/saved, idle **Having fun** scheduler noise — healthy long-running instance. **Restart** mac-stats to load uncommitted **`content_reduction.rs`** into the running binary.
+- [x] Code review (`content_reduction.rs`): four new `||` groups **FEAT-D429** (`disclinations` / `disclination exceed`) through **FEAT-D432** (`interstitials` / `interstitial exceed`), ordered after **`vortices`/`vortex`**, each **`contains_phrase_after_ident_boundary`** + **`explicit_context_slot_after_ident_boundary`** (same FEAT-D295 explicit context-slot list). Rustdoc comments parallel prior defect/quasiparticle rows. Negatives: **`superdisclination`** … **`superinterstitial exceed`**; HTTP/billing/schema caps without slot wording. User-facing overflow sanitization unchanged in intent.

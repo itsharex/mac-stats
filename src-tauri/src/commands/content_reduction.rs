@@ -367,6 +367,18 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// `vortices exceed` does not match inside `microvortices exceed` / `metavortices exceed`, and
 /// `vortex exceed` does not match inside `subvortex exceed` (left-boundary rejects
 /// `prevortex exceed` and `revortex exceed`);
+/// `disclinations exceed` does not match inside `microdisclinations exceed` / `metadisclinations exceed`, and
+/// `disclination exceed` does not match inside `subdisclination exceed` (left-boundary rejects
+/// `predisclination exceed` and `redisclination exceed`);
+/// `dislocations exceed` does not match inside `microdislocations exceed` / `metadislocations exceed`, and
+/// `dislocation exceed` does not match inside `subdislocation exceed` (left-boundary rejects
+/// `predislocation exceed` and `redislocation exceed`);
+/// `vacancies exceed` does not match inside `microvacancies exceed` / `metavacancies exceed`, and
+/// `vacancy exceed` does not match inside `subvacancy exceed` (left-boundary rejects
+/// `prevacancy exceed` and `revacancy exceed`);
+/// `interstitials exceed` does not match inside `microinterstitials exceed` / `metainterstitials exceed`, and
+/// `interstitial exceed` does not match inside `subinterstitial exceed` (left-boundary rejects
+/// `preinterstitial exceed` and `reinterstitial exceed`);
 /// `messages exceed` does not match inside `micromessages exceed` / `metamessages exceed`, and
 /// `message exceed` does not match inside `submessage exceed` (left-boundary rejects `premessage exceed`
 /// and `remessage exceed`);
@@ -1840,6 +1852,57 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
         || ((contains_phrase_after_ident_boundary(&lower, "vortices exceed")
             || contains_phrase_after_ident_boundary(&lower, "vortices exceeded")
             || contains_phrase_after_ident_boundary(&lower, "vortex exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "disclinations / disclination exceed(s/ed)" (FEAT-D429). Parallel to
+        // `vortices exceed` / `vortex exceed`. `disclination exceed` matches present/past via `exceed`
+        // prefix of `exceeds` / `exceeded` and does not substring-match plural `disclinations exceed`
+        // (the `s` after `disclination` breaks `disclination` + space + `exceed`). Ident-boundary so
+        // `microdisclinations exceed` / `metadisclinations exceed` / `subdisclination exceed` do not
+        // false-positive; `predisclination exceed` and `redisclination exceed` are rejected the same way.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `disclinations exceed`
+        // rate limits, per-domain / line-defect caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "disclinations exceed")
+            || contains_phrase_after_ident_boundary(&lower, "disclinations exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "disclination exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "dislocations / dislocation exceed(s/ed)" (FEAT-D430). Parallel to
+        // `disclinations exceed` / `disclination exceed`. `dislocation exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `dislocations exceed` (the `s` after `dislocation` breaks `dislocation` + space + `exceed`).
+        // Ident-boundary so `microdislocations exceed` / `metadislocations exceed` / `subdislocation exceed`
+        // do not false-positive; `predislocation exceed` and `redislocation exceed` are rejected the same way;
+        // embedded `dislocation exceed` inside `superdislocation exceed` does not match. Same explicit
+        // context-slot phrases as `messages exceed`. Negatives: HTTP `dislocations exceed` rate limits,
+        // per-slip-system / Burgers-vector caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "dislocations exceed")
+            || contains_phrase_after_ident_boundary(&lower, "dislocations exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "dislocation exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "vacancies / vacancy exceed(s/ed)" (FEAT-D431). Parallel to
+        // `dislocations exceed` / `dislocation exceed`. `vacancy exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `vacancies exceed` (the `s` after `vacancy` breaks `vacancy` + space + `exceed`).
+        // Ident-boundary so `microvacancies exceed` / `metavacancies exceed` / `subvacancy exceed`
+        // do not false-positive; `prevacancy exceed` and `revacancy exceed` are rejected the same way;
+        // embedded `vacancy exceed` inside `supervacancy exceed` does not match. Same explicit
+        // context-slot phrases as `messages exceed`. Negatives: HTTP `vacancies exceed` rate limits,
+        // per-lattice / formation-energy caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "vacancies exceed")
+            || contains_phrase_after_ident_boundary(&lower, "vacancies exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "vacancy exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "interstitials / interstitial exceed(s/ed)" (FEAT-D432). Parallel to
+        // `vacancies exceed` / `vacancy exceed`. `interstitial exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `interstitials exceed` (the `s` after `interstitial` breaks `interstitial` + space + `exceed`).
+        // Ident-boundary so `microinterstitials exceed` / `metainterstitials exceed` / `subinterstitial exceed`
+        // do not false-positive; `preinterstitial exceed` and `reinterstitial exceed` are rejected the same way;
+        // embedded `interstitial exceed` inside `superinterstitial exceed` does not match. Same explicit
+        // context-slot phrases as `messages exceed`. Negatives: HTTP `interstitials exceed` rate limits,
+        // per-lattice / migration-barrier caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "interstitials exceed")
+            || contains_phrase_after_ident_boundary(&lower, "interstitials exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "interstitial exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
@@ -4680,6 +4743,138 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "supervortex exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: disclinations exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: disclinations exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: disclination exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: disclination exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: disclinations exceed per-domain rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: disclinations exceeded daily Frank cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: disclination exceed max line-tension budget on this graph field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microdisclinations exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metadisclinations exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subdisclination exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superdisclination exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: dislocations exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: dislocations exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: dislocation exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: dislocation exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: dislocations exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: dislocations exceeded daily slip-system cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: dislocation exceed max Burgers-vector budget on this crystal field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microdislocations exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metadislocations exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subdislocation exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superdislocation exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: vacancies exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: vacancies exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: vacancy exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: vacancy exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: vacancies exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: vacancies exceeded daily formation-energy cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: vacancy exceed max lattice-site budget on this crystal field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microvacancies exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metavacancies exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subvacancy exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supervacancy exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: interstitials exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: interstitials exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: interstitial exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: interstitial exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: interstitials exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: interstitials exceeded daily migration-barrier cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: interstitial exceed max defect-site budget on this crystal field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microinterstitials exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metainterstitials exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subinterstitial exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superinterstitial exceed the model's context window on this request"
         ));
         assert!(is_context_overflow_error(
             "API: bytes exceed the model's context window on this request"
