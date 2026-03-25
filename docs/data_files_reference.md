@@ -58,6 +58,22 @@ Schedules are stored as a **JSON array** for simplicity, human readability, and 
 
 ---
 
+## scheduler_delivery_awareness.json
+
+**Path:** `$HOME/.mac-stats/scheduler_delivery_awareness.json`  
+**Purpose:** Append-only style log (bounded list, newest kept) of **successful** scheduler posts to Discord when `reply_to_channel_id` is set. The in-app CPU window Ollama chat injects a short summary of recent rows into the **system** prompt so the primary on-device conversation stays aligned with what was already sent to a channel. **Authoritative** user-visible delivery remains Discord; this file is for continuity and deduplication (per-run `context_key`), not a second outbound path.
+
+### JSON structure
+
+- **Top-level key:** `entries` (array of objects, oldest first on disk).
+- **Each entry:** `context_key` (unique per successful delivery attempt), `utc` (RFC3339 UTC), optional `schedule_id`, `channel_id` (string), `summary` (truncated body that was posted).
+
+### When rows are written
+
+Only after Discord accepts the final user-visible message for that run (scheduler loop or task runner). Internal-only runs (e.g. `FETCH_URL` / `BRAVE_SEARCH` with no Discord post) do not add entries. Duplicate `context_key` values are ignored (idempotent).
+
+---
+
 ## user-info.json
 
 **Path:** `$HOME/.mac-stats/user-info.json`  

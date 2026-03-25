@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.60] - 2026-03-25
+
+### Added
+- **Browser agent (CDP)** — `browser_agent/cdp_url.rs`: derive HTTP(S) bases from `ws`/`wss` and debugger URLs (strip `/devtools/browser/…`, trailing `/cdp` for `/json/*`), rewrite loopback when the debugger advertises `0.0.0.0` or IPv6 unspecified, and **`redact_cdp_url`** for logs/errors; wired into `/json/version` discovery and WebSocket connect strings; unit tests. (`browser_agent/mod.rs`, `docs/029_browser_automation.md`.)
+- **Scheduler → Discord delivery awareness** — After a successful scheduler post to Discord, append a bounded JSON log (`scheduler_delivery_awareness.json`), inject a short **recent-deliveries** block into the **CPU window / dashboard** Ollama system prompt, and list entries in Settings via **`list_scheduler_delivery_awareness`**. (`scheduler/delivery_awareness.rs`, `scheduler/mod.rs`, `discord/mod.rs`, `commands/ollama_frontend_chat.rs`, `commands/scheduler.rs`, `lib.rs`, `dashboard.html`, `dashboard.js`; `docs/009_scheduler_agent.md`, `docs/007_discord_agent.md`.)
+- **Unix single-instance guard** — Optional fail-fast second launch using a non-blocking **`flock`** on `~/.mac-stats/single-instance.lock` (warn + exit 0 if another instance holds the lock). (`lib.rs`.)
+- **Outbound Discord attachment roots** — `security/attachment_roots.rs` centralizes allowlisting: canonical roots under **`~/.mac-stats`** for screenshots, PDF exports, and browser downloads, plus optional **`extraAttachmentRoots`** in `config.json` (must resolve under `$HOME` or `~/.mac-stats`). Discord attachment sending filters through **`is_allowed_outbound_attachment_path`**. (`discord/mod.rs`, `config/mod.rs`, `security/mod.rs`, `docs/data_files_reference.md`.)
+- **RUN_CMD pipeline hardening** — Each pipeline **stage** runs via `sh -c`; stages split **only** at top-level `|`. Quote-aware validation rejects `;`, `&&`, `||`, nested `|`, leading subshells, `$(…)`, backticks, process substitution, and stray background `&`; first token cannot be a nested shell/env wrapper (`bash`, `env`, …). (`commands/run_cmd.rs`, `docs/011_local_cmd_agent.md`.)
+- **Ollama errors** — `is_context_overflow_error` extended with **`wave function(s)`**, **`slater determinant(s)`**, **`configuration state function(s)`**, **`csf coefficient(s)`**, and **`ci coefficient(s)`** exceed / exceeded chains aligned with the existing context-slot pairing rules (FEAT-D458–D462). (`commands/content_reduction.rs`.)
+
+### Changed
+- **Browser tools** — Dispatch and agent prompt tweaks alongside CDP wiring. (`commands/browser_tool_dispatch.rs`, `commands/agent_descriptions.rs`.)
+- **Task runner** — Minor review/runner integration. (`task/review.rs`, `task/runner.rs`.)
+- **Docs & agent workflow** — OpenClaw reviewer / FEATURE-CODER timestamps and backlog (`005-openclaw-reviewer/005-openclaw-reviewer.md`, `006-feature-coder/FEATURE-CODER.md`); agent flow and automation references (`docs/020_agent_task_flow_analysis.md`, `docs/029_browser_automation.md`, etc.).
+
 ## [0.1.59] - 2026-03-25
 
 ### Added

@@ -9,11 +9,12 @@
 //! On a **new** CDP attach (not session reuse), the agent polls until tab targets are enumerable (~8s max, ~200ms interval) so the WebSocket being up does not imply automation-ready.
 //! When CDP is unavailable, HTTP fallback (fetch + scraper) provides NAVIGATE/CLICK/INPUT/EXTRACT without Chrome.
 
+mod cdp_url;
 mod http_fallback;
 
 pub use http_fallback::{click_http, extract_http, input_http, navigate_http};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -57,6 +58,30 @@ pub struct BrowserState {
     pub interactables: Vec<Interactable>,
 }
 
+// ---------------------------------------------------------------------------
+// Bounded page diagnostics for tool state (opt-in)
+// ---------------------------------------------------------------------------
+const DIAG_MAX_CONSOLE_LINES: usize = 10;
+const DIAG_MAX_CONSOLE_CHARS_PER_LINE: usize = 200;
+const DIAG_MAX_UNCAUGHT_EXC_MESSAGES: usize = 2;
+const DIAG_MAX_UNCAUGHT_EXC_CHARS_PER_MESSAGE: usize = 200;
+
+fn normalize_diagnostic_text(s: &str, max_chars: usize) -> String {
+    // Keep it compact for tool results: collapse whitespace and hard-truncate.
+    let compact = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    compact.chars().take(max_chars).collect::<String>()
+}
+
+fn push_bounded_dedup(queue: &mut VecDeque<String>, item: String, max_len: usize) {
+    if queue.iter().any(|x| *x == item) {
+        return;
+    }
+    queue.push_back(item);
+    while queue.len() > max_len {
+        queue.pop_front();
+    }
+}
+
 /// Raw row returned from JS get_interactables snippet (before assigning index).
 #[derive(Debug, Deserialize)]
 struct InteractableRow {
@@ -76,29 +101,55 @@ const CDP_DISCOVERY_ATTEMPTS: u32 = 4;
 const CDP_DISCOVERY_RETRY_SLEEP_MS: u64 = 225;
 /// Per-attempt HTTP timeout for discovery: dead ports fail fast; reliability comes from repeated tries.
 const CDP_DISCOVERY_HTTP_TIMEOUT: Duration = Duration::from_secs(1);
+/// Host used for `http://…/json/version` discovery today (loopback). Advertised `ws://0.0.0.0/…` URLs are rewritten to this.
+const CDP_DISCOVERY_HTTP_HOST: &str = "127.0.0.1";
 
 /// Fetch WebSocket debugger URL from Chrome running with --remote-debugging-port.
 fn get_ws_url_with_timeout(port: u16, timeout: Duration) -> Result<String, String> {
-    let url = format!("http://127.0.0.1:{}/json/version", port);
-    let client = reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .build()
-        .map_err(|e| format!("HTTP client: {}", e))?;
-    let resp = client
-        .get(&url)
-        .send()
-        .map_err(|e| format!("Request to {}: {}", url, e))?;
-    if !resp.status().is_success() {
-        return Err(format!("{} returned {}", url, resp.status()));
+    let discovery_seed = format!("http://{}:{}", CDP_DISCOVERY_HTTP_HOST, port);
+    let url = cdp_url::cdp_http_base_from_endpoint(&discovery_seed)
+        .ok()
+        .and_then(|base| base.join("json/version").ok())
+        .map(|u| u.to_string())
+        .unwrap_or_else(|| cdp_url::json_version_probe_url(CDP_DISCOVERY_HTTP_HOST, port));
+    let url_for_logs = cdp_url::redact_cdp_url(&url);
+    let res = (|| {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| format!("HTTP client: {}", e))?;
+        let resp = client
+            .get(&url)
+            .send()
+            .map_err(|e| format!("Request to {}: {}", url_for_logs, e))?;
+        if !resp.status().is_success() {
+            return Err(format!("{} returned {}", url_for_logs, resp.status()));
+        }
+        let json: serde_json::Value = resp
+            .json()
+            .map_err(|e| format!("Parse JSON from {}: {}", url_for_logs, e))?;
+        let ws_raw = json
+            .get("webSocketDebuggerUrl")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "webSocketDebuggerUrl not found in /json/version".to_string())?
+            .to_string();
+        let ws = cdp_url::rewrite_ws_debugger_host_for_discovery(&ws_raw, CDP_DISCOVERY_HTTP_HOST);
+        if ws != ws_raw {
+            mac_stats_debug!(
+                "browser/cdp",
+                "Browser agent [CDP]: adjusted webSocketDebuggerUrl bind-all host → {}",
+                cdp_url::redact_cdp_url(&ws)
+            );
+        }
+        Ok(ws)
+    })();
+
+    match &res {
+        Ok(_) => record_cdp_http_probe_result(port, true, None),
+        Err(e) => record_cdp_http_probe_result(port, false, Some(e.clone())),
     }
-    let json: serde_json::Value = resp
-        .json()
-        .map_err(|e| format!("Parse JSON from {}: {}", url, e))?;
-    let ws = json
-        .get("webSocketDebuggerUrl")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "webSocketDebuggerUrl not found in /json/version".to_string())?;
-    Ok(ws.to_string())
+
+    res
 }
 
 fn get_ws_url(port: u16) -> Result<String, String> {
@@ -193,10 +244,25 @@ If Chrome showed a prompt to allow remote debugging, approve it; keep Chrome run
 
 /// Open a CDP session from a WebSocket URL and wait until tab targets are ready (attach path only).
 fn connect_browser_to_ws_url(ws_url: &str) -> Result<Browser, String> {
-    let browser = Browser::connect_with_timeout(ws_url.to_string(), Duration::from_secs(60))
-        .map_err(|e| format!("CDP connect: {}", e))?;
-    wait_for_cdp_targets_ready_after_attach(&browser)?;
-    Ok(browser)
+    let inferred_port = Url::parse(ws_url)
+        .ok()
+        .and_then(|u| u.port())
+        .unwrap_or(9222);
+    let ws_redacted = cdp_url::redact_cdp_url(ws_url);
+
+    let res: Result<Browser, String> = (|| {
+        let browser = Browser::connect_with_timeout(ws_url.to_string(), Duration::from_secs(60))
+            .map_err(|e| format!("CDP connect (ws={}): {}", ws_redacted, e))?;
+        wait_for_cdp_targets_ready_after_attach(&browser)?;
+        Ok(browser)
+    })();
+
+    match &res {
+        Ok(_) => record_cdp_attach_result(inferred_port, true, None),
+        Err(e) => record_cdp_attach_result(inferred_port, false, Some(e.clone())),
+    }
+
+    res
 }
 
 /// Connect to Chrome at the given debugging port.
@@ -545,7 +611,25 @@ pub fn get_browser_state(tab: &headless_chrome::Tab) -> Result<BrowserState, Str
 
 /// Format BrowserState as a string for the LLM (Current page: URL, Elements: [1] ...).
 pub fn format_browser_state_for_llm(state: &BrowserState) -> String {
-    let mut s = format!("Current page: {}\n", state.current_url);
+    let mut s = String::new();
+    if is_chrome_internal_error_document_url(state.current_url.as_str()) {
+        mac_stats_debug!(
+            "browser/cdp",
+            "Browser agent [CDP]: LLM snapshot prepended chrome-error hint (url host classify)"
+        );
+        s.push_str(
+            "Note: tab is showing a Chrome load error page, not a normal website. Consider BROWSER_NAVIGATE to a valid https URL or retry.\n",
+        );
+    } else if is_new_tab_page_url(state.current_url.as_str()) {
+        mac_stats_debug!(
+            "browser/cdp",
+            "Browser agent [CDP]: LLM snapshot prepended new-tab/blank hint"
+        );
+        s.push_str(
+            "Note: tab is on a browser new-tab or blank page, not a website. Use BROWSER_NAVIGATE with a real https URL when you need page content.\n",
+        );
+    }
+    s.push_str(&format!("Current page: {}\n", state.current_url));
     if let Some(ref t) = state.page_title {
         s.push_str(&format!("Title: {}\n", t));
     }
@@ -696,8 +780,8 @@ fn fetch_page_and_extract_phones_with_browser(
     Ok(phones)
 }
 
-/// Cached browser session: (Browser, last_used, was_headless). Dropped when idle longer than browser_idle_timeout_secs.
-static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant, bool)>>> = OnceLock::new();
+/// Cached browser session: (Browser, created_at, last_used, was_headless). Dropped when idle longer than browser_idle_timeout_secs.
+static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant, Instant, bool)>>> = OnceLock::new();
 
 /// Index of the current tab for BROWSER_* actions (0 = first tab). Updated when BROWSER_NAVIGATE is used with new_tab.
 static CURRENT_TAB_INDEX: OnceLock<Mutex<usize>> = OnceLock::new();
@@ -759,12 +843,180 @@ static LAST_ELEMENT_LABELS: OnceLock<Mutex<Option<HashMap<u32, String>>>> = Once
 /// Last browser state text shown to the model. Used to re-ground retries after browser-step failures.
 static LAST_BROWSER_STATE_SNAPSHOT: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
+/// Internal snapshot used to enrich returned `BROWSER_*` tool errors with compact readiness context.
+///
+/// Kept in-process and intentionally best-effort: it describes the *last known* CDP/discovery/session state
+/// so operators can distinguish "port not listening" vs "WebSocket up but automation not ready" quickly.
+struct BrowserHealthSnapshot {
+    /// Configured CDP port (even if current transport is headless/HTTP-only).
+    cdp_port: u16,
+    /// Result of the most recent `/json/version` probe (get_ws_url attempt).
+    cdp_http_ok: Option<bool>,            // None => not used (e.g. headless transport)
+    cdp_http_err_summary: Option<String>, // truncated summary
+    /// Result of the most recent CDP attach attempt (connect + ready poll).
+    ws_ok: Option<bool>,            // None => not used (e.g. headless transport)
+    ws_err_summary: Option<String>, // truncated summary
+    /// Whether the currently cached session was reused from idle cache vs created for this tool call.
+    session_created_this_turn: Option<bool>,
+    /// Elapsed time since session creation (if known).
+    session_created_at: Option<Instant>,
+}
+
+static LAST_BROWSER_HEALTH: OnceLock<Mutex<Option<BrowserHealthSnapshot>>> = OnceLock::new();
+
+/// Captured on navigation timeouts so the dispatcher can include `navchg=<0|1>` in error context.
+static LAST_NAV_TIMEOUT_URL_CHANGED_HINT: OnceLock<Mutex<Option<bool>>> = OnceLock::new();
+
 fn last_element_labels() -> &'static Mutex<Option<HashMap<u32, String>>> {
     LAST_ELEMENT_LABELS.get_or_init(|| Mutex::new(None))
 }
 
 fn last_browser_state_snapshot() -> &'static Mutex<Option<String>> {
     LAST_BROWSER_STATE_SNAPSHOT.get_or_init(|| Mutex::new(None))
+}
+
+fn last_browser_health() -> &'static Mutex<Option<BrowserHealthSnapshot>> {
+    LAST_BROWSER_HEALTH.get_or_init(|| Mutex::new(None))
+}
+
+fn last_nav_timeout_url_changed_hint() -> &'static Mutex<Option<bool>> {
+    LAST_NAV_TIMEOUT_URL_CHANGED_HINT.get_or_init(|| Mutex::new(None))
+}
+
+fn truncate_compact(s: &str, max_chars: usize) -> String {
+    let t = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut it = t.chars().take(max_chars);
+    let out: String = it.by_ref().collect();
+    if t.chars().count() > max_chars {
+        format!("{}…", out)
+    } else {
+        out
+    }
+}
+
+fn with_last_browser_health_mut<F>(cdp_port: u16, f: F)
+where
+    F: FnOnce(&mut BrowserHealthSnapshot),
+{
+    if let Ok(mut guard) = last_browser_health().lock() {
+        if guard.is_none() {
+            *guard = Some(BrowserHealthSnapshot {
+                cdp_port,
+                cdp_http_ok: None,
+                cdp_http_err_summary: None,
+                ws_ok: None,
+                ws_err_summary: None,
+                session_created_this_turn: None,
+                session_created_at: None,
+            });
+        }
+        if let Some(ref mut h) = guard.as_mut() {
+            f(h)
+        }
+    }
+}
+
+fn record_cdp_http_probe_result(cdp_port: u16, ok: bool, err_summary: Option<String>) {
+    with_last_browser_health_mut(cdp_port, |h| {
+        h.cdp_port = cdp_port;
+        h.cdp_http_ok = Some(ok);
+        h.cdp_http_err_summary = err_summary;
+    })
+}
+
+fn record_cdp_attach_result(cdp_port: u16, ok: bool, err_summary: Option<String>) {
+    with_last_browser_health_mut(cdp_port, |h| {
+        h.cdp_port = cdp_port;
+        h.ws_ok = Some(ok);
+        h.ws_err_summary = err_summary;
+    })
+}
+
+fn record_session_created_this_turn(cdp_port: u16, reused: bool, created_at: Instant) {
+    with_last_browser_health_mut(cdp_port, |h| {
+        h.cdp_port = cdp_port;
+        h.session_created_this_turn = Some(!reused);
+        h.session_created_at = Some(created_at);
+    })
+}
+
+pub(crate) fn take_last_nav_timeout_url_changed_hint() -> Option<bool> {
+    let mut guard = last_nav_timeout_url_changed_hint().lock().ok()?;
+    guard.take()
+}
+
+fn format_context_suffix_from_health(
+    health: &BrowserHealthSnapshot,
+    nav_url_changed: Option<bool>,
+    max_chars: usize,
+) -> String {
+    let cdp_http = match health.cdp_http_ok {
+        Some(true) => "ok".to_string(),
+        Some(false) => {
+            let summary = health
+                .cdp_http_err_summary
+                .as_deref()
+                .map(|s| truncate_compact(s, 40))
+                .unwrap_or_else(|| "err".to_string());
+            format!("fail({})", summary)
+        }
+        None => "not_used".to_string(),
+    };
+    let ws = match health.ws_ok {
+        Some(true) => "ok".to_string(),
+        Some(false) => {
+            let summary = health
+                .ws_err_summary
+                .as_deref()
+                .map(|s| truncate_compact(s, 40))
+                .unwrap_or_else(|| "err".to_string());
+            format!("fail({})", summary)
+        }
+        None => "not_used".to_string(),
+    };
+    let sess = match health.session_created_this_turn {
+        Some(true) => "new",
+        Some(false) => "reused",
+        None => "?",
+    };
+    let age = health
+        .session_created_at
+        .map(|t| {
+            let secs = Instant::now().duration_since(t).as_secs_f64();
+            // Keep compact: 1 decimal is enough for operator debugging.
+            format!("{:.1}s", secs)
+        })
+        .unwrap_or_else(|| "na".to_string());
+    let mut s = format!(
+        "context: cdp_http={} ws={} port={} sess={} age={}",
+        cdp_http, ws, health.cdp_port, sess, age
+    );
+    if let Some(changed) = nav_url_changed {
+        s.push_str(&format!(" navchg={}", if changed { 1 } else { 0 }));
+    }
+    if s.chars().count() > max_chars {
+        s.chars().take(max_chars - 1).collect::<String>() + "…"
+    } else {
+        s
+    }
+}
+
+pub(crate) fn format_last_browser_error_context(
+    cdp_used: bool,
+    nav_url_changed: Option<bool>,
+) -> Option<String> {
+    if !cdp_used {
+        let mut s = "context: cdp=not_used".to_string();
+        if let Some(changed) = nav_url_changed {
+            s.push_str(&format!(
+                " navchg={}",
+                if changed { 1 } else { 0 }
+            ));
+        }
+        return Some(s);
+    }
+    let guard = last_browser_health().lock().ok()?;
+    guard.as_ref().map(|h| format_context_suffix_from_health(h, nav_url_changed, 190))
 }
 
 fn element_label_for_status(i: &Interactable) -> String {
@@ -892,7 +1144,7 @@ fn register_dialog_auto_dismiss(tab: &Arc<headless_chrome::Tab>) {
     }
 }
 
-fn browser_session() -> &'static Mutex<Option<(Browser, Instant, bool)>> {
+fn browser_session() -> &'static Mutex<Option<(Browser, Instant, Instant, bool)>> {
     BROWSER_SESSION.get_or_init(|| Mutex::new(None))
 }
 
@@ -911,6 +1163,26 @@ fn is_new_tab_or_blank(url: &str) -> bool {
         || u.eq_ignore_ascii_case("about:blank")
         || u.starts_with("chrome://newtab")
         || u == "chrome://newtab/"
+}
+
+/// Same URL set as browser-use `is_new_tab_page`: `about:blank`, `chrome://new-tab-page` /
+/// `chrome://newtab` with optional trailing slash. Only the `chrome://` scheme prefix is
+/// ASCII case-insensitive; the host/path segment matches browser-use literally.
+fn is_new_tab_page_url(url: &str) -> bool {
+    let url = url.trim();
+    if url == "about:blank" {
+        return true;
+    }
+    const PREFIX: &[u8] = b"chrome://";
+    let b = url.as_bytes();
+    if b.len() < PREFIX.len() || !b[..PREFIX.len()].eq_ignore_ascii_case(PREFIX) {
+        return false;
+    }
+    let rest = &url[PREFIX.len()..];
+    matches!(
+        rest,
+        "new-tab-page" | "new-tab-page/" | "newtab" | "newtab/"
+    )
 }
 
 /// Chrome internal error document (load failure). Cookie-banner heuristics must not run here.
@@ -1058,12 +1330,14 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     let prefer_headless = PREFER_HEADLESS.load(Ordering::Relaxed);
     let mut guard = browser_session().lock().map_err(|e| e.to_string())?;
     let now = Instant::now();
-    if let Some((ref browser, last_used, was_headless)) = guard.as_ref() {
+    if let Some((ref browser, created_at, last_used, was_headless)) = guard.as_ref() {
         if now.duration_since(*last_used).as_secs() < timeout_secs
             && *was_headless == prefer_headless
         {
             let b = browser.clone();
-            *guard = Some((b.clone(), now, prefer_headless));
+            let created_at_val = *created_at;
+            *guard = Some((b.clone(), created_at_val, now, prefer_headless));
+            record_session_created_this_turn(port, true, created_at_val);
             mac_stats_info!(
                 "browser/cdp",
                 "Browser agent [CDP]: reusing existing session (idle timeout {}s, headless={})",
@@ -1100,19 +1374,28 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     {
         let guard = browser_session().lock().map_err(|e| e.to_string())?;
         let now = Instant::now();
-        if let Some((ref browser, last_used, was_headless)) = guard.as_ref() {
+        if let Some((ref browser, created_at, last_used, was_headless)) = guard.as_ref() {
             if now.duration_since(*last_used).as_secs() < timeout_secs
                 && *was_headless == prefer_headless
             {
                 mac_stats_info!("browser/cdp",
                     "Browser agent [CDP]: reusing session after launch lock (another thread created it)"
                 );
+                record_session_created_this_turn(port, true, *created_at);
                 return Ok(browser.clone());
             }
         }
     }
 
     if prefer_headless {
+        // Headless transport means we do not probe/connect CDP via `/json/version` and a WebSocket.
+        // Clear CDP probe/attach markers so error context does not imply a WS existed.
+        with_last_browser_health_mut(port, |h| {
+            h.cdp_http_ok = None;
+            h.cdp_http_err_summary = None;
+            h.ws_ok = None;
+            h.ws_err_summary = None;
+        });
         kill_orphaned_browser_processes();
     }
     let browser = if prefer_headless {
@@ -1158,7 +1441,8 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
         }
     };
     *browser_session().lock().map_err(|e| e.to_string())? =
-        Some((browser.clone(), Instant::now(), prefer_headless));
+        Some((browser.clone(), now, now, prefer_headless));
+    record_session_created_this_turn(port, false, now);
     Ok(browser)
 }
 
@@ -1338,15 +1622,129 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
     } else {
         nav_timeout_secs
     };
+
+    // Optional bounded diagnostic capture: collect a small number of console error/warning lines
+    // and uncaught exceptions during/after navigation so blank SPA failures become interpretable.
+    let include_diag = crate::config::Config::browser_include_diagnostics_in_state();
+    let mut diag_console_lines: Option<Arc<Mutex<VecDeque<String>>>> = None;
+    let mut diag_uncaught_excs: Option<Arc<Mutex<VecDeque<String>>>> = None;
+    let mut diag_listener_weak = None;
+    let mut diag_enabled = false;
+    if include_diag {
+        let console_buf: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let exc_buf: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+
+        // Enable only when we need them; failures should never break navigation.
+        if let Err(e) = tab.enable_log().and_then(|t| t.enable_runtime()) {
+            mac_stats_warn!(
+                "browser/cdp",
+                "Browser agent [CDP]: failed to enable diagnostics log/runtime: {} (continuing)",
+                e
+            );
+        } else {
+            diag_enabled = true;
+            let console_buf_clone = Arc::clone(&console_buf);
+            let exc_buf_clone = Arc::clone(&exc_buf);
+            let listener = Arc::new(move |event: &Event| match event {
+                Event::LogEntryAdded(ev) => {
+                    let level = &ev.params.entry.level;
+                    let prefix = match level {
+                        headless_chrome::protocol::cdp::Log::LogEntryLevel::Error => {
+                            Some("error")
+                        }
+                        headless_chrome::protocol::cdp::Log::LogEntryLevel::Warning => {
+                            Some("warning")
+                        }
+                        _ => None,
+                    };
+                    let Some(prefix) = prefix else {
+                        return;
+                    };
+                    let raw_text = ev.params.entry.text.trim();
+                    if raw_text.is_empty() {
+                        return;
+                    }
+                    let normalized =
+                        normalize_diagnostic_text(raw_text, DIAG_MAX_CONSOLE_CHARS_PER_LINE);
+                    if normalized.is_empty() {
+                        return;
+                    }
+                    let line = format!("[{}] {}", prefix, normalized);
+                    if let Ok(mut q) = console_buf_clone.lock() {
+                        push_bounded_dedup(&mut q, line, DIAG_MAX_CONSOLE_LINES);
+                    }
+                }
+                Event::RuntimeExceptionThrown(ev) => {
+                    let details = &ev.params.exception_details;
+                    let raw_text = if !details.text.trim().is_empty() {
+                        details.text.as_str()
+                    } else {
+                        details
+                            .stack_trace
+                            .as_ref()
+                            .and_then(|st| st.description.as_deref())
+                            .unwrap_or("")
+                    };
+                    let raw_text = raw_text.trim();
+                    if raw_text.is_empty() {
+                        return;
+                    }
+                    let normalized =
+                        normalize_diagnostic_text(raw_text, DIAG_MAX_UNCAUGHT_EXC_CHARS_PER_MESSAGE);
+                    if normalized.is_empty() {
+                        return;
+                    }
+                    let msg = format!("Uncaught exception: {}", normalized);
+                    if let Ok(mut q) = exc_buf_clone.lock() {
+                        push_bounded_dedup(&mut q, msg, DIAG_MAX_UNCAUGHT_EXC_MESSAGES);
+                    }
+                }
+                _ => {}
+            });
+
+            match tab.add_event_listener(listener) {
+                Ok(w) => {
+                    diag_listener_weak = Some(w);
+                    diag_console_lines = Some(console_buf);
+                    diag_uncaught_excs = Some(exc_buf);
+                }
+                Err(e) => {
+                    mac_stats_warn!(
+                        "browser/cdp",
+                        "Browser agent [CDP]: failed to register diagnostics event listener: {} (continuing)",
+                        e
+                    );
+                    let _ = tab.disable_runtime();
+                    let _ = tab.disable_log();
+                }
+            }
+        }
+    }
+
+    // Ensure we stop diagnostics collection before every return (so it can't leak memory between calls).
+    let mut cleanup_diag = || {
+        if let Some(w) = diag_listener_weak.take() {
+            let _ = tab.remove_event_listener(&w);
+        }
+        if diag_enabled {
+            let _ = tab.disable_runtime();
+            let _ = tab.disable_log();
+        }
+    };
+
     tab.set_default_timeout(Duration::from_secs(actual_timeout_secs));
-    tab.navigate_to(&url_normalized).map_err(|e| {
+    let nav_res = tab.navigate_to(&url_normalized).map_err(|e| {
         let msg = e.to_string();
         let detail = navigate_failed_detail_from_display(&msg);
         log_navigation_cdp_failure(&url_normalized, &detail);
         let s = format_navigation_failed_for_tool(&url_normalized, &detail);
         clear_browser_session_on_error(&s);
         s
-    })?;
+    });
+    if let Err(e) = nav_res {
+        cleanup_diag();
+        return Err(e);
+    }
     match tab.wait_until_navigated() {
         Ok(_) => {}
         Err(e) => {
@@ -1357,6 +1755,30 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
                     "Browser agent [CDP]: navigation wait timed out after {}s",
                     actual_timeout_secs
                 );
+                // Capture whether Chrome ended up on a different URL (redirect / SPA navigation)
+                // so the dispatcher can add `navchg=<0|1>` context without dumping URLs twice.
+                let final_url = tab.get_url();
+                let normalize_origin_path = |s: &str| -> Option<String> {
+                    let u = Url::parse(s).ok()?;
+                    let scheme = u.scheme().to_ascii_lowercase();
+                    let host = u.host_str()?.to_ascii_lowercase();
+                    let mut path = u.path().trim_end_matches('/').to_string();
+                    if path.is_empty() {
+                        path = "/".to_string();
+                    }
+                    Some(format!("{}://{}{}", scheme, host, path))
+                };
+                let nav_changed = match (
+                    normalize_origin_path(url_normalized.as_str()),
+                    normalize_origin_path(final_url.as_str()),
+                ) {
+                    (Some(a), Some(b)) => a != b,
+                    _ => final_url.as_str() != url_normalized,
+                };
+                if let Ok(mut g) = last_nav_timeout_url_changed_hint().lock() {
+                    *g = Some(nav_changed);
+                }
+                cleanup_diag();
                 return Err(format!(
                     "Navigation failed: timeout after {}s",
                     actual_timeout_secs
@@ -1373,12 +1795,18 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
     if let Some(msg) =
         post_navigate_load_failure_message(url_normalized.as_str(), final_after_wait.as_str())
     {
+        cleanup_diag();
         return Err(msg);
     }
     std::thread::sleep(Duration::from_millis(1500));
-    let mut state = get_browser_state(&tab).inspect_err(|e| {
-        clear_browser_session_on_error(e);
-    })?;
+    let mut state = match get_browser_state(&tab) {
+        Ok(s) => s,
+        Err(e) => {
+            clear_browser_session_on_error(&e);
+            cleanup_diag();
+            return Err(e);
+        }
+    };
     // Auto-dismiss cookie banner so the user doesn't have to ask. Visible in logs and verbose mode.
     mac_stats_debug!(
         "browser/cdp",
@@ -1391,7 +1819,52 @@ fn navigate_and_get_state_inner(url: &str, new_tab: bool) -> Result<String, Stri
             state = refreshed;
         }
     }
-    let snapshot = format_browser_state_for_llm(&state);
+
+    let mut diagnostics_section = String::new();
+    if include_diag {
+        let console_vec = if let Some(buf) = &diag_console_lines {
+            buf.lock()
+                .map(|q| q.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let exc_vec = if let Some(buf) = &diag_uncaught_excs {
+            buf.lock()
+                .map(|q| q.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        mac_stats_debug!(
+            "browser/cdp",
+            "Browser agent [CDP]: captured diagnostics console_lines={} uncaught_exceptions={}",
+            console_vec.len(),
+            exc_vec.len()
+        );
+
+        if !console_vec.is_empty() || !exc_vec.is_empty() {
+            diagnostics_section.push_str("\n## Page diagnostics\n");
+            if !console_vec.is_empty() {
+                diagnostics_section.push_str("Console (error/warning):\n");
+                for l in console_vec {
+                    diagnostics_section.push_str(&format!("- {}\n", l));
+                }
+            }
+            if !exc_vec.is_empty() {
+                diagnostics_section.push_str("Uncaught exceptions:\n");
+                for m in exc_vec {
+                    diagnostics_section.push_str(&format!("- {}\n", m));
+                }
+            }
+        }
+    }
+
+    cleanup_diag();
+
+    let mut snapshot = format_browser_state_for_llm(&state);
+    snapshot.push_str(&diagnostics_section);
     set_last_element_labels(
         state
             .interactables
@@ -2313,6 +2786,45 @@ mod tests {
         assert!(is_chrome_internal_error_document_url(
             "chrome-error://chromewebdata/"
         ));
+    }
+
+    #[test]
+    fn new_tab_page_url_matches_browser_use_set() {
+        assert!(is_new_tab_page_url("about:blank"));
+        assert!(is_new_tab_page_url("chrome://new-tab-page"));
+        assert!(is_new_tab_page_url("chrome://new-tab-page/"));
+        assert!(is_new_tab_page_url("chrome://newtab"));
+        assert!(is_new_tab_page_url("chrome://newtab/"));
+        assert!(is_new_tab_page_url("Chrome://newtab"));
+        assert!(is_new_tab_page_url("  chrome://new-tab-page/  "));
+        assert!(!is_new_tab_page_url("https://example.com"));
+        assert!(!is_new_tab_page_url("chrome://settings"));
+        assert!(!is_new_tab_page_url(""));
+        assert!(!is_new_tab_page_url("About:blank"));
+    }
+
+    #[test]
+    fn format_browser_state_prepends_new_tab_hint() {
+        let state = BrowserState {
+            current_url: "chrome://new-tab-page/".to_string(),
+            page_title: Some("New Tab".to_string()),
+            interactables: vec![],
+        };
+        let out = format_browser_state_for_llm(&state);
+        assert!(out.starts_with("Note: tab is on a browser new-tab"));
+        assert!(out.contains("Current page: chrome://new-tab-page/"));
+    }
+
+    #[test]
+    fn format_browser_state_prepends_chrome_error_hint() {
+        let state = BrowserState {
+            current_url: "chrome-error://chromewebdata/".to_string(),
+            page_title: None,
+            interactables: vec![],
+        };
+        let out = format_browser_state_for_llm(&state);
+        assert!(out.starts_with("Note: tab is showing a Chrome load error"));
+        assert!(out.contains("Current page: chrome-error://"));
     }
 
     #[test]

@@ -9,6 +9,12 @@ pub fn list_schedules() -> Result<Vec<scheduler::ScheduleForUi>, String> {
     Ok(scheduler::list_schedules_for_ui())
 }
 
+/// Recent successful scheduler → Discord deliveries (newest first), for Settings / operator verification.
+#[tauri::command]
+pub fn list_scheduler_delivery_awareness() -> Result<Vec<scheduler::DeliveryAwarenessEntry>, String> {
+    Ok(scheduler::list_scheduler_delivery_awareness())
+}
+
 /// Add a recurring schedule (cron). Id is generated as ui-<unix_ts>.
 #[tauri::command]
 pub fn add_schedule(

@@ -45,7 +45,7 @@ SCHEDULE cron examples (6-field: sec min hour day month dow). Use as SCHEDULE: <
 pub(crate) fn format_run_cmd_description(num: u32) -> String {
     let allowed = crate::commands::run_cmd::allowed_commands().join(", ");
     format!(
-        "\n\n{}. **RUN_CMD** (local read-only): Run a restricted local command. Use for: reading app data under ~/.mac-stats (schedules.json, config, task files), or current time/user (date, whoami), or allowed CLI tools. To invoke: reply with exactly one line: RUN_CMD: <command> [args] (e.g. RUN_CMD: cat ~/.mac-stats/schedules.json, RUN_CMD: date, RUN_CMD: cursor-agent --help). Allowed: {}; file paths must be under ~/.mac-stats; date, whoami, ps, cursor-agent and similar need no path.",
+        "\n\n{}. **RUN_CMD** (local read-only): Run a restricted local command. Use for: reading app data under ~/.mac-stats (schedules.json, config, task files), or current time/user (date, whoami), or allowed CLI tools. To invoke: reply with exactly one line: RUN_CMD: <command> [args] (e.g. RUN_CMD: cat ~/.mac-stats/schedules.json, RUN_CMD: date, RUN_CMD: cursor-agent --help). **One simple command per stage**: do not use ';', '&&', '||', command substitution, or '|' inside a stage—chain with a single top-level '|' between stages only (e.g. RUN_CMD: cat ~/.mac-stats/schedules.json | wc -c) or use separate tool steps. Shell wrappers (sh, bash, env …) as the first word are blocked. Allowed first tokens: {}; file paths must be under ~/.mac-stats; date, whoami, ps, cursor-agent and similar need no path.",
         num, allowed
     )
 }
@@ -118,6 +118,22 @@ pub(crate) async fn build_agent_descriptions(from_discord: bool, question: Optio
     use tracing::info;
     let skills = crate::skills::load_skills();
     let mut base = AGENT_DESCRIPTIONS_BASE.to_string();
+
+    if !crate::config::Config::browser_tools_enabled() {
+        // Omit the verbose BROWSER_* tool block from the system prompt when disabled so the model
+        // doesn't waste turns on tool calls that are guaranteed to be refused.
+        let start_marker = "3. **BROWSER_SCREENSHOT**";
+        let end_marker = "\n\n5. **BRAVE_SEARCH**";
+        if let (Some(start), Some(end)) = (base.find(start_marker), base.find(end_marker)) {
+            base.replace_range(
+                start..end,
+                "3. **BROWSER_*** (disabled): Browser automation tools are disabled in `~/.mac-stats/config.json` via `browserToolsEnabled=false`. Do not call any BROWSER_* tools. If called, the app will refuse them with: Browser tools disabled in config.\n",
+            );
+        } else {
+            base.push_str("\n\nNOTE: Browser automation tools (BROWSER_*) are disabled in `~/.mac-stats/config.json` via `browserToolsEnabled=false`. Do not call any BROWSER_* tools; the app will refuse them with: Browser tools disabled in config.");
+        }
+    }
+
     base.push_str(SCHEDULE_CRON_EXAMPLES);
     let mut num = 6u32;
     if !skills.is_empty() {

@@ -11,6 +11,16 @@ use crate::commands::ollama_chat::{
 use crate::commands::ollama_config::{default_non_agent_system_prompt, ChatRequest};
 use crate::commands::tool_parsing::parse_fetch_url_from_response;
 
+/// Primary in-app chat should see what the scheduler already posted to Discord (authoritative log + this block).
+fn augment_cpu_system_with_scheduler_awareness(base: String) -> String {
+    let block = crate::scheduler::delivery_awareness::format_for_chat_context();
+    if block.is_empty() {
+        base
+    } else {
+        format!("{}\n\n{}", base, block)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OllamaChatWithExecutionRequest {
     pub question: String,
@@ -97,9 +107,11 @@ pub async fn ollama_chat_with_execution(
     let context_message = format!("{}\n\nUser question: {}", metrics_block, request.question);
 
     // Get system prompt: use soul.md (~/.mac-stats/agents/soul.md or bundled default) + tools when not overridden
-    let system_prompt = request
-        .system_prompt
-        .unwrap_or_else(default_non_agent_system_prompt);
+    let system_prompt = augment_cpu_system_with_scheduler_awareness(
+        request
+            .system_prompt
+            .unwrap_or_else(default_non_agent_system_prompt),
+    );
 
     // Build messages array with conversation history
     let mut messages = vec![crate::ollama::ChatMessage {
@@ -288,7 +300,9 @@ pub async fn ollama_chat_continue_with_result(
         execution_result
     );
 
-    let system_prompt = system_prompt.unwrap_or_else(default_non_agent_system_prompt);
+    let system_prompt = augment_cpu_system_with_scheduler_awareness(
+        system_prompt.unwrap_or_else(default_non_agent_system_prompt),
+    );
 
     let follow_up_message = format!(
         "I have executed your last codeblocks and the result is: {}\n\nCan you now answer the original question: {}?",

@@ -2,11 +2,13 @@
 //!
 //! Allowlist is read from the first enabled orchestrator's skill.md (section "## RUN_CMD allowlist");
 //! if missing, the default list below is used. Paths under ~/.mac-stats where applicable.
-//! Commands are executed via a shell (sh -c) so redirects (>, |, ;) work. See docs/011_local_cmd_agent.md.
+//! Each pipeline stage is executed via `sh -c`; stages are split only at top-level `|`.
+//! Compound shell in one stage (`;`, `&&`, nested `|`, command substitution, etc.) is rejected
+//! fail-closed. See docs/011_local_cmd_agent.md.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Default allowlist when orchestrator skill.md has no "## RUN_CMD allowlist" section.
 /// Security: cursor-agent is an exception — it runs user/agent-controlled prompts in the user
@@ -27,6 +29,171 @@ const DEFAULT_ALLOWED_COMMANDS: &[&str] = &[
 
 /// Commands that always require a path (under ~/.mac-stats). All others in the allowlist are treated as no-path.
 const PATH_REQUIRED_COMMANDS: &[&str] = &["cat", "head", "tail", "grep"];
+
+/// First token cannot be a nested shell / env wrapper even if mistakenly added to the skill allowlist.
+const BLOCKED_FIRST_COMMANDS: &[&str] = &[
+    "sh",
+    "bash",
+    "zsh",
+    "dash",
+    "fish",
+    "ksh",
+    "csh",
+    "tcsh",
+    "pwsh",
+    "powershell",
+    "env",
+    "exec",
+    "nix-shell",
+];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunCmdQuote {
+    None,
+    Single,
+    Double,
+}
+
+/// Fail-closed validation for one pipeline stage before `sh -c`.
+/// Quote-aware (`'` / `"`). Allows redirects such as `>`, `>>`, `<`, `2>`, `2>&1`, `&>`.
+/// Rejects command chaining and nested composition inside the stage; use top-level `|` or separate RUN_CMD lines.
+pub(crate) fn validate_run_cmd_stage_shape(stage: &str) -> Result<(), String> {
+    let s = stage.trim();
+    if s.is_empty() {
+        return Err("RUN_CMD: empty command.".to_string());
+    }
+    if s.contains('\n') || s.contains('\r') {
+        return Err(
+            "RUN_CMD: newlines are not allowed inside a command stage; use separate RUN_CMD lines."
+                .to_string(),
+        );
+    }
+    if s.trim_start().starts_with('(') {
+        return Err(
+            "RUN_CMD: a leading subshell '(' is not allowed in one stage; use separate RUN_CMD lines."
+                .to_string(),
+        );
+    }
+
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0usize;
+    let mut quote = RunCmdQuote::None;
+
+    while i < chars.len() {
+        let c = chars[i];
+        match quote {
+            RunCmdQuote::None => {
+                if c == '\'' {
+                    quote = RunCmdQuote::Single;
+                    i += 1;
+                    continue;
+                }
+                if c == '"' {
+                    quote = RunCmdQuote::Double;
+                    i += 1;
+                    continue;
+                }
+                if c == '\\' {
+                    i += 1;
+                    if i < chars.len() {
+                        i += 1;
+                    }
+                    continue;
+                }
+                if c == '$' && i + 1 < chars.len() && chars[i + 1] == '(' {
+                    return Err(
+                        "RUN_CMD: command substitution $(...) is not allowed; use a pipeline stage or another RUN_CMD."
+                            .to_string(),
+                    );
+                }
+                if c == '`' {
+                    return Err(
+                        "RUN_CMD: backticks are not allowed; use a pipeline or another RUN_CMD."
+                            .to_string(),
+                    );
+                }
+                if c == '<' && i + 1 < chars.len() && chars[i + 1] == '(' {
+                    return Err(
+                        "RUN_CMD: process substitution <(...) is not allowed.".to_string(),
+                    );
+                }
+                if c == '>' && i + 1 < chars.len() && chars[i + 1] == '(' {
+                    return Err(
+                        "RUN_CMD: process substitution >(...) is not allowed.".to_string(),
+                    );
+                }
+                if c == ';' {
+                    return Err(
+                        "RUN_CMD: ';' is not allowed in one stage; use top-level '|' between commands or separate RUN_CMD lines."
+                            .to_string(),
+                    );
+                }
+                if c == '|' {
+                    if i + 1 < chars.len() && chars[i + 1] == '|' {
+                        return Err(
+                            "RUN_CMD: '||' is not allowed in one stage; use separate RUN_CMD lines."
+                                .to_string(),
+                        );
+                    }
+                    return Err(
+                        "RUN_CMD: '|' inside a stage is not allowed; split pipelines only at the top level (e.g. RUN_CMD: cmd1 | cmd2)."
+                            .to_string(),
+                    );
+                }
+                if c == '&' {
+                    if i + 1 < chars.len() && chars[i + 1] == '&' {
+                        return Err(
+                            "RUN_CMD: '&&' is not allowed in one stage; use separate RUN_CMD lines."
+                                .to_string(),
+                        );
+                    }
+                    if i + 1 < chars.len() && chars[i + 1] == '>' {
+                        // &>word
+                        i += 2;
+                        continue;
+                    }
+                    if i > 0 && chars[i - 1] == '>' {
+                        // >&, 2>&
+                        i += 1;
+                        continue;
+                    }
+                    return Err(
+                        "RUN_CMD: '&' is not allowed here (no background jobs); use separate RUN_CMD lines or '|' between whole stages."
+                            .to_string(),
+                    );
+                }
+                i += 1;
+            }
+            RunCmdQuote::Single => {
+                if c == '\'' {
+                    quote = RunCmdQuote::None;
+                }
+                i += 1;
+            }
+            RunCmdQuote::Double => {
+                if c == '\\' && i + 1 < chars.len() {
+                    i += 2;
+                    continue;
+                }
+                if c == '"' {
+                    quote = RunCmdQuote::None;
+                }
+                i += 1;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn reject_nested_interpreter(first: &str) -> Result<(), String> {
+    if BLOCKED_FIRST_COMMANDS.contains(&first) {
+        return Err(
+            "RUN_CMD: nested shells and env wrappers (sh, bash, env, …) are not allowed; run an allowlisted command directly."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
 
 /// Return the current allowlist (from orchestrator skill.md or default). Used by the tool loop for retry prompts.
 pub fn allowed_commands() -> Vec<String> {
@@ -143,8 +310,8 @@ fn first_command_token(stage: &str) -> Option<String> {
         .map(|s| s.to_lowercase())
 }
 
-/// Run a single pipeline stage via shell so redirects (>, |, ;) are interpreted. Returns stdout bytes.
-/// Validates: first token is in allowlist; path-like tokens are under permitted base.
+/// Run a single pipeline stage via shell so redirects (e.g. `>`, `2>&1`) are interpreted. Returns stdout bytes.
+/// Validates: stage shape (no compound shell inside the stage); first token not a blocked interpreter; allowlist; paths.
 fn run_single_command_shell(
     stage: &str,
     base: &Path,
@@ -152,8 +319,25 @@ fn run_single_command_shell(
 ) -> Result<Vec<u8>, String> {
     use std::process::Stdio;
 
+    if let Err(e) = validate_run_cmd_stage_shape(stage) {
+        warn!(
+            "RUN_CMD: rejected stage (shape): {} — {}",
+            crate::logging::ellipse(stage, 120),
+            e
+        );
+        return Err(e);
+    }
+
     let allowed = get_allowed_commands();
     let first = first_command_token(stage).ok_or_else(|| "RUN_CMD: empty command.".to_string())?;
+    if let Err(e) = reject_nested_interpreter(&first) {
+        warn!(
+            "RUN_CMD: rejected stage (interpreter): {} — {}",
+            crate::logging::ellipse(stage, 120),
+            e
+        );
+        return Err(e);
+    }
     if !allowed.contains(&first) {
         return Err(format!(
             "Command not allowed (allowed: {}).",
@@ -247,10 +431,10 @@ fn run_single_command_shell(
     Ok(output.stdout)
 }
 
-/// Run a restricted local command. Executes each pipeline stage via shell (sh -c) so redirects (>, |, ;) work.
+/// Run a restricted local command. Stages are split at top-level `|` only; each stage runs via `sh -c`.
 /// Allowlist from orchestrator skill.md "## RUN_CMD allowlist" or default (cat, head, tail, ls, grep, date, whoami, ps, wc, uptime, cursor-agent).
 /// cursor-agent runs user/agent-controlled prompts and is not path-bound; document or restrict via skill.md if locking down.
-/// Supports `cmd1 | cmd2 | cmd3` pipelines; each stage runs in a shell so redirects and semicolons work.
+/// Compound shell inside a stage (`;`, `&&`, inner `|`, command substitution, …) is rejected.
 /// Path-like arguments must be under ~/.mac-stats where applicable.
 pub fn run_local_command(arg: &str) -> Result<String, String> {
     info!("RUN_CMD: exact command: {}", arg);
@@ -299,4 +483,92 @@ pub fn run_local_command(arg: &str) -> Result<String, String> {
     let stdout = prev_stdout.unwrap_or_default();
     let out = String::from_utf8_lossy(&stdout);
     Ok(out.trim().to_string())
+}
+
+#[cfg(test)]
+mod run_cmd_stage_validate_tests {
+    use super::{reject_nested_interpreter, validate_run_cmd_stage_shape};
+
+    #[test]
+    fn shape_rejects_semicolon_chain() {
+        assert!(validate_run_cmd_stage_shape("cat ~/.mac-stats/foo; ps").is_err());
+    }
+
+    #[test]
+    fn shape_rejects_and_and() {
+        assert!(validate_run_cmd_stage_shape("date && date").is_err());
+    }
+
+    #[test]
+    fn shape_rejects_or_or() {
+        assert!(validate_run_cmd_stage_shape("date || date").is_err());
+    }
+
+    #[test]
+    fn shape_rejects_inner_pipe() {
+        assert!(validate_run_cmd_stage_shape("cat a | wc").is_err());
+    }
+
+    #[test]
+    fn shape_allows_top_level_split_only_in_runner() {
+        // Validator is per-stage; inner | must fail.
+        assert!(validate_run_cmd_stage_shape("date").is_ok());
+        assert!(validate_run_cmd_stage_shape("wc -c").is_ok());
+    }
+
+    #[test]
+    fn shape_rejects_command_substitution() {
+        assert!(validate_run_cmd_stage_shape("echo $(whoami)").is_err());
+    }
+
+    #[test]
+    fn shape_rejects_backticks() {
+        assert!(validate_run_cmd_stage_shape("echo `whoami`").is_err());
+    }
+
+    #[test]
+    fn shape_rejects_leading_subshell() {
+        assert!(validate_run_cmd_stage_shape("( date )").is_err());
+    }
+
+    #[test]
+    fn shape_allows_redir_merge() {
+        assert!(validate_run_cmd_stage_shape("date 2>&1").is_ok());
+    }
+
+    #[test]
+    fn shape_allows_amp_redirect() {
+        assert!(validate_run_cmd_stage_shape("date &> /dev/null").is_ok());
+    }
+
+    #[test]
+    fn shape_ignores_metachars_in_single_quotes() {
+        assert!(validate_run_cmd_stage_shape("grep ';' ~/.mac-stats/schedules.json").is_ok());
+    }
+
+    #[test]
+    fn nested_interpreter_rejects_sh() {
+        assert!(reject_nested_interpreter("sh").is_err());
+    }
+
+    #[test]
+    fn nested_interpreter_rejects_env() {
+        assert!(reject_nested_interpreter("env").is_err());
+    }
+
+    #[test]
+    fn pipeline_date_wc_integration() {
+        let out = super::run_local_command("date | wc -c").expect("legal pipeline");
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn pipeline_rejects_injected_second_command() {
+        let err = super::run_local_command("date; wc").expect_err("compound should fail");
+        assert!(
+            err.contains(';') || err.contains("not allowed"),
+            "unexpected err: {}",
+            err
+        );
+    }
 }

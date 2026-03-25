@@ -74,6 +74,8 @@ Whenever Ollama is asked to decide which agent to use (planning step in Discord 
    - If Chrome is not installed at the path above, install it or create a symlink; mac-stats does not install Chrome.
    - After a timeout or crash, mac-stats clears the cached session; the next BROWSER_* use will reconnect or relaunch.
 
+To disable browser automation entirely (all `BROWSER_*` tools / Chrome-CDP and any HTTP fallback), set `browserToolsEnabled` to `false` in `~/.mac-stats/config.json`. Default is `true`. When disabled, the app refuses any `BROWSER_*` tool call with `Browser tools disabled in config` and does not launch or connect to Chrome; changes apply on the next tool invocation (no restart required).
+
 ### Connection process (step-by-step)
 
 When you invoke a BROWSER_* tool (e.g. BROWSER_NAVIGATE, BROWSER_SCREENSHOT), the app does the following:
@@ -83,7 +85,7 @@ When you invoke a BROWSER_* tool (e.g. BROWSER_NAVIGATE, BROWSER_SCREENSHOT), th
 
 2. **No session or session expired**  
    The app needs a live Chrome to talk to:
-   - **Port check:** It requests `http://127.0.0.1:9222/json/version` (short per-request timeout) up to a few times with brief pauses between attempts, so a single flaky failure does not immediately trigger a new Chrome launch while Chrome is still starting or right after a restart. If a probe succeeds, it reads the WebSocket URL and connects. Logs `CDP discovery succeeded on retry` when a later attempt succeeds after an initial miss (visible in `-vv` logs).
+   - **Port check:** It requests `http://127.0.0.1:9222/json/version` (short per-request timeout) up to a few times with brief pauses between attempts, so a single flaky failure does not immediately trigger a new Chrome launch while Chrome is still starting or right after a restart. If a probe succeeds, it reads `webSocketDebuggerUrl`, **normalizes** it (maps `ws`/`wss` to the right HTTP base for future `/json/*` use, strips DevTools path cruft when deriving bases), **rewrites** bind-all hosts (`0.0.0.0`, `::`) to the discovery host (`127.0.0.1` today) so the WebSocket client can attach, then connects. Connection and discovery errors use **redacted** URL text (no userinfo; sensitive query keys like `token` masked) so diagnostics do not leak credentials. Logs `CDP discovery succeeded on retry` when a later attempt succeeds after an initial miss (visible in `-vv` logs). At debug verbosity, an adjusted-host line is logged when Chromium advertised a bind-all address.
    - **Connect:** It opens a CDP connection over WebSocket, then **polls** (up to ~8 seconds, ~200 ms between tries) until listing tabs succeeds with at least one tab—so a successful handshake alone is not treated as “browser ready” (mirrors attach timing on macOS user Chrome). Failed probes log at **debug** (`browser/cdp`, attach readiness). If the deadline passes, the connection is dropped and the tool returns a clear error (approve any Chrome debugging prompt, keep Chrome open, retry). Only then is the session cached for subsequent BROWSER_* calls.
 
 3. **Nothing on port 9222**  
@@ -106,7 +108,7 @@ So: **first use** or **after an error/timeout** → check 9222 → connect or la
 When the user asks to remove or dismiss a cookie consent banner and take a screenshot, the planning prompt instructs the model to include **BROWSER_CLICK** on the consent button (using the Elements list from BROWSER_NAVIGATE) **before** BROWSER_SCREENSHOT. Pre-routing to NAVIGATE + SCREENSHOT is skipped when the question mentions cookie/consent/banner so the planner can add the click step.
 
 ### Navigation timeout, new tab, and go back
-- **Navigation timeout:** Maximum wait for BROWSER_NAVIGATE, BROWSER_GO_BACK, BROWSER_GO_FORWARD, and BROWSER_RELOAD is configurable: `config.json` key `browserNavigationTimeoutSecs` (default 30, range 5–120) or env `MAC_STATS_BROWSER_NAVIGATION_TIMEOUT_SECS`. Slow or stuck navigations fail with a clear message (e.g. "Navigation failed: timeout after 30s") instead of hanging.
+- **Navigation timeout:** Maximum wait for BROWSER_NAVIGATE, BROWSER_GO_BACK, BROWSER_GO_FORWARD, and BROWSER_RELOAD is configurable: `config.json` key `browserNavigationTimeoutSecs` (default 30, range 5–120) or env `MAC_STATS_BROWSER_NAVIGATION_TIMEOUT_SECS`. Slow or stuck navigations fail with a clear message (e.g. "Navigation failed: timeout after 30s") plus a compact `context: ...` line describing CDP discovery/connect and (for BROWSER_NAVIGATE timeouts) whether the tab URL changed (`navchg=0|1`).
 - **Same-domain shorter timeout (optional):** When the navigation target is on the same domain as the current page (e.g. in-site link or SPA transition), a shorter wait can be used so in-site navigations don’t wait the full timeout. Set `config.json` key `browserSameDomainNavigationTimeoutSecs` (e.g. 5) or env `MAC_STATS_BROWSER_SAME_DOMAIN_NAVIGATION_TIMEOUT_SECS`. When set, same-domain navigations use this value for the post-navigate wait; cross-domain, BROWSER_GO_BACK, BROWSER_GO_FORWARD, and BROWSER_RELOAD still use `browserNavigationTimeoutSecs`. When not set, all navigations use the single navigation timeout. Debug log line "same-domain navigation, using Ns timeout" confirms when the shorter timeout is applied.
 - **New tab:** Add `new_tab` after the URL (e.g. `BROWSER_NAVIGATE: https://example.com new_tab`) to open the URL in a new tab and switch focus to it; subsequent BROWSER_CLICK / BROWSER_SCREENSHOT apply to that tab.
 - **Screenshot with URL:** `BROWSER_SCREENSHOT: https://…` navigates and captures the **focused** tab (the same internal tab index as `BROWSER_NAVIGATE` and `new_tab`), not the first tab in the Chrome window.
@@ -129,6 +131,12 @@ If Chrome loads an internal **`chrome-error://`** document without failing `navi
 When an **HTTP(S)** URL was requested but the tab stays **`about:blank`** and Chrome did not report `errorText`, the tool returns a **single** cautious line that the navigation **may** have failed (heuristic; do not assume the page loaded). This is separate from **SPA / hash** behaviour: if **`wait_until_navigated`** times out with a **timeout** error, the existing **timeout** failure still applies; non-timeout wait failures keep the **warn + short sleep** path when there is no hard error.
 
 Debug logging (`browser/cdp`): one line with **host only** (no path/query) plus a short **error class** (first token of `errorText`), and a second **debug** line with the **full** `errorText` for reviewers.
+
+### LLM snapshot hints (new tab and error pages)
+When the focused tab’s URL is a **blank / Chrome new-tab** URL (`about:blank`, `chrome://new-tab-page`, `chrome://newtab`, with the same variants as browser-use) or a **`chrome-error://`** load-error document, the **Current page / Elements** text sent to the model starts with a short **Note:** line explaining that the tab is not a normal website, so the model is less likely to waste turns on `BROWSER_CLICK` / `BROWSER_EXTRACT` against an empty or internal surface. This is agent UX only; SSRF and navigation policy are unchanged.
+
+### Optional page diagnostics (console + uncaught exceptions)
+When `config.json` sets `browserIncludeDiagnosticsInState` to `true`, successful `BROWSER_NAVIGATE` tool results include a bounded `## Page diagnostics` section (console `error`/`warning` lines and uncaught exception excerpts captured via CDP). If there are no diagnostics, the section is omitted.
 
 ### Grounded browser retries
 - `BROWSER_NAVIGATE` must receive a concrete URL. Natural-language filler such as `BROWSER_NAVIGATE to the video URL` is rejected and treated as an agent-side planning/parsing failure, not as evidence about the website.
@@ -183,6 +191,10 @@ If BROWSER_* tools fail with "Chrome isn't running on port 9222" or launch error
    - If visible Chrome on 9222 is not an option, the app can use the headless_chrome crate (no port 9222). When the model or user says "headless", BROWSER_* uses that path. You can also retry after a failed launch; in some cases the code falls back to headless automatically.
 
 If the problem persists, check `~/.mac-stats/debug.log` for lines like `Browser agent [CDP]: ...` or `Launch Chrome: ...` to see the exact error.
+
+## Outbound attachments (Discord)
+
+**BROWSER_SCREENSHOT** writes PNGs under `~/.mac-stats/screenshots/`. When the Discord bot (or REST helper) sends those files, it uses the same **central allowlist** as other outbound artifacts: canonical directories under **`screenshots/`**, **`pdfs/`**, and **`browser-downloads/`** inside `~/.mac-stats/` (each applies once that folder exists), plus optional directories from **`extraAttachmentRoots`** in `config.json`. Paths outside that set are skipped so the model cannot attach unrelated files. See **docs/007_discord_agent.md** (Behaviour → outbound file attachments).
 
 ## Open tasks
 

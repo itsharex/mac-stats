@@ -159,6 +159,48 @@ pub fn run() {
 }
 
 fn run_internal(open_cpu_window: bool) {
+    // Single-instance guard (fail-fast): prevents concurrent Discord/scheduler/CDP startup that
+    // would otherwise cause duplicated local I/O and confusing logs.
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+
+        let lock_path = crate::config::Config::log_file_path()
+            .parent()
+            .map(|p| p.join("single-instance.lock"))
+            .unwrap_or_else(|| std::path::PathBuf::from("single-instance.lock"));
+
+        let _instance_lock_guard: Option<std::fs::File> = match std::fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+        {
+            Ok(lock_file) => {
+                let fd = lock_file.as_raw_fd();
+                let res = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+                if res != 0 {
+                    tracing::warn!(
+                        "mac-stats: another instance is already running (single-instance lock); exiting this launch"
+                    );
+                    eprintln!("mac-stats: already running; exiting this launch.");
+                    std::process::exit(0);
+                }
+                Some(lock_file)
+            }
+            Err(e) => {
+                // If we cannot create/take the lock, fall back to legacy behavior rather than crashing.
+                // (In this case, concurrent runs are possible, but we avoid taking the entire app down.)
+                tracing::warn!(
+                    "mac-stats: could not open single-instance lock file at {:?} ({}); continuing without lock",
+                    lock_path,
+                    e
+                );
+                None
+            }
+        };
+    }
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_cpu_details,
@@ -237,6 +279,7 @@ fn run_internal(open_cpu_window: bool) {
             commands::logging::open_debug_log,
             // Scheduler UI commands
             commands::scheduler::list_schedules,
+            commands::scheduler::list_scheduler_delivery_awareness,
             commands::scheduler::add_schedule,
             commands::scheduler::add_schedule_at,
             commands::scheduler::remove_schedule,

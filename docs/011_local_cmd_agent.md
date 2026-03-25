@@ -36,13 +36,13 @@ Whenever Ollama is asked to decide which agent to use, the app sends the complet
 
 ## RUN_CMD Agent
 
-The RUN_CMD agent lets Ollama read app data by running restricted local commands. Only read-only commands are allowed, and only for paths under `~/.mac-stats`. Commands are executed via a shell (`sh -c "<command>"`) so that redirects (`>`, `>>`), pipes (`|`), and semicolons (`;`) work as expected.
+The RUN_CMD agent lets Ollama read app data by running restricted local commands. Only read-only commands are allowed, and only for paths under `~/.mac-stats`. Each **pipeline stage** is executed via a shell (`sh -c "<stage>"`). Stages are split only at top-level `|` characters. **Compound shell in one stage is rejected** (`;`, `&&`, `||`, `|` inside a stage, command substitution, leading subshells, etc.) so that what is validated is what runs. Redirects such as `>`, `>>`, `<`, and `2>&1` remain supported inside a stage when they do not use disallowed metacharacters.
 
 ### Overview
 
 *   **Agent name**: RUN_CMD  
 *   **Invocation**: Ollama replies with one line: `RUN_CMD: <command> [args]` (e.g. `RUN_CMD: cat ~/.mac-stats/schedules.json`, `RUN_CMD: date`, `RUN_CMD: whoami`, or `RUN_CMD: ls ~/.mac-stats`).  
-*   The app runs the command via a shell (`sh -c`) so that redirects (`>`, `>>`), pipes (`|`), and semicolons (`;`) work. Path-like arguments are validated to be under `~/.mac-stats` where applicable. Stdout (or an error message) is injected back into the conversation.
+*   The app runs each stage via `sh -c`. Path-like arguments are validated to be under `~/.mac-stats` where applicable. Stdout (or an error message) is injected back into the conversation.
 
 ## Setup
 
@@ -55,9 +55,9 @@ The RUN_CMD agent lets Ollama read app data by running restricted local commands
 *   **Path-required commands**: Only `cat`, `head`, `tail`, and `grep` require a path argument under `~/.mac-stats`. All other allowed commands (e.g. `date`, `whoami`, `ps`, `cursor-agent`) can be run with no path.
 *   **Security — cursor-agent**: `cursor-agent` in the allowlist runs user/ or agent-controlled prompts in the user environment; its arguments are not path-validated. It is a privileged capability. To lock down, remove `cursor-agent` from the RUN_CMD allowlist in your orchestrator’s `skill.md` (see `## RUN_CMD allowlist`).
 *   **Paths**: Any argument that looks like a path (contains `/` or starts with `~`) must resolve to a location under `~/.mac-stats`. Paths are expanded (`~` → `$HOME`) and validated (canonical form must be under the permitted base). Paths outside `~/.mac-stats` are rejected with "Path not allowed (must be under ~/.mac-stats)."
-*   **Shell execution**: The app runs each pipeline stage with `sh -c "<stage>"` so that redirects, pipes, and semicolons are interpreted. The first token of each stage must be in the allowlist; path-like arguments are validated to be under `~/.mac-stats`.
+*   **Shell execution**: The app runs each pipeline stage with `sh -c "<stage>"`. The stage string is validated **fail-closed** for unsupported shell composition (see **Shell injection considerations** below). The first token of each stage must be in the allowlist and must not be a blocked nested interpreter (`sh`, `bash`, `env`, …); path-like arguments are validated to be under `~/.mac-stats`.
 *   **`ls` with no path**: If the user invokes `RUN_CMD: ls` with no arguments, the app runs `ls` (no path), and the shell will run it from the current working directory; for listing app data use e.g. `RUN_CMD: ls ~/.mac-stats`. **`date` and `whoami`** need no path; use e.g. `RUN_CMD: date` or `RUN_CMD: whoami`.
-*   **Pipelines**: Commands can be chained with `|` (e.g. `RUN_CMD: ps aux | grep tail`). Each stage runs via `sh -c`; the first token of each stage must be in the allowlist; path-like arguments in each stage must be under `~/.mac-stats`.
+*   **Pipelines**: Commands can be chained with **one** top-level `|` between whole stages (e.g. `RUN_CMD: ps aux | grep tail`, `RUN_CMD: cat ~/.mac-stats/schedules.json | wc -c`). A `|` inside a stage is rejected—split pipelines only at the outer `|` delimiters. Each stage runs via `sh -c`; the first token of each stage must be in the allowlist; path-like arguments in each stage must be under `~/.mac-stats`.
 
 ## Behaviour
 
@@ -81,7 +81,7 @@ This handles the common case where the model appends plan commentary to the comm
 
 ## Security
 
-*   Only commands in the allowlist (from the orchestrator’s skill.md or the built-in default) are allowed. No `find`, `sed`, or shell.
+*   Only commands in the allowlist (from the orchestrator’s skill.md or the built-in default) are allowed. No `find`, `sed`, or arbitrary shells as the first token.
 *   Path validation ensures no escape from `~/.mac-stats` (canonical path check).
 *   Execution is via `sh -c "<stage>"`; the first token (command) must be in the allowlist and path-like tokens are validated to be under `~/.mac-stats`.
 
@@ -91,7 +91,8 @@ This handles the common case where the model appends plan commentary to the comm
 |--------|--------|
 | **Allowlist** | Only commands from orchestrator `skill.md` (§ RUN_CMD allowlist) or built-in default (`cat`, `head`, `tail`, `ls`, `grep`, `date`, `whoami`, `ps`, `wc`, `uptime`, `cursor-agent`) can run. No arbitrary binaries. |
 | **Path validation** | For path-required commands (`cat`, `head`, `tail`, `grep`), any path-like argument is canonicalized and must be under `~/.mac-stats`. Prevents reading or escaping outside app data. |
-| **Shell scope** | `sh -c` runs only the user/agent-provided string; no extra shell profile or global env beyond what the app has. Pipelines and redirects are allowed but each stage's first token must be allowlisted. |
+| **Stage shape guard** | Before `sh -c`, each stage is scanned (quote-aware) for disallowed metacharacters (`;`, `&&`, `||`, inner `|`, command substitution, etc.). Rejected stages are logged at warn with ellipsed content. |
+| **Shell scope** | `sh -c` runs only the validated stage string; no extra shell profile or global env beyond what the app has. Top-level `|` pipelines and common redirects are allowed; each stage's first token must be allowlisted. |
 | **cursor-agent caveat** | `cursor-agent` is allowlisted but its arguments are not path-validated; it runs user/agent-controlled prompts in the user environment. To lock down, remove it from the allowlist in the orchestrator's `skill.md`. |
 | **ALLOW_LOCAL_CMD** | Set to `0` / `false` / `no` (env or `.config.env`) to disable RUN_CMD entirely in locked-down setups. |
 
@@ -99,18 +100,15 @@ Together these prevent unauthorized access to files outside `~/.mac-stats` and l
 
 ### Shell injection considerations
 
-The full pipeline stage string is passed to `sh -c "<stage>"`. Only the **first token** is allowlisted and path-like tokens are validated; the rest of the stage is not parsed for further commands. So shell metacharacters in the same stage can run additional commands:
+Previously, only the **first token** of each stage was allowlisted while the full string was still passed to `sh -c`, so metacharacters in the same stage could chain extra commands (e.g. `cat ~/.mac-stats/x; ps`). **Current behaviour:** each stage is validated **fail-closed** before execution. Disallowed patterns include `;`, `&&`, `||`, a `|` inside the stage (use the app’s top-level `|` only), `$(...)`, backticks, process substitution markers, newlines, leading subshell `(...)`, and `&` except in merges like `2>&1` or `&>`. Metacharacters inside single- or double-quoted segments are ignored by the scanner so patterns like `grep ';' file` remain valid.
 
-- Example: `RUN_CMD: cat ~/.mac-stats/x; echo pwned` — first token `cat` is allowed, path `~/.mac-stats/x` is valid; the shell then also runs `echo pwned`.
-- Same applies to `&&`, `||`, command substitution (backticks or `$(...)`), and newlines within the stage.
+**Caveat:** Top-level `|` splitting is character-based, not a full shell parser—avoid `|` inside unquoted arguments (rare for allowlisted commands). Mitigations in place:
 
-**Intentional design:** Pipelines and redirects are supported (e.g. `cat file | grep x`, `date > out`), so the app does not strip or reject shell syntax. The trust boundary is the source of the RUN_CMD line (Ollama model or user). Mitigations in place:
-
-- Allowlist restricts which *leading* command can run (no arbitrary binaries).
-- Path validation restricts which files can be read (under `~/.mac-stats`).
+- Allowlist + path validation as above.
+- Nested interpreters (`sh`, `bash`, `env`, …) blocked as the first token even if mistakenly added to `skill.md`.
 - Disable RUN_CMD via `ALLOW_LOCAL_CMD=0` or remove `cursor-agent` from the allowlist for strict lock-down.
 
-A future "strict mode" could run only the first token plus path-validated arguments via `Command::new(cmd).args(...)` without a shell, at the cost of breaking pipelines and redirects; not implemented.
+A future mode could invoke allowlisted binaries without `sh -c` for maximum strictness, at the cost of shell redirects; not implemented.
 
 ## Where it’s Used
 

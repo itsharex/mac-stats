@@ -12,6 +12,17 @@ use std::str::FromStr;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
+pub mod delivery_awareness;
+
+pub use delivery_awareness::DeliveryAwarenessEntry;
+
+/// Successful scheduled run with text to optionally post to Discord from the scheduler loop.
+struct ScheduleExecuteSuccess {
+    reply_text: String,
+    already_sent_to_discord: bool,
+    delivery_context_key: String,
+}
+
 /// Minimum interval when user config is below 1 (safety).
 const MIN_CHECK_SECS: u64 = 1;
 
@@ -290,11 +301,12 @@ fn next_run(entry: &ScheduleEntry, after: DateTime<Local>) -> Option<DateTime<Lo
 }
 
 /// Result of running a scheduled task.
-/// - Ok(Some((reply_text, already_sent_to_discord))): success with optional reply to send.
-/// - Ok(None): task ran but produced no reply (e.g. FETCH_URL/BRAVE_SEARCH that don't post to Discord).
+/// - Ok(Some(success)): success with optional reply to send from the scheduler loop.
+/// - Ok(None): task ran but produced no user-visible Discord outcome (e.g. FETCH_URL/BRAVE_SEARCH internal-only).
 /// - Err(msg): task failed; msg is a short user-facing error for Discord when reply_to_channel_id is set.
-async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, String> {
+async fn execute_task(entry: &ScheduleEntry) -> Result<Option<ScheduleExecuteSuccess>, String> {
     let id_info = entry.id.as_deref().unwrap_or("(no id)");
+    let delivery_context_key = delivery_awareness::new_context_key_for_schedule(id_info);
     let task = entry.task.trim();
 
     if task.to_uppercase().starts_with("FETCH_URL:") {
@@ -420,11 +432,18 @@ async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, S
                     .id
                     .as_deref()
                     .map(|sid| format!("[Schedule: {}] ", sid));
+                let scheduler_awareness = reply_to_channel.map(|_| {
+                    (
+                        delivery_context_key.clone(),
+                        entry.id.clone(),
+                    )
+                });
                 match crate::task::runner::run_task_until_finished(
                     path,
                     10,
                     reply_to_channel,
                     prefix,
+                    scheduler_awareness,
                 )
                 .await
                 {
@@ -435,7 +454,11 @@ async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, S
                             reply.chars().count(),
                             sent_to_discord
                         );
-                        return Ok(Some((reply, sent_to_discord)));
+                        return Ok(Some(ScheduleExecuteSuccess {
+                            reply_text: reply,
+                            already_sent_to_discord: sent_to_discord,
+                            delivery_context_key,
+                        }));
                     }
                     Err(e) => {
                         error!("Scheduler: task run failed (id={}): {}", id_info, e);
@@ -481,7 +504,11 @@ async fn execute_task(entry: &ScheduleEntry) -> Result<Option<(String, bool)>, S
                 None,
             )
             .await;
-            Ok(Some((reply.text, false)))
+            Ok(Some(ScheduleExecuteSuccess {
+                reply_text: reply.text,
+                already_sent_to_discord: false,
+                delivery_context_key,
+            }))
         }
         Err(e) => {
             error!("Scheduler: Ollama failed (id={}): {}", id_info, e);
@@ -574,14 +601,14 @@ async fn scheduler_loop() {
                 }
             };
             match result {
-                Ok(Some((ref text, already_sent))) => {
+                Ok(Some(success)) => {
                     if let Some(ref channel_id_str) = entry.reply_to_channel_id {
-                        if !already_sent {
+                        if !success.already_sent_to_discord {
                             if let Ok(channel_id) = channel_id_str.parse::<u64>() {
                                 let message = if let Some(ref sid) = entry.id {
-                                    format!("[Schedule: {}]\n\n{}", sid, text)
+                                    format!("[Schedule: {}]\n\n{}", sid, success.reply_text)
                                 } else {
-                                    text.clone()
+                                    success.reply_text.clone()
                                 };
                                 if let Err(e) =
                                     crate::discord::send_message_to_channel(channel_id, &message)
@@ -595,6 +622,12 @@ async fn scheduler_loop() {
                                     info!(
                                         "Scheduler: sent result to Discord channel {}",
                                         channel_id_str
+                                    );
+                                    delivery_awareness::record_if_new(
+                                        &success.delivery_context_key,
+                                        entry.id.as_deref(),
+                                        channel_id,
+                                        &message,
                                     );
                                 }
                             }
@@ -801,6 +834,11 @@ pub fn remove_schedule_by_id(id: &str) -> Result<bool, String> {
     }
 
     Ok(removed)
+}
+
+/// Recent successful scheduler → Discord posts (newest first) for Settings / operator checks.
+pub fn list_scheduler_delivery_awareness() -> Vec<DeliveryAwarenessEntry> {
+    delivery_awareness::list_entries_newest_first()
 }
 
 /// Spawn the scheduler in a background thread. Reads ~/.mac-stats/schedules.json and runs due tasks.

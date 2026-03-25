@@ -3,6 +3,7 @@
 //! Extracted from `commands/ollama.rs` to keep modules small and cohesive.
 
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use tracing::info;
 
@@ -10,6 +11,7 @@ use crate::commands::browser_helpers::{
     append_latest_browser_state_guidance, extract_browser_navigation_target,
     should_use_http_fallback_after_browser_action_error,
 };
+use crate::config::Config;
 
 pub(crate) struct BrowserScreenshotResult {
     pub message: String,
@@ -22,11 +24,64 @@ fn send_status(tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>, msg: &st
     }
 }
 
+fn browser_tools_disabled_guard() -> Option<String> {
+    if Config::browser_tools_enabled() {
+        return None;
+    }
+
+    static LOGGED: OnceLock<()> = OnceLock::new();
+    LOGGED.get_or_init(|| {
+        // Avoid leaking URLs/targets; this message is stable and policy-friendly.
+        crate::mac_stats_info!(
+            "browser/tools_disabled",
+            "Browser tools disabled in config (browserToolsEnabled=false)"
+        );
+    });
+
+    Some("Browser tools disabled in config".to_string())
+}
+
+fn nav_url_changed_hint_if_navigation_timeout(err: &str) -> Option<bool> {
+    // Error returned by `browser_agent::navigate_and_get_state_inner`.
+    if err.contains("Navigation failed: timeout after") {
+        crate::browser_agent::take_last_nav_timeout_url_changed_hint()
+    } else {
+        None
+    }
+}
+
+fn append_browser_readiness_context(
+    base: String,
+    cdp_used: bool,
+    nav_url_changed: Option<bool>,
+) -> String {
+    if let Some(ctx) = crate::browser_agent::format_last_browser_error_context(
+        cdp_used,
+        nav_url_changed,
+    ) {
+        crate::mac_stats_debug!(
+            "browser/tools",
+            "Browser tool error context: {}",
+            crate::logging::ellipse(&ctx, 200)
+        );
+        format!("{}\n{}", base, ctx)
+    } else {
+        base
+    }
+}
+
 pub(crate) async fn handle_browser_screenshot(
     arg: &str,
     request_id: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> BrowserScreenshotResult {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return BrowserScreenshotResult {
+            message: msg,
+            attachment_path: None,
+        };
+    }
+
     let url_arg = arg.trim().to_string();
     let is_current = url_arg.is_empty() || url_arg.eq_ignore_ascii_case("current");
     if !is_current {
@@ -63,11 +118,13 @@ pub(crate) async fn handle_browser_screenshot(
                     request_id,
                     crate::logging::ellipse(&e, 200)
                 );
+                let base_msg = format!(
+                    "Screenshot of current page failed: {}. (Use BROWSER_NAVIGATE and BROWSER_CLICK first with CDP; then BROWSER_SCREENSHOT: current. Chrome may need to be on port 9222.)",
+                    e
+                );
+                let msg = append_browser_readiness_context(base_msg, true, None);
                 BrowserScreenshotResult {
-                    message: format!(
-                        "Screenshot of current page failed: {}. (Use BROWSER_NAVIGATE and BROWSER_CLICK first with CDP; then BROWSER_SCREENSHOT: current. Chrome may need to be on port 9222.)",
-                        e
-                    ),
+                    message: msg,
                     attachment_path: None,
                 }
             }
@@ -84,6 +141,10 @@ pub(crate) async fn handle_browser_navigate(
     request_id: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let raw_arg = arg.trim().to_string();
     if raw_arg.is_empty() {
         return "BROWSER_NAVIGATE requires a URL (e.g. BROWSER_NAVIGATE: https://www.example.com). Please try again with a URL.".to_string();
@@ -137,11 +198,16 @@ pub(crate) async fn handle_browser_navigate(
                         .await
                         {
                             Ok(Ok(state_str)) => state_str,
-                            Ok(Err(http_err)) => format!(
-                                "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
-                                crate::logging::ellipse(&cdp_err2, 80),
-                                http_err
-                            ),
+                            Ok(Err(http_err)) => {
+                                let nav_url_changed =
+                                    nav_url_changed_hint_if_navigation_timeout(&cdp_err2);
+                                let base = format!(
+                                    "BROWSER_NAVIGATE failed (CDP: {}). HTTP fallback also failed: {}",
+                                    crate::logging::ellipse(&cdp_err2, 80),
+                                    http_err
+                                );
+                                append_browser_readiness_context(base, false, nav_url_changed)
+                            }
                             Err(e) => format!("BROWSER_NAVIGATE HTTP fallback task error: {}", e),
                         }
                     }
@@ -164,12 +230,18 @@ pub(crate) async fn handle_browser_go_back(
     request_id: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     send_status(status_tx, "🔙 Going back…");
     info!("Agent router [{}]: BROWSER_GO_BACK", request_id);
     match tokio::task::spawn_blocking(crate::browser_agent::go_back).await {
         Ok(Ok(state_str)) => state_str,
         Ok(Err(e)) => {
-            append_latest_browser_state_guidance(&format!("BROWSER_GO_BACK failed: {}", e))
+            let base = format!("BROWSER_GO_BACK failed: {}", e);
+            let base = append_browser_readiness_context(base, true, None);
+            append_latest_browser_state_guidance(&base)
         }
         Err(e) => format!("BROWSER_GO_BACK task error: {}", e),
     }
@@ -179,12 +251,18 @@ pub(crate) async fn handle_browser_go_forward(
     request_id: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     send_status(status_tx, "⏩ Going forward…");
     info!("Agent router [{}]: BROWSER_GO_FORWARD", request_id);
     match tokio::task::spawn_blocking(crate::browser_agent::go_forward).await {
         Ok(Ok(state_str)) => state_str,
         Ok(Err(e)) => {
-            append_latest_browser_state_guidance(&format!("BROWSER_GO_FORWARD failed: {}", e))
+            let base = format!("BROWSER_GO_FORWARD failed: {}", e);
+            let base = append_browser_readiness_context(base, true, None);
+            append_latest_browser_state_guidance(&base)
         }
         Err(e) => format!("BROWSER_GO_FORWARD task error: {}", e),
     }
@@ -196,6 +274,10 @@ pub(crate) async fn handle_browser_reload(
     request_id: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let tok = arg.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
     let ignore_cache = matches!(tok.as_str(), "nocache" | "hard" | "bypass");
     let status_msg = if ignore_cache {
@@ -215,7 +297,9 @@ pub(crate) async fn handle_browser_reload(
     {
         Ok(Ok(state_str)) => state_str,
         Ok(Err(e)) => {
-            append_latest_browser_state_guidance(&format!("BROWSER_RELOAD failed: {}", e))
+            let base = format!("BROWSER_RELOAD failed: {}", e);
+            let base = append_browser_readiness_context(base, true, None);
+            append_latest_browser_state_guidance(&base)
         }
         Err(e) => format!("BROWSER_RELOAD task error: {}", e),
     }
@@ -225,6 +309,10 @@ pub(crate) async fn handle_browser_click(
     arg: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let index_arg = arg.split_whitespace().next().unwrap_or("").trim();
     let index = index_arg.parse::<u32>().ok();
     let status_msg = match index {
@@ -266,17 +354,17 @@ pub(crate) async fn handle_browser_click(
                         .await
                         {
                             Ok(Ok(state_str)) => state_str,
-                            Ok(Err(e)) => append_latest_browser_state_guidance(&format!(
-                                "BROWSER_CLICK failed: {}",
-                                e
-                            )),
+                            Ok(Err(e)) => {
+                                let base = format!("BROWSER_CLICK failed: {}", e);
+                                let base = append_browser_readiness_context(base, false, None);
+                                append_latest_browser_state_guidance(&base)
+                            }
                             Err(e) => format!("BROWSER_CLICK task error: {}", e),
                         }
                     } else {
-                        append_latest_browser_state_guidance(&format!(
-                            "BROWSER_CLICK failed: {}",
-                            cdp_err
-                        ))
+                        let base = format!("BROWSER_CLICK failed: {}", cdp_err);
+                        let base = append_browser_readiness_context(base, true, None);
+                        append_latest_browser_state_guidance(&base)
                     }
                 }
                 Err(e) => append_latest_browser_state_guidance(&format!(
@@ -295,6 +383,10 @@ pub(crate) async fn handle_browser_input(
     arg: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let mut parts = arg.trim().splitn(2, |c: char| c.is_whitespace());
     let index_arg = parts.next().unwrap_or("").trim();
     let index_for_status = index_arg.parse::<u32>().ok();
@@ -340,17 +432,17 @@ pub(crate) async fn handle_browser_input(
                         .await
                         {
                             Ok(Ok(state_str)) => state_str,
-                            Ok(Err(e)) => append_latest_browser_state_guidance(&format!(
-                                "BROWSER_INPUT failed: {}",
-                                e
-                            )),
+                            Ok(Err(e)) => {
+                                let base = format!("BROWSER_INPUT failed: {}", e);
+                                let base = append_browser_readiness_context(base, false, None);
+                                append_latest_browser_state_guidance(&base)
+                            }
                             Err(e) => format!("BROWSER_INPUT task error: {}", e),
                         }
                     } else {
-                        append_latest_browser_state_guidance(&format!(
-                            "BROWSER_INPUT failed: {}",
-                            cdp_err
-                        ))
+                        let base = format!("BROWSER_INPUT failed: {}", cdp_err);
+                        let base = append_browser_readiness_context(base, true, None);
+                        append_latest_browser_state_guidance(&base)
                     }
                 }
                 Err(e) => append_latest_browser_state_guidance(&format!(
@@ -369,6 +461,10 @@ pub(crate) async fn handle_browser_keys(
     arg: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let chord = arg.trim().to_string();
     if chord.is_empty() {
         return append_latest_browser_state_guidance(
@@ -387,7 +483,11 @@ pub(crate) async fn handle_browser_keys(
     .await
     {
         Ok(Ok(state_str)) => state_str,
-        Ok(Err(e)) => append_latest_browser_state_guidance(&format!("BROWSER_KEYS failed: {}", e)),
+        Ok(Err(e)) => {
+            let base = format!("BROWSER_KEYS failed: {}", e);
+            let base = append_browser_readiness_context(base, true, None);
+            append_latest_browser_state_guidance(&base)
+        }
         Err(e) => append_latest_browser_state_guidance(&format!("BROWSER_KEYS task error: {}", e)),
     }
 }
@@ -396,6 +496,10 @@ pub(crate) async fn handle_browser_scroll(
     arg: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let scroll_arg = if arg.trim().is_empty() {
         "down".to_string()
     } else {
@@ -413,21 +517,33 @@ pub(crate) async fn handle_browser_scroll(
                 "BROWSER_SCROLL failed: {}",
                 crate::logging::ellipse(&e, 200)
             );
-            format!("BROWSER_SCROLL failed: {}", e)
+            let base = format!("BROWSER_SCROLL failed: {}", e);
+            append_browser_readiness_context(base, true, None)
         }
         Err(e) => format!("BROWSER_SCROLL task error: {}", e),
     }
 }
 
 pub(crate) async fn handle_browser_extract() -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     match tokio::task::spawn_blocking(crate::browser_agent::extract_page_text).await {
         Ok(Ok(text)) => text,
         Ok(Err(_cdp_err)) => {
             match tokio::task::spawn_blocking(crate::browser_agent::extract_http).await {
                 Ok(Ok(text)) => text,
                 Ok(Err(e)) => format!(
-                    "BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
-                    e
+                    "{}",
+                    append_browser_readiness_context(
+                        format!(
+                            "BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
+                            e
+                        ),
+                        false,
+                        None
+                    )
                 ),
                 Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
             }
@@ -440,6 +556,10 @@ pub(crate) async fn handle_browser_search_page(
     arg: &str,
     status_tx: Option<&tokio::sync::mpsc::UnboundedSender<String>>,
 ) -> String {
+    if let Some(msg) = browser_tools_disabled_guard() {
+        return msg;
+    }
+
     let pattern = arg.trim().to_string();
     if pattern.is_empty() {
         return "BROWSER_SEARCH_PAGE requires a search pattern (e.g. BROWSER_SEARCH_PAGE: Ralf Röber). Use to find specific text on the current page.".to_string();
@@ -460,10 +580,11 @@ pub(crate) async fn handle_browser_search_page(
                 "BROWSER_SEARCH_PAGE failed: {}",
                 crate::logging::ellipse(&e, 200)
             );
-            format!(
+            let base = format!(
                 "BROWSER_SEARCH_PAGE failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
                 e
-            )
+            );
+            append_browser_readiness_context(base, true, None)
         }
         Err(e) => format!("BROWSER_SEARCH_PAGE task error: {}", e),
     }

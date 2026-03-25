@@ -634,15 +634,14 @@ async function loadSettingsSchedules() {
         const schedules = await invoke('list_schedules');
         if (schedules.length === 0) {
             listEl.innerHTML = '<p class="settings-empty">No schedules. Add one below.</p>';
-            return;
-        }
-        for (const s of schedules) {
-            const id = s.id || '(no id)';
-            const when = s.cron ? `cron: ${s.cron}` : (s.at ? `at: ${s.at}` : '—');
-            const next = s.next_run ? `Next: ${s.next_run}` : '';
-            const item = document.createElement('div');
-            item.className = 'settings-list-item';
-            item.innerHTML = `
+        } else {
+            for (const s of schedules) {
+                const id = s.id || '(no id)';
+                const when = s.cron ? `cron: ${s.cron}` : (s.at ? `at: ${s.at}` : '—');
+                const next = s.next_run ? `Next: ${s.next_run}` : '';
+                const item = document.createElement('div');
+                item.className = 'settings-list-item';
+                item.innerHTML = `
                 <div>
                     <span class="label">${escapeHtml(id)}</span>
                     <div class="sublabel">${escapeHtml(when)} ${escapeHtml(next)}</div>
@@ -650,7 +649,37 @@ async function loadSettingsSchedules() {
                 </div>
                 <button type="button" class="btn-remove" data-schedule-id="${escapeHtml(id)}">Remove</button>
             `;
-            item.querySelector('.btn-remove').addEventListener('click', () => removeScheduleFromSettings(id));
+                item.querySelector('.btn-remove').addEventListener('click', () => removeScheduleFromSettings(id));
+                listEl.appendChild(item);
+            }
+        }
+    } catch (err) {
+        listEl.innerHTML = `<p class="settings-error">Failed to load: ${escapeHtml(String(err))}</p>`;
+    }
+    await loadSettingsSchedulerAwareness();
+}
+
+async function loadSettingsSchedulerAwareness() {
+    const listEl = document.getElementById('settings-scheduler-awareness-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    try {
+        const rows = await invoke('list_scheduler_delivery_awareness');
+        if (!rows.length) {
+            listEl.innerHTML = '<p class="settings-empty">No recorded deliveries yet (runs a schedule with a Discord channel ID).</p>';
+            return;
+        }
+        for (const r of rows) {
+            const sid = r.schedule_id ? `id: ${r.schedule_id} · ` : '';
+            const item = document.createElement('div');
+            item.className = 'settings-list-item';
+            item.innerHTML = `
+                <div>
+                    <span class="label">${escapeHtml(r.utc)}</span>
+                    <div class="sublabel">${escapeHtml(sid)}channel ${escapeHtml(r.channel_id)}</div>
+                    <div class="sublabel">${escapeHtml(r.summary)}</div>
+                </div>
+            `;
             listEl.appendChild(item);
         }
     } catch (err) {

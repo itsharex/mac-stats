@@ -9,6 +9,8 @@
 //! **No-logging rule:** Do not log credential values or any buffer that might contain them
 //! (e.g. request/response headers or bodies). Use `mask_credential` for safe display only.
 
+pub mod attachment_roots;
+
 use anyhow::{Context, Result};
 use security_framework::passwords::delete_generic_password;
 use security_framework::passwords::get_generic_password;

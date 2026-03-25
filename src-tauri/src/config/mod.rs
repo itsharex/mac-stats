@@ -19,7 +19,7 @@
 //! leak secrets.
 //!
 //! **JSON config reload (no restart needed):**
-//! - `config.json` — read on every access (window decorations, scheduler interval, maxSchedules, ollamaChatTimeoutSecs, browserViewportWidth/Height, browserIdleTimeoutSecs, perplexityMaxResults, perplexitySnippetMaxChars, discord_draft_throttle_ms, downloadsOrganizer*).
+//! - `config.json` — read on every access (window decorations, scheduler interval, maxSchedules, ollamaChatTimeoutSecs, browserViewportWidth/Height, browserIdleTimeoutSecs, perplexityMaxResults, perplexitySnippetMaxChars, discord_draft_throttle_ms, extraAttachmentRoots, downloadsOrganizer*).
 //! - `schedules.json` — scheduler checks file mtime each loop and reloads when changed.
 //! - `discord_channels.json` — Discord loop checks mtime every tick and reloads when changed.
 
@@ -602,6 +602,72 @@ impl Config {
         }
     }
 
+    /// PDF exports directory (outbound Discord attachments when PDF tools write here): `$HOME/.mac-stats/pdfs/`
+    pub fn pdfs_dir() -> PathBuf {
+        if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".mac-stats").join("pdfs")
+        } else {
+            std::env::temp_dir().join("mac-stats-pdfs")
+        }
+    }
+
+    /// Browser download artifacts directory (reserved for outbound attachments): `$HOME/.mac-stats/browser-downloads/`
+    pub fn browser_downloads_dir() -> PathBuf {
+        if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home)
+                .join(".mac-stats")
+                .join("browser-downloads")
+        } else {
+            std::env::temp_dir().join("mac-stats-browser-downloads")
+        }
+    }
+
+    /// Extra directory roots allowed for outbound attachments (Discord, etc.), from `config.json` **`extraAttachmentRoots`**.
+    ///
+    /// Each entry is a path string: absolute, or `~/…`, or relative to `$HOME`. After canonicalization, the directory must lie under canonical `$HOME/.mac-stats` or under canonical `$HOME`; otherwise it is skipped with a log line.
+    pub fn extra_attachment_roots() -> Vec<PathBuf> {
+        let config_path = Self::config_file_path();
+        let Ok(content) = std::fs::read_to_string(&config_path) else {
+            return Vec::new();
+        };
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
+            return Vec::new();
+        };
+        let Some(arr) = json
+            .get("extraAttachmentRoots")
+            .and_then(|v| v.as_array())
+        else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for v in arr {
+            let Some(s) = v.as_str() else {
+                continue;
+            };
+            let p = Self::resolve_user_config_path(s);
+            out.push(p);
+        }
+        out
+    }
+
+    /// Resolve a path from config: `~/` → `$HOME/…`; relative → `$HOME/<path>`; absolute unchanged.
+    fn resolve_user_config_path(raw: &str) -> PathBuf {
+        let t = raw.trim();
+        if let Some(rest) = t.strip_prefix("~/") {
+            if let Ok(home) = std::env::var("HOME") {
+                return PathBuf::from(home).join(rest);
+            }
+        }
+        let p = PathBuf::from(t);
+        if p.is_absolute() {
+            p
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(t)
+        } else {
+            p
+        }
+    }
+
     /// Idle timeout in seconds for the CDP browser session. If the browser is not used for this long, it is closed.
     /// Default: 300 (5 minutes). Config: config.json `browserIdleTimeoutSecs`.
     /// Env override: `MAC_STATS_BROWSER_IDLE_TIMEOUT_SECS`. Clamped to 30..=3600.
@@ -623,6 +689,23 @@ impl Config {
             }
         }
         DEFAULT
+    }
+
+    /// Master enable/disable switch for all browser automation tools (BROWSER_*).
+    ///
+    /// When set to `false`, the app refuses BROWSER_* tool calls (no Chrome/CDP launch and no HTTP fallback).
+    /// Default: `true`.
+    /// Config: config.json `browserToolsEnabled` (boolean).
+    pub fn browser_tools_enabled() -> bool {
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(b) = json.get("browserToolsEnabled").and_then(|v| v.as_bool()) {
+                    return b;
+                }
+            }
+        }
+        true
     }
 
     /// Maximum navigation wait timeout in seconds for BROWSER_NAVIGATE, BROWSER_GO_BACK, BROWSER_GO_FORWARD, and BROWSER_RELOAD. Slow or stuck navigations fail with a clear message instead of hanging. Config: config.json `browserNavigationTimeoutSecs`. Env: `MAC_STATS_BROWSER_NAVIGATION_TIMEOUT_SECS`. Default 30, clamped to 5..=120.
@@ -675,6 +758,33 @@ impl Config {
             }
         }
         None
+    }
+
+    /// Whether to include bounded CDP console and page-level JavaScript error diagnostics
+    /// in `BROWSER_NAVIGATE` tool results (and optionally other browser tool results).
+    ///
+    /// Off by default to preserve existing context size and tool output stability.
+    /// Config: config.json `browserIncludeDiagnosticsInState` (boolean);
+    /// Env: `MAC_STATS_BROWSER_INCLUDE_DIAGNOSTICS_IN_STATE` (true/1/yes or false/0/no).
+    pub fn browser_include_diagnostics_in_state() -> bool {
+        if let Ok(s) = std::env::var("MAC_STATS_BROWSER_INCLUDE_DIAGNOSTICS_IN_STATE") {
+            let lower = s.to_lowercase();
+            return matches!(lower.as_str(), "1" | "true" | "yes" | "on");
+        }
+
+        let config_path = Self::config_file_path();
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(b) = json
+                    .get("browserIncludeDiagnosticsInState")
+                    .and_then(|v| v.as_bool())
+                {
+                    return b;
+                }
+            }
+        }
+
+        false
     }
 
     /// Browser viewport width in pixels (CDP/headless window size). Config: config.json `browserViewportWidth`.

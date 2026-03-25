@@ -484,6 +484,41 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// contiguous phrase `atomic orbitals exceed` is absent there; a spaced `micro atomic orbitals exceed`
 /// is not listed here because the generic `orbitals exceed` arm can match at the boundary before `orbitals`;
 /// `subatomic …` is rejected at the boundary before `atomic` (the `b` in `sub` is an ident continuation).
+/// `wave functions exceed` does not match inside `microwave functions exceed` / `shortwave functions exceed`, and
+/// `wave function exceed` does not match inside `subwave function exceed` (left-boundary at `wave`
+/// rejects `prewave function exceed` and `rewave function exceed`; there is no bare `functions exceed` /
+/// `function exceed` arm—only qualified phrases such as `basis functions exceed`—so `superwavefunction exceed`
+/// does not match via a generic `function` tail; no space inside `wavefunctions`, so the contiguous phrase
+/// `wave functions exceed` is absent there; a spaced `micro wave functions …` still matches at the boundary
+/// before `wave`);
+/// `slater determinants exceed` does not match inside `microslater determinants exceed` / `metaslater determinants exceed`, and
+/// `slater determinant exceed` does not match inside `subslater determinant exceed` (left-boundary at `slater`
+/// rejects `preslater determinant exceed` and `reslater determinant exceed`; embedded `slater determinant exceed`
+/// inside `superslater determinant exceed` does not match (the `r` in `super` is an ident continuation before `slater`);
+/// no space inside `slaterdeterminants`, so the contiguous phrase `slater determinants exceed` is absent in
+/// `microslaterdeterminants exceed` / `metaslaterdeterminants exceed`;
+/// `superslaterdeterminant exceed` has no contiguous `slater determinant exceed` substring (no space between `slater` and `determinant`));
+/// `configuration state functions exceed` does not match inside `microconfiguration state functions exceed` / `metaconfiguration state functions exceed`, and
+/// `configuration state function exceed` does not match inside `subconfiguration state function exceed` (left-boundary at `configuration`
+/// rejects `preconfiguration state function exceed` and `reconfiguration state function exceed` when `configuration` is embedded in a longer ident;
+/// embedded `configuration state function exceed` inside `superconfiguration state function exceed` does not match (the `r` in `super` is an ident
+/// continuation before `configuration`); no space inside `configurationstatefunctions`, so the contiguous phrase `configuration state functions exceed` is absent in
+/// `microconfigurationstatefunctions exceed` / `metaconfigurationstatefunctions exceed`;
+/// `superconfigurationstatefunction exceed` has no contiguous `configuration state function exceed` substring (no space between `configuration` and `state`));
+/// `csf coefficients exceed` does not match inside `microcsf coefficients exceed` / `metacsf coefficients exceed`, and
+/// `csf coefficient exceed` does not match inside `subcsf coefficient exceed` (left-boundary at `csf`
+/// rejects `precsf coefficient exceed` and `recsf coefficient exceed` when `csf` is embedded in a longer ident;
+/// embedded `csf coefficient exceed` inside `supercsf coefficient exceed` does not match (the `r` in `super` is an ident
+/// continuation before `csf`); no space inside `csfcoefficients`, so the contiguous phrase `csf coefficients exceed` is absent in
+/// `microcsfcoefficients exceed` / `metacsfcoefficients exceed`;
+/// `supercsfcoefficient exceed` has no contiguous `csf coefficient exceed` substring (no space between `csf` and `coefficient`));
+/// `ci coefficients exceed` does not match inside `microci coefficients exceed` / `metaci coefficients exceed`, and
+/// `ci coefficient exceed` does not match inside `subci coefficient exceed` (left-boundary at `ci`
+/// rejects `preci coefficient exceed` and `reci coefficient exceed` when `ci` is embedded in a longer ident;
+/// embedded `ci coefficient exceed` inside `superci coefficient exceed` does not match (the `r` in `super` is an ident
+/// continuation before `ci`); no space inside `cicoefficients`, so the contiguous phrase `ci coefficients exceed` is absent in
+/// `microcicoefficients exceed` / `metacicoefficients exceed`;
+/// `supercicoefficient exceed` has no contiguous `ci coefficient exceed` substring (no space between `ci` and `coefficient`));
 /// `electrons exceed` does not match inside `microelectrons exceed` / `metaelectrons exceed`, and
 /// `electron exceed` does not match inside `subelectron exceed` (left-boundary rejects
 /// `preelectron exceed` and `reelectron exceed`; embedded `electron exceed` inside `superelectron exceed`
@@ -2378,6 +2413,95 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
             || contains_phrase_after_ident_boundary(&lower, "atomic orbitals exceeded")
             || contains_phrase_after_ident_boundary(&lower, "atomic orbital exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "wave functions / wave function exceed(s/ed)" (FEAT-D458). Parallel to
+        // `atomic orbitals exceed` / `atomic orbital exceed`. `wave function exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `wave functions exceed` (the `s` in `functions` prevents the singular `function` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `wave` so `microwave functions exceed` / `shortwave functions exceed` /
+        // `subwave function exceed` do not false-positive (no space inside `wavefunctions`, so the
+        // phrase `wave functions exceed` is absent in `microwavefunctions exceed` / `metawavefunctions exceed`,
+        // which also avoids qualified `… functions exceed` arms such as `basis functions exceed`; a spaced
+        // `micro wave functions …` still matches at the boundary before `wave`). `prewave function exceed` and
+        // `rewave function exceed` are rejected the same way; `superwavefunction exceed` has no contiguous
+        // `wave function exceed` substring (no space between `wave` and `function`).
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `wave functions exceed`
+        // rate limits, CI-vector / orbital-basis caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "wave functions exceed")
+            || contains_phrase_after_ident_boundary(&lower, "wave functions exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "wave function exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "slater determinants / slater determinant exceed(s/ed)" (FEAT-D459). Parallel to
+        // `wave functions exceed` / `wave function exceed`. `slater determinant exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `slater determinants exceed` (the `s` in `determinants` prevents the singular `determinant` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `slater` so `microslater determinants exceed` / `metaslater determinants exceed` /
+        // `subslater determinant exceed` do not false-positive (no space inside `slaterdeterminants`, so the
+        // phrase `slater determinants exceed` is absent there; a spaced `micro slater determinants …`
+        // still matches at the boundary before `slater`). `preslater determinant exceed` and
+        // `reslater determinant exceed` are rejected the same way; `superslaterdeterminant exceed` has no contiguous
+        // `slater determinant exceed` substring (no space between `slater` and `determinant`).
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `slater determinants exceed`
+        // rate limits, FCI / active-space / determinant caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "slater determinants exceed")
+            || contains_phrase_after_ident_boundary(&lower, "slater determinants exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "slater determinant exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "configuration state functions / configuration state function exceed(s/ed)" (FEAT-D460). Parallel to
+        // `slater determinants exceed` / `slater determinant exceed`. `configuration state function exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `configuration state functions exceed` (the `s` in `functions` prevents the singular `function` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `configuration` so `microconfiguration state functions exceed` / `metaconfiguration state functions exceed` /
+        // `subconfiguration state function exceed` do not false-positive (no space inside `configurationstatefunctions`, so the
+        // phrase `configuration state functions exceed` is absent there; a spaced `micro configuration state functions …`
+        // still matches at the boundary before `configuration`). `preconfiguration state function exceed` and
+        // `reconfiguration state function exceed` are rejected when `configuration` is embedded in a longer ident; `superconfiguration state function exceed`
+        // does not match at the boundary before `configuration`. `superconfigurationstatefunction exceed` has no contiguous
+        // `configuration state function exceed` substring.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `configuration state functions exceed`
+        // rate limits, active-space / CSF-count caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "configuration state functions exceed")
+            || contains_phrase_after_ident_boundary(&lower, "configuration state functions exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "configuration state function exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "csf coefficients / csf coefficient exceed(s/ed)" (FEAT-D461). Parallel to
+        // `configuration state functions exceed` / `configuration state function exceed`. `csf coefficient exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `csf coefficients exceed` (the `s` in `coefficients` prevents the singular `coefficient` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `csf` so `microcsf coefficients exceed` / `metacsf coefficients exceed` /
+        // `subcsf coefficient exceed` do not false-positive (no space inside `csfcoefficients`, so the
+        // phrase `csf coefficients exceed` is absent there; a spaced `micro csf coefficients …`
+        // still matches at the boundary before `csf`). `precsf coefficient exceed` and
+        // `recsf coefficient exceed` are rejected when `csf` is embedded in a longer ident; `supercsf coefficient exceed`
+        // does not match at the boundary before `csf`. `supercsfcoefficient exceed` has no contiguous
+        // `csf coefficient exceed` substring.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `csf coefficients exceed`
+        // rate limits, CI-vector / CSF-expansion caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "csf coefficients exceed")
+            || contains_phrase_after_ident_boundary(&lower, "csf coefficients exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "csf coefficient exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "ci coefficients / ci coefficient exceed(s/ed)" (FEAT-D462). Parallel to
+        // `csf coefficients exceed` / `csf coefficient exceed`. `ci coefficient exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `ci coefficients exceed` (the `s` in `coefficients` prevents the singular `coefficient` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `ci` so `microci coefficients exceed` / `metaci coefficients exceed` /
+        // `subci coefficient exceed` do not false-positive (no space inside `cicoefficients`, so the
+        // phrase `ci coefficients exceed` is absent there; a spaced `micro ci coefficients …`
+        // still matches at the boundary before `ci`). `preci coefficient exceed` and
+        // `reci coefficient exceed` are rejected when `ci` is embedded in a longer ident; `superci coefficient exceed`
+        // does not match at the boundary before `ci`. `supercicoefficient exceed` has no contiguous
+        // `ci coefficient exceed` substring.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `ci coefficients exceed`
+        // rate limits, CI-vector / expansion caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "ci coefficients exceed")
+            || contains_phrase_after_ident_boundary(&lower, "ci coefficients exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "ci coefficient exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
         // copy does not match non-slot errors. Plural `inputs are/were` (FEAT-D302) parallels
@@ -2991,6 +3115,21 @@ mod tests {
         ));
         assert!(is_context_overflow_error(
             "gateway: atomic orbitals exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: wave functions exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: slater determinants exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: configuration state functions exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: csf coefficients exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: ci coefficients exceed available context on this request"
         ));
         assert!(is_context_overflow_error(
             "gateway: electrons exceed available context on this request"
@@ -6306,6 +6445,201 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "reatomicorbital exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: wave functions exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: wave functions exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: wave function exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: wave function exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: wave functions exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: wave functions exceeded CI-vector / orbital-basis cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: wave function exceed max CI expansion budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microwavefunctions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metawavefunctions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subwave function exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superwavefunction exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "prewavefunction exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "rewavefunction exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: slater determinants exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: slater determinants exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: slater determinant exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: slater determinant exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: slater determinants exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: slater determinants exceeded FCI / active-space cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: slater determinant exceed max expansion budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microslaterdeterminants exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaslaterdeterminants exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subslater determinant exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superslaterdeterminant exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "preslaterdeterminant exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "reslaterdeterminant exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: configuration state functions exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: configuration state functions exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: configuration state function exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: configuration state function exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: configuration state functions exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: configuration state functions exceeded active-space / CSF-count cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: configuration state function exceed max CSF budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microconfigurationstatefunctions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaconfigurationstatefunctions exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subconfiguration state function exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "superconfigurationstatefunction exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "preconfiguration state function exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "reconfiguration state function exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: csf coefficients exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: csf coefficients exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: csf coefficient exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: csf coefficient exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: csf coefficients exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: csf coefficients exceeded CI expansion / active-space cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: csf coefficient exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microcsfcoefficients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metacsfcoefficients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subcsf coefficient exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supercsfcoefficient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "precsf coefficient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "recsf coefficient exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: ci coefficients exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: ci coefficients exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: ci coefficient exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: ci coefficient exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: ci coefficients exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: ci coefficients exceeded CI-vector / expansion cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: ci coefficient exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microcicoefficients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metacicoefficients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subci coefficient exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supercicoefficient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "preci coefficient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "reci coefficient exceed the model's context window on this request"
         ));
         assert!(is_context_overflow_error(
             "API: electrons exceed the model's context window on this request"

@@ -13,11 +13,13 @@ pub type RunTaskResult = Result<(String, bool), String>;
 /// Auto-closes as unsuccessful if max iterations reached without finished.
 /// When reply_to_discord_channel is Some (from scheduler or from task file ## Reply-to: discord <id>), sends the finished task summary to that channel.
 /// message_prefix is prepended when sending (e.g. "[Schedule: id] "). Caller should pass None if not from scheduler.
+/// When `scheduler_delivery_awareness` is Some and Discord send succeeds, records an entry for CPU chat awareness (scheduler-initiated delivery only).
 pub async fn run_task_until_finished(
     task_path: PathBuf,
     max_iterations: u32,
     reply_to_discord_channel: Option<u64>,
     message_prefix: Option<String>,
+    scheduler_delivery_awareness: Option<(String, Option<String>)>,
 ) -> RunTaskResult {
     let task_name = task_path
         .file_name()
@@ -34,6 +36,7 @@ pub async fn run_task_until_finished(
                 reply_to_discord_channel,
                 &message_prefix,
                 &summary,
+                scheduler_delivery_awareness.as_ref(),
             )
             .await;
             return Ok((summary, sent));
@@ -87,6 +90,7 @@ pub async fn run_task_until_finished(
                 reply_to_discord_channel,
                 &message_prefix,
                 &last_reply,
+                scheduler_delivery_awareness.as_ref(),
             )
             .await;
             return Ok((last_reply, sent));
@@ -117,6 +121,7 @@ pub async fn run_task_until_finished(
         reply_to_discord_channel,
         &message_prefix,
         &summary,
+        scheduler_delivery_awareness.as_ref(),
     )
     .await;
     Ok((summary, sent))
@@ -128,6 +133,7 @@ async fn send_finished_summary_if_channel(
     reply_to_override: Option<u64>,
     message_prefix: &Option<String>,
     summary: &str,
+    scheduler_delivery_awareness: Option<&(String, Option<String>)>,
 ) -> bool {
     let channel_id =
         reply_to_override.or_else(|| crate::task::get_reply_to_discord_channel(task_path));
@@ -140,6 +146,14 @@ async fn send_finished_summary_if_channel(
                     "Task runner: sent finished summary to Discord channel {}",
                     channel_id
                 );
+                if let Some((ctx_key, schedule_id)) = scheduler_delivery_awareness {
+                    crate::scheduler::delivery_awareness::record_if_new(
+                        ctx_key,
+                        schedule_id.as_deref(),
+                        channel_id,
+                        &message,
+                    );
+                }
                 true
             }
             Err(e) => {

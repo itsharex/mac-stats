@@ -1955,7 +1955,7 @@ pub(super) async fn run_discord_ollama_router(
             }
             if let Some(path_str) = msg.strip_prefix(ATTACH_PREFIX) {
                 let path = PathBuf::from(path_str.trim());
-                if allowed_attachment_path(&path) {
+                if crate::security::attachment_roots::is_allowed_outbound_attachment_path(&path) {
                     use serenity::builder::CreateAttachment;
                     use serenity::builder::CreateMessage;
                     if let Ok(att) = CreateAttachment::path(&path).await {
@@ -2185,23 +2185,25 @@ pub(super) async fn run_discord_ollama_router(
         }
     }
 
-    // Send attachment(s) if any (e.g. BROWSER_SCREENSHOT); only paths under ~/.mac-stats/screenshots/.
+    // Send attachment(s) if any (e.g. BROWSER_SCREENSHOT); only paths under shared outbound attachment roots.
     // Always send the batch so screenshots reliably reach Discord (verbose per-ATTACH can be unreliable).
     let allowed: Vec<_> = attachment_paths
         .iter()
-        .filter(|p| allowed_attachment_path(p))
+        .filter(|p| {
+            crate::security::attachment_roots::is_allowed_outbound_attachment_path(p)
+        })
         .cloned()
         .collect();
     if allowed.len() != attachment_paths.len() && !attachment_paths.is_empty() {
         info!(
-            "Discord: {} of {} attachment(s) under screenshots dir (rest skipped)",
+            "Discord: {} of {} attachment(s) under allowed outbound roots (rest skipped)",
             allowed.len(),
             attachment_paths.len()
         );
     }
     if !attachment_paths.is_empty() && allowed.is_empty() {
         info!(
-            "Discord: had {} attachment path(s) but none allowed (must be under ~/.mac-stats/screenshots/)",
+            "Discord: had {} attachment path(s) but none allowed (must be under configured attachment roots; see docs)",
             attachment_paths.len()
         );
     }
@@ -2460,19 +2462,8 @@ fn token_from_config_env_file(path: &Path) -> Option<String> {
     token.filter(|t| !t.is_empty())
 }
 
-/// Returns true only if `path` is under `~/.mac-stats/screenshots/` (canonicalized) so we never send arbitrary files.
-fn allowed_attachment_path(path: &Path) -> bool {
-    let Ok(canon_path) = path.canonicalize() else {
-        return false;
-    };
-    let Ok(allowed_dir) = crate::config::Config::screenshots_dir().canonicalize() else {
-        return false;
-    };
-    canon_path.starts_with(allowed_dir)
-}
-
 /// Send a message to a Discord channel with optional file attachments (e.g. screenshots).
-/// Paths must be under ~/.mac-stats/screenshots/; others are skipped.
+/// Paths must be under configured outbound attachment roots (`security::attachment_roots`); others are skipped.
 /// Respects Discord 429 rate limits (up to 3 retries with Retry-After + jitter).
 pub async fn send_message_to_channel_with_attachments(
     channel_id: u64,
@@ -2485,7 +2476,9 @@ pub async fn send_message_to_channel_with_attachments(
     };
     let allowed: Vec<_> = attachment_paths
         .iter()
-        .filter(|p| allowed_attachment_path(p))
+        .filter(|p| {
+            crate::security::attachment_roots::is_allowed_outbound_attachment_path(p)
+        })
         .collect();
     if allowed.is_empty() {
         return send_message_to_channel(channel_id, content).await;
@@ -2703,19 +2696,27 @@ pub fn spawn_discord_if_configured() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn allowed_attachment_path_under_screenshots_only() {
+    fn outbound_attachment_path_allowlist() {
         let screenshots = crate::config::Config::screenshots_dir();
         let _ = std::fs::create_dir_all(&screenshots);
         let under = screenshots.join("test_attachment_allowed.png");
         let _ = std::fs::write(&under, b"x");
         assert!(
-            allowed_attachment_path(&under),
+            crate::security::attachment_roots::is_allowed_outbound_attachment_path(&under),
             "path under screenshots_dir should be allowed"
         );
         let _ = std::fs::remove_file(&under);
+
+        let pdfs = crate::config::Config::pdfs_dir();
+        let _ = std::fs::create_dir_all(&pdfs);
+        let pdf = pdfs.join("test_export.pdf");
+        let _ = std::fs::write(&pdf, b"%PDF");
+        assert!(
+            crate::security::attachment_roots::is_allowed_outbound_attachment_path(&pdf),
+            "path under pdfs_dir should be allowed when directory exists"
+        );
+        let _ = std::fs::remove_file(&pdf);
 
         let outside = std::env::temp_dir()
             .join("mac-stats-attachment-test-outside")
@@ -2723,8 +2724,8 @@ mod tests {
         let _ = std::fs::create_dir_all(outside.parent().unwrap());
         let _ = std::fs::write(&outside, b"x");
         assert!(
-            !allowed_attachment_path(&outside),
-            "path outside screenshots_dir should be rejected"
+            !crate::security::attachment_roots::is_allowed_outbound_attachment_path(&outside),
+            "path outside allowlist should be rejected"
         );
         let _ = std::fs::remove_file(&outside);
         let _ = std::fs::remove_dir(outside.parent().unwrap());
