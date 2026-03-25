@@ -534,16 +534,13 @@ pub(crate) async fn handle_browser_extract() -> String {
         Ok(Err(_cdp_err)) => {
             match tokio::task::spawn_blocking(crate::browser_agent::extract_http).await {
                 Ok(Ok(text)) => text,
-                Ok(Err(e)) => format!(
-                    "{}",
-                    append_browser_readiness_context(
-                        format!(
-                            "BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
-                            e
-                        ),
-                        false,
-                        None
-                    )
+                Ok(Err(e)) => append_browser_readiness_context(
+                    format!(
+                        "BROWSER_EXTRACT failed: {}. (Navigate to a page first with BROWSER_NAVIGATE.)",
+                        e
+                    ),
+                    false,
+                    None,
                 ),
                 Err(e) => format!("BROWSER_EXTRACT task error: {}", e),
             }

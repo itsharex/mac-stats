@@ -13,12 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unix single-instance guard** — Optional fail-fast second launch using a non-blocking **`flock`** on `~/.mac-stats/single-instance.lock` (warn + exit 0 if another instance holds the lock). (`lib.rs`.)
 - **Outbound Discord attachment roots** — `security/attachment_roots.rs` centralizes allowlisting: canonical roots under **`~/.mac-stats`** for screenshots, PDF exports, and browser downloads, plus optional **`extraAttachmentRoots`** in `config.json` (must resolve under `$HOME` or `~/.mac-stats`). Discord attachment sending filters through **`is_allowed_outbound_attachment_path`**. (`discord/mod.rs`, `config/mod.rs`, `security/mod.rs`, `docs/data_files_reference.md`.)
 - **RUN_CMD pipeline hardening** — Each pipeline **stage** runs via `sh -c`; stages split **only** at top-level `|`. Quote-aware validation rejects `;`, `&&`, `||`, nested `|`, leading subshells, `$(…)`, backticks, process substitution, and stray background `&`; first token cannot be a nested shell/env wrapper (`bash`, `env`, …). (`commands/run_cmd.rs`, `docs/011_local_cmd_agent.md`.)
-- **Ollama errors** — `is_context_overflow_error` extended with **`wave function(s)`**, **`slater determinant(s)`**, **`configuration state function(s)`**, **`csf coefficient(s)`**, and **`ci coefficient(s)`** exceed / exceeded chains aligned with the existing context-slot pairing rules (FEAT-D458–D462). (`commands/content_reduction.rs`.)
+- **Ollama errors** — `is_context_overflow_error` extended with **`wave function(s)`**, **`slater determinant(s)`**, **`configuration state function(s)`**, **`csf coefficient(s)`**, **`ci coefficient(s)`**, **`mo coefficient(s)`**, **`natural orbital(s)`**, **`occupied orbital(s)`**, and **`canonical orbital(s)`** exceed / exceeded chains aligned with the existing context-slot pairing rules (FEAT-D458–D465, FEAT-D467). (`commands/content_reduction.rs`.)
 
 ### Changed
-- **Browser tools** — Dispatch and agent prompt tweaks alongside CDP wiring. (`commands/browser_tool_dispatch.rs`, `commands/agent_descriptions.rs`.)
+- **Browser agent (CDP)** — Trailing `/cdp` path normalization uses `strip_suffix("/cdp")` (clearer than manual slicing); empty path and bare `cdp` still normalize to `/`. (`browser_agent/cdp_url.rs`.)
+- **Browser tools** — Dispatch and agent prompt tweaks alongside CDP wiring; **`BROWSER_EXTRACT`** CDP-fallback errors pass the message directly into `append_browser_readiness_context` (drop redundant `format!` wrapper). (`commands/browser_tool_dispatch.rs`, `commands/agent_descriptions.rs`.)
+- **Browser session** — `BrowserSessionCell` type alias for the cached session `Mutex` (keeps `type_complexity` lint clean). (`browser_agent/mod.rs`.)
+- **Single-instance lock** — Open `~/.mac-stats/single-instance.lock` with **`truncate(true)`** so stale contents are not retained across launches. (`lib.rs`.)
 - **Task runner** — Minor review/runner integration. (`task/review.rs`, `task/runner.rs`.)
-- **Docs & agent workflow** — OpenClaw reviewer / FEATURE-CODER timestamps and backlog (`005-openclaw-reviewer/005-openclaw-reviewer.md`, `006-feature-coder/FEATURE-CODER.md`); agent flow and automation references (`docs/020_agent_task_flow_analysis.md`, `docs/029_browser_automation.md`, etc.).
+- **Docs & agent workflow** — OpenClaw reviewer / FEATURE-CODER verification timestamps, OpenClaw `HEAD`, and backlog through **FEAT-D467** / **FEAT-D466** (`005-openclaw-reviewer/005-openclaw-reviewer.md`, `006-feature-coder/FEATURE-CODER.md`); agent flow and automation references (`docs/020_agent_task_flow_analysis.md`, `docs/029_browser_automation.md`, etc.).
 
 ## [0.1.59] - 2026-03-25
 

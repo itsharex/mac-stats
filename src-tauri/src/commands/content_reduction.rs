@@ -519,6 +519,34 @@ fn contains_bounded_token(haystack: &str, needle: &str) -> bool {
 /// continuation before `ci`); no space inside `cicoefficients`, so the contiguous phrase `ci coefficients exceed` is absent in
 /// `microcicoefficients exceed` / `metacicoefficients exceed`;
 /// `supercicoefficient exceed` has no contiguous `ci coefficient exceed` substring (no space between `ci` and `coefficient`));
+/// `mo coefficients exceed` does not match inside `micromocoefficients exceed` / `metamocoefficients exceed`, and
+/// `mo coefficient exceed` does not match inside `submo coefficient exceed` (left-boundary at `mo`
+/// rejects `premo coefficient exceed` and `remo coefficient exceed` when `mo` is embedded in a longer ident;
+/// embedded `mo coefficient exceed` inside `supermo coefficient exceed` does not match (the `r` in `super` is an ident
+/// continuation before `mo`); no space inside `mocoefficients`, so the contiguous phrase `mo coefficients exceed` is absent in
+/// `micromocoefficients exceed` / `metamocoefficients exceed`;
+/// `supermocoefficient exceed` has no contiguous `mo coefficient exceed` substring (no space between `mo` and `coefficient`));
+/// `natural orbitals exceed` does not match inside `micronaturalorbitals exceed` / `metanaturalorbitals exceed`, and
+/// `natural orbital exceed` does not match inside `subnatural orbital exceed` (left-boundary at `natural`
+/// rejects `prenaturalorbital exceed` and `renaturalorbital exceed`; embedded `natural orbital exceed`
+/// inside `supernaturalorbital exceed` does not match; no space inside `naturalorbitals`, so the
+/// contiguous phrase `natural orbitals exceed` is absent there; a spaced `micronatural orbitals exceed`
+/// is not listed here because the generic `orbitals exceed` arm can match at the boundary before `orbitals`;
+/// similarly `supernatural orbital exceed` / `prenatural orbital exceed` are not listed because the generic
+/// `orbital exceed` arm matches at the boundary before `orbital` when a context slot is present);
+/// `occupied orbitals exceed` does not match inside `microoccupiedorbitals exceed` / `metaoccupiedorbitals exceed`, and
+/// `occupied orbital exceed` does not match inside `suboccupied orbital exceed` (left-boundary at `occupied`
+/// rejects embedded `occupied` after an ident char (`preoccupied …`, `unoccupied …` on the qualified `occupied orbitals` arm);
+/// a spaced `preoccupied orbitals …` / `unoccupied orbitals …` with a context slot can still match the generic
+/// `orbitals exceed` arm at the boundary before `orbitals` (parallel to `natural orbitals exceed`);
+/// no space inside `occupiedorbitals`, so the contiguous phrase `occupied orbitals exceed` is absent there;
+/// a spaced `micro occupied orbitals …` still matches at the boundary before `occupied`);
+/// `canonical orbitals exceed` does not match inside `microcanonicalorbitals exceed` / `metacanonicalorbitals exceed`, and
+/// `canonical orbital exceed` does not match inside `subcanonical orbital exceed` (left-boundary at `canonical`
+/// rejects `precanonicalorbital exceed` and `recanonicalorbital exceed`; embedded `canonical orbital exceed`
+/// inside `supercanonicalorbital exceed` does not match; no space inside `canonicalorbitals`, so the
+/// contiguous phrase `canonical orbitals exceed` is absent there; a spaced `micro canonical orbitals …`
+/// still matches at the boundary before `canonical`; `microcanonical` as one token breaks the boundary before `canonical`);
 /// `electrons exceed` does not match inside `microelectrons exceed` / `metaelectrons exceed`, and
 /// `electron exceed` does not match inside `subelectron exceed` (left-boundary rejects
 /// `preelectron exceed` and `reelectron exceed`; embedded `electron exceed` inside `superelectron exceed`
@@ -2502,6 +2530,76 @@ pub(crate) fn is_context_overflow_error(err: &str) -> bool {
             || contains_phrase_after_ident_boundary(&lower, "ci coefficients exceeded")
             || contains_phrase_after_ident_boundary(&lower, "ci coefficient exceed"))
             && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "mo coefficients / mo coefficient exceed(s/ed)" (FEAT-D463). Parallel to
+        // `ci coefficients exceed` / `ci coefficient exceed`. `mo coefficient exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `mo coefficients exceed` (the `s` in `coefficients` prevents the singular `coefficient` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `mo` so `micromo coefficients exceed` / `metamo coefficients exceed` /
+        // `submo coefficient exceed` do not false-positive (no space inside `mocoefficients`, so the
+        // phrase `mo coefficients exceed` is absent there; a spaced `micro mo coefficients …`
+        // still matches at the boundary before `mo`). `premo coefficient exceed` and
+        // `remo coefficient exceed` are rejected when `mo` is embedded in a longer ident; `supermo coefficient exceed`
+        // does not match at the boundary before `mo`. `supermocoefficient exceed` has no contiguous
+        // `mo coefficient exceed` substring.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `mo coefficients exceed`
+        // rate limits, MO-basis / LCAO caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "mo coefficients exceed")
+            || contains_phrase_after_ident_boundary(&lower, "mo coefficients exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "mo coefficient exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "natural orbitals / natural orbital exceed(s/ed)" (FEAT-D464). Parallel to
+        // `molecular orbitals exceed` / `molecular orbital exceed`. `natural orbital exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `natural orbitals exceed` (the `s` in `orbitals` prevents the singular `orbital` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `natural` so `micronatural orbitals exceed` / `metanatural orbitals exceed` /
+        // `subnatural orbital exceed` do not false-positive (no space inside `naturalorbitals`, so the
+        // phrase `natural orbitals exceed` is absent there; a spaced `micro natural orbitals …`
+        // still matches at the boundary before `natural`). `prenaturalorbital exceed` and
+        // `renaturalorbital exceed` document compounds without a contiguous `natural orbital exceed` substring;
+        // spaced `prenatural orbital exceed` matches the generic `orbital exceed` arm when a slot is present
+        // (parallel to molecular / atomic). `supernatural orbital exceed` does not match at the boundary before `natural`.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `natural orbitals exceed`
+        // rate limits, NO-truncation / occupation-number caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "natural orbitals exceed")
+            || contains_phrase_after_ident_boundary(&lower, "natural orbitals exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "natural orbital exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "occupied orbitals / occupied orbital exceed(s/ed)" (FEAT-D467). Parallel to
+        // `natural orbitals exceed` / `natural orbital exceed`. `occupied orbital exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `occupied orbitals exceed` (the `s` in `orbitals` prevents the singular `orbital` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `occupied` so `microoccupied orbitals exceed` / `metaoccupied orbitals exceed` /
+        // `suboccupied orbital exceed` do not false-positive (no space inside `occupiedorbitals`, so the
+        // phrase `occupied orbitals exceed` is absent there; a spaced `micro occupied orbitals …`
+        // still matches at the boundary before `occupied`). `preoccupied orbitals exceed` and
+        // `unoccupied orbitals exceed` embed `occupied` without a boundary before the token.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `occupied orbitals exceed`
+        // rate limits, frozen-core / active-space caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "occupied orbitals exceed")
+            || contains_phrase_after_ident_boundary(&lower, "occupied orbitals exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "occupied orbital exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
+        // Plural / singular "canonical orbitals / canonical orbital exceed(s/ed)" (FEAT-D465). Parallel to
+        // `natural orbitals exceed` / `natural orbital exceed`. `canonical orbital exceed` matches present/past via
+        // `exceed` prefix of `exceeds` / `exceeded` and does not substring-match plural
+        // `canonical orbitals exceed` (the `s` in `orbitals` prevents the singular `orbital` + space +
+        // `exceed` path from aligning inside the plural phrase).
+        // Ident-boundary at `canonical` so `microcanonical orbitals exceed` / `metacanonical orbitals exceed` /
+        // `subcanonical orbital exceed` do not false-positive (no space inside `canonicalorbitals`, so the
+        // phrase `canonical orbitals exceed` is absent there; a spaced `micro canonical orbitals …`
+        // still matches at the boundary before `canonical`). `precanonicalorbital exceed` and
+        // `recanonicalorbital exceed` document compounds without a contiguous `canonical orbital exceed` substring;
+        // spaced `precanonical orbital exceed` matches the generic `orbital exceed` arm when a slot is present.
+        // `microcanonical` as one token before `orbitals` does not match at the boundary before `canonical`.
+        // Same explicit context-slot phrases as `messages exceed`. Negatives: HTTP `canonical orbitals exceed`
+        // rate limits, CASSCF / active-space caps, etc. without slot wording.
+        || ((contains_phrase_after_ident_boundary(&lower, "canonical orbitals exceed")
+            || contains_phrase_after_ident_boundary(&lower, "canonical orbitals exceeded")
+            || contains_phrase_after_ident_boundary(&lower, "canonical orbital exceed"))
+            && explicit_context_slot_after_ident_boundary(&lower))
         // "message/input(s) … too long" (distinct from `prompt too long` already handled above).
         // Same context-slot guard as `messages exceed` (FEAT-D295) so incidental `model context`
         // copy does not match non-slot errors. Plural `inputs are/were` (FEAT-D302) parallels
@@ -3130,6 +3228,18 @@ mod tests {
         ));
         assert!(is_context_overflow_error(
             "gateway: ci coefficients exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: mo coefficients exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: natural orbitals exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: occupied orbitals exceed available context on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: canonical orbitals exceed available context on this request"
         ));
         assert!(is_context_overflow_error(
             "gateway: electrons exceed available context on this request"
@@ -6622,6 +6732,159 @@ mod tests {
         ));
         assert!(!is_context_overflow_error(
             "schema: ci coefficient exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(is_context_overflow_error(
+            "API: mo coefficients exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: mo coefficients exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: mo coefficient exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: mo coefficient exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: mo coefficients exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: mo coefficients exceeded LCAO / MO-basis cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: mo coefficient exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micromocoefficients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metamocoefficients exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: submo coefficient exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supermocoefficient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "premo coefficient exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "remo coefficient exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: natural orbitals exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: natural orbitals exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: natural orbital exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: natural orbital exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: natural orbitals exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: natural orbitals exceeded NO-truncation / occupation cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: natural orbital exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: micronaturalorbitals exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metanaturalorbitals exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subnatural orbital exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supernaturalorbital exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "prenaturalorbital exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "renaturalorbital exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "API: occupied orbitals exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: occupied orbitals exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: occupied orbital exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: occupied orbital exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: occupied orbitals exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: occupied orbitals exceeded frozen-core / active-space cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: occupied orbital exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microoccupiedorbitals exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metaoccupiedorbitals exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: suboccupied orbital exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: preoccupied orbitals exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: unoccupied orbitals exceed per-client rate limits for this endpoint"
+        ));
+        assert!(is_context_overflow_error(
+            "API: canonical orbitals exceed the model's context window on this request"
+        ));
+        assert!(is_context_overflow_error(
+            "batch: canonical orbitals exceeded available context for the completion"
+        ));
+        assert!(is_context_overflow_error(
+            "validation: canonical orbital exceed maximum context length for this model"
+        ));
+        assert!(is_context_overflow_error(
+            "gateway: canonical orbital exceeded the context window"
+        ));
+        assert!(!is_context_overflow_error(
+            "HTTP: canonical orbitals exceed per-client rate limits for this endpoint"
+        ));
+        assert!(!is_context_overflow_error(
+            "billing: canonical orbitals exceeded CASSCF / active-space cap (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "schema: canonical orbital exceed max variational budget on this field (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "config: microcanonicalorbitals exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "tuning: metacanonicalorbitals exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "parser: subcanonical orbital exceed core budget (no model context configured)"
+        ));
+        assert!(!is_context_overflow_error(
+            "supercanonicalorbital exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "precanonicalorbital exceed the model's context window on this request"
+        ));
+        assert!(!is_context_overflow_error(
+            "recanonicalorbital exceed the model's context window on this request"
         ));
         assert!(!is_context_overflow_error(
             "config: microcicoefficients exceed the model's context window on this request"

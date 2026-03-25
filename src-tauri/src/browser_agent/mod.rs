@@ -781,7 +781,8 @@ fn fetch_page_and_extract_phones_with_browser(
 }
 
 /// Cached browser session: (Browser, created_at, last_used, was_headless). Dropped when idle longer than browser_idle_timeout_secs.
-static BROWSER_SESSION: OnceLock<Mutex<Option<(Browser, Instant, Instant, bool)>>> = OnceLock::new();
+type BrowserSessionCell = Mutex<Option<(Browser, Instant, Instant, bool)>>;
+static BROWSER_SESSION: OnceLock<BrowserSessionCell> = OnceLock::new();
 
 /// Index of the current tab for BROWSER_* actions (0 = first tab). Updated when BROWSER_NAVIGATE is used with new_tab.
 static CURRENT_TAB_INDEX: OnceLock<Mutex<usize>> = OnceLock::new();

@@ -21,21 +21,17 @@ fn strip_devtools_browser_path(path: &str) -> String {
 
 fn strip_trailing_cdp_path(path: &str) -> String {
     let trimmed = path.trim_end_matches('/');
-    if trimmed.ends_with("/cdp") {
-        let cut = trimmed[..trimmed.len() - 4].trim_end_matches('/');
+    if let Some(prefix) = trimmed.strip_suffix("/cdp") {
+        let cut = prefix.trim_end_matches('/');
         if cut.is_empty() {
             "/".to_string()
         } else {
             cut.to_string()
         }
-    } else if trimmed == "cdp" {
+    } else if trimmed == "cdp" || trimmed.is_empty() {
         "/".to_string()
     } else {
-        if trimmed.is_empty() {
-            "/".to_string()
-        } else {
-            trimmed.to_string()
-        }
+        trimmed.to_string()
     }
 }
 

@@ -172,6 +172,7 @@ fn run_internal(open_cpu_window: bool) {
 
         let _instance_lock_guard: Option<std::fs::File> = match std::fs::OpenOptions::new()
             .create(true)
+            .truncate(true)
             .read(true)
             .write(true)
             .open(&lock_path)
