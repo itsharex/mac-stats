@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **`BROWSER_SCROLL`** (viewport-based steps), **`BROWSER_EXTRACT`** (markdown from DOM), post-launch **`/json/version`** polling; expanded **`config.json`** and agent prompts; documentation refresh across browser, agents, memory, and logging references.
+- **OpenClaw reviewer** — Independent re-run timestamp and upstream status for **2026-03-26** (`HEAD` unchanged `55dc6a8bb2`; **Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 
 ## [0.1.60] - 2026-03-25
 
