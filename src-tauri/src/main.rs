@@ -57,6 +57,13 @@ struct Args {
     )]
     browser_doctor: bool,
 
+    /// [Debug] CDP Page.crash on the current automation tab (same browser_agent session). Exits after a short delay so Target.targetCrashed can log. Requires browser tools enabled.
+    #[arg(
+        long = "browser-debug-crash-tab",
+        help = "Debug: invoke Page.crash on the automation tab (smoke test for Target.targetCrashed handling); exits"
+    )]
+    browser_debug_crash_tab: bool,
+
     /// Subcommands: task (add, list, show, ...) or agent (test). Run and exit without starting the app.
     #[command(subcommand)]
     cmd: Option<MainCmd>,
@@ -157,6 +164,29 @@ fn main() {
         mac_stats::config::Config::ensure_defaults();
         let code = mac_stats::browser_doctor::run_browser_doctor_stdio();
         std::process::exit(code);
+    }
+
+    if args.browser_debug_crash_tab {
+        mac_stats::config::Config::ensure_defaults();
+        if !mac_stats::config::Config::browser_tools_enabled() {
+            eprintln!(
+                "--browser-debug-crash-tab requires browser tools enabled (browserToolsEnabled in config)."
+            );
+            std::process::exit(1);
+        }
+        match mac_stats::browser_agent::debug_page_crash_current_automation_tab() {
+            Ok(msg) => {
+                println!("{}", msg);
+                // Side WebSocket thread needs time to read Target.targetCrashed before we exit.
+                std::thread::sleep(std::time::Duration::from_millis(1200));
+                mac_stats::sync_debug_log_best_effort();
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     // If a subcommand is used, run it and exit

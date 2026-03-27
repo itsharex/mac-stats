@@ -33,7 +33,7 @@ Ollama invokes tools by replying with **exactly one line** in the form `TOOL_NAM
 | **FETCH_URL** | `FETCH_URL: <full URL>` | Fetch web page body as text (server-side, no CORS). | `commands/browser.rs` → `fetch_page_content()` (reqwest, 15s timeout). |
 | **BRAVE_SEARCH** | `BRAVE_SEARCH: <search query>` | Web search; results injected for Ollama to summarize. | `commands/brave.rs` → `brave_web_search()`. Requires `BRAVE_API_KEY`. |
 | **RUN_JS** | `RUN_JS: <JavaScript code>` | Execute JavaScript (e.g. in CPU window). In Discord, JS is not executed. | CPU window: frontend runs code and returns result; Discord: "not available" message. |
-| **BROWSER_SCREENSHOT** | `BROWSER_SCREENSHOT: current` | Screenshot of current page only. Navigate first with BROWSER_NAVIGATE. | `browser_agent/`; PNG saved to `~/.mac-stats/screenshots/`. |
+| **BROWSER_SCREENSHOT** | `BROWSER_SCREENSHOT: current` or `BROWSER_SCREENSHOT: <url>` | **current** — capture focused tab as-is. **URL form** — navigate the **focused** CDP tab to that URL (same SSRF checks as BROWSER_NAVIGATE), then capture. | `commands/browser_tool_dispatch.rs` → `browser_agent/`; PNG under `~/.mac-stats/screenshots/`. |
 | **BROWSER_NAVIGATE** | `BROWSER_NAVIGATE: <url>` | Open URL; returns page state with numbered elements. | CDP or HTTP fallback; optional `new_tab` for new tab. |
 | **BROWSER_GO_BACK** | `BROWSER_GO_BACK` | Go back one step in tab history. | `browser_agent/`. |
 | **BROWSER_GO_FORWARD** | `BROWSER_GO_FORWARD` | Go forward one step in tab history (same focused tab). | `browser_agent/`. |

@@ -1474,15 +1474,20 @@ impl Config {
         DEFAULT
     }
 
-    /// WebSocket connect handshake timeout in seconds for attaching to Chromium CDP (`Browser::connect_with_timeout`).
+    /// Max seconds without CDP traffic before headless_chrome closes the WebSocket (attach + headless launch).
     ///
-    /// Default **60**. Config: **`browserCdpWsConnectTimeoutSecs`**; env: **`MAC_STATS_BROWSER_CDP_WS_CONNECT_TIMEOUT_SECS`**.
-    /// Clamped to **5–120**.
-    pub fn browser_cdp_ws_connect_timeout_secs() -> u64 {
-        const DEFAULT: u64 = 60;
-        const MIN: u64 = 5;
-        const MAX: u64 = 120;
-        if let Ok(s) = std::env::var("MAC_STATS_BROWSER_CDP_WS_CONNECT_TIMEOUT_SECS") {
+    /// Must exceed long LLM turns between **BROWSER_*** tools or Chrome will time out (default was 30s in the
+    /// launcher; attach previously used a shorter idle). Default **600** (10 minutes). Config:
+    /// **`browserCdpIdleTimeoutSecs`**; env: **`MAC_STATS_BROWSER_CDP_IDLE_TIMEOUT_SECS`**. Clamped **30–3600**.
+    ///
+    /// If **`browserCdpIdleTimeoutSecs`** is unset, legacy **`browserCdpWsConnectTimeoutSecs`** / env
+    /// **`MAC_STATS_BROWSER_CDP_WS_CONNECT_TIMEOUT_SECS`** (clamped **5–120**) is used so existing configs keep
+    /// working; otherwise the default above applies.
+    pub fn browser_cdp_idle_timeout_secs() -> u64 {
+        const DEFAULT: u64 = 600;
+        const MIN: u64 = 30;
+        const MAX: u64 = 3600;
+        if let Ok(s) = std::env::var("MAC_STATS_BROWSER_CDP_IDLE_TIMEOUT_SECS") {
             if let Ok(n) = s.trim().parse::<u64>() {
                 return n.clamp(MIN, MAX);
             }
@@ -1491,14 +1496,37 @@ impl Config {
         if let Ok(content) = std::fs::read_to_string(&config_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(n) = json
-                    .get("browserCdpWsConnectTimeoutSecs")
+                    .get("browserCdpIdleTimeoutSecs")
                     .and_then(|v| v.as_u64())
                 {
                     return n.clamp(MIN, MAX);
                 }
             }
         }
+        const LEGACY_MIN: u64 = 5;
+        const LEGACY_MAX: u64 = 120;
+        if let Ok(s) = std::env::var("MAC_STATS_BROWSER_CDP_WS_CONNECT_TIMEOUT_SECS") {
+            if let Ok(n) = s.trim().parse::<u64>() {
+                return n.clamp(LEGACY_MIN, LEGACY_MAX).clamp(MIN, MAX);
+            }
+        }
+        if let Ok(content) = std::fs::read_to_string(&config_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(n) = json
+                    .get("browserCdpWsConnectTimeoutSecs")
+                    .and_then(|v| v.as_u64())
+                {
+                    return n.clamp(LEGACY_MIN, LEGACY_MAX).clamp(MIN, MAX);
+                }
+            }
+        }
         DEFAULT
+    }
+
+    /// Alias for [`Self::browser_cdp_idle_timeout_secs`] (historical name: `Browser::connect_with_timeout` uses this
+    /// duration as **idle**, not a separate TCP handshake timeout).
+    pub fn browser_cdp_ws_connect_timeout_secs() -> u64 {
+        Self::browser_cdp_idle_timeout_secs()
     }
 
     /// CDP [`Browser.grantPermissions`](https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-grantPermissions)
@@ -1754,16 +1782,16 @@ impl Config {
 
     /// Minimum time (seconds) to wait after `wait_until_navigated` completes on the CDP path,
     /// before returning page state (in addition to optional network-idle wait). Mirrors browser-use
-    /// `minimum_wait_page_load_time`; default **0.25s** keeps latency low while absorbing late
-    /// paint/hydration after the load event (raise in config if a site needs more settle time; SPA
-    /// retry still applies separately — see `browserSpaRetryEnabled`).
+    /// `minimum_wait_page_load_time`; default **1.5s** gives SPAs time to hydrate before SPA
+    /// readiness and state capture (lower in config for fast static pages; SPA retry still applies
+    /// separately — see `browserSpaRetryEnabled`).
     ///
-    /// Default **0.25**. Config: `browserPostNavigateMinDwellSecs`.
+    /// Default **1.5**. Config: `browserPostNavigateMinDwellSecs`.
     /// Env: `MAC_STATS_BROWSER_POST_NAV_MIN_DWELL_SECS`. Clamped to `0.0..=10.0`.
     ///
     /// Applies uniformly (same-domain shorter **navigation timeout** does not skip this dwell).
     pub fn browser_post_navigate_min_dwell_secs() -> f64 {
-        const DEFAULT: f64 = 0.25;
+        const DEFAULT: f64 = 1.5;
         const MAX: f64 = 10.0;
         if let Ok(s) = std::env::var("MAC_STATS_BROWSER_POST_NAV_MIN_DWELL_SECS") {
             if let Ok(n) = s.trim().parse::<f64>() {

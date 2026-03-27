@@ -26,27 +26,32 @@ fn pending_map() -> &'static Mutex<HashMap<u64, ChannelPending>> {
     PENDING.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn merge_debounced_contents(parts: &[DebouncedPart]) -> String {
+/// Merge lines for logs and Ollama input: same author → newline-joined body; mixed → `Name: text` per line.
+fn merge_debounced_string_parts(parts: &[(&str, u64, &str)]) -> String {
     if parts.is_empty() {
         return String::new();
     }
     if parts.len() == 1 {
-        return parts[0].content.clone();
+        return parts[0].0.to_string();
     }
-    let same_author = parts.windows(2).all(|w| w[0].author_id == w[1].author_id);
+    let same_author = parts.windows(2).all(|w| w[0].1 == w[1].1);
     if same_author {
-        parts
-            .iter()
-            .map(|p| p.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n")
+        parts.iter().map(|p| p.0).collect::<Vec<_>>().join("\n")
     } else {
         parts
             .iter()
-            .map(|p| format!("{}: {}", p.display_name, p.content))
+            .map(|p| format!("{}: {}", p.2, p.0))
             .collect::<Vec<_>>()
             .join("\n")
     }
+}
+
+fn merge_debounced_contents(parts: &[DebouncedPart]) -> String {
+    let tmp: Vec<(&str, u64, &str)> = parts
+        .iter()
+        .map(|p| (p.content.as_str(), p.author_id, p.display_name.as_str()))
+        .collect();
+    merge_debounced_string_parts(&tmp)
 }
 
 pub(super) fn discord_message_bypasses_debounce(
@@ -170,4 +175,34 @@ pub(super) async fn enqueue_or_run_router(
         }
         run_discord_ollama_router(ctx2, last_msg, merged, Vec::new(), mode).await;
     });
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::merge_debounced_string_parts;
+
+    #[test]
+    fn merge_empty() {
+        assert_eq!(merge_debounced_string_parts(&[]), "");
+    }
+
+    #[test]
+    fn merge_single() {
+        assert_eq!(
+            merge_debounced_string_parts(&[("hello", 1u64, "A")]),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn merge_same_author_newlines() {
+        let s = merge_debounced_string_parts(&[("first", 9, "Zed"), ("second", 9, "Zed")]);
+        assert_eq!(s, "first\nsecond");
+    }
+
+    #[test]
+    fn merge_mixed_authors_prefixed() {
+        let s = merge_debounced_string_parts(&[("hi", 1, "Ann"), ("yo", 2, "Bob")]);
+        assert_eq!(s, "Ann: hi\nBob: yo");
+    }
 }

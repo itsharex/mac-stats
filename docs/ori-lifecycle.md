@@ -41,8 +41,8 @@ If those files are missing or empty, no briefing section is injected.
 
 | Event | Condition | Action | Primary env flags | Module / call site |
 |-------|-----------|--------|-------------------|---------------------|
-| New session (empty prepared history) | Orient hook on, not automation source | Read vault excerpts → `## Ori session briefing` | `MAC_STATS_ORI_LIFECYCLE_ENABLED`, `MAC_STATS_ORI_HOOK_ORIENT`, vault path | `commands/ori_lifecycle.rs` → `commands/ollama.rs` after `prepare_conversation_history` |
-| User message | Prefetch on, cooldown OK | `ori query similar` (cwd = vault) | `MAC_STATS_ORI_PREFETCH`, limits/timeouts | `commands/ori_lifecycle.rs` → `commands/ollama.rs` before execution prompt |
+| New session (empty prepared history) | Orient hook on, not automation source | Read vault excerpts → `## Ori session briefing` | `MAC_STATS_ORI_LIFECYCLE_ENABLED`, `MAC_STATS_ORI_HOOK_ORIENT`, vault path | `commands/ori_lifecycle.rs` → `commands/ollama.rs` after `prepare_conversation_history`; same hooks in `commands/ollama_frontend_chat.rs` (CPU window chat, `hook_source` `cpu`, `session_id` `0`) |
+| User message | Prefetch on, cooldown OK | `ori query similar` (cwd = vault) | `MAC_STATS_ORI_PREFETCH`, limits/timeouts | `commands/ori_lifecycle.rs` → `commands/ollama.rs` before execution prompt; CPU path in `ollama_chat_with_execution` |
 | Post-compaction | Success + lessons + mode ≠ off | Inbox note (background thread) | `MAC_STATS_ORI_HOOK_CAPTURE_COMPACTION`, `MAC_STATS_ORI_COMPACTION_CAPTURE_MODE` | `session_history.rs`, `compaction.rs` |
 | Session reset | `clear_session` with messages | Inbox note (background thread) | `MAC_STATS_ORI_HOOK_BEFORE_RESET` | `session_memory.rs` → `ori_lifecycle` |
 | Scheduler / heartbeat / task_runner | Default | Skip orient + prefetch | `MAC_STATS_ORI_ALLOW_ON_SCHEDULER=true` to opt in | `ori_skip_automation_sources` |

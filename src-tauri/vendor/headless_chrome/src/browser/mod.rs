@@ -5,7 +5,7 @@ use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 
 use process::Process;
 pub use process::{DEFAULT_ARGS, LaunchOptions, LaunchOptionsBuilder};
@@ -269,6 +269,9 @@ impl Browser {
 
         util::Wait::with_timeout(Duration::from_secs(20))
             .until(|| {
+                // `TargetCreated` can be delayed or missed when attaching to Chrome with zero open
+                // tabs; sync from `Target.getTargets` so the new page appears in `tabs`.
+                self.register_missing_tabs();
                 let tabs = self.inner.tabs.lock().unwrap();
                 tabs.iter().find_map(|tab| {
                     if *tab.get_target_id() == target_id {
@@ -298,30 +301,50 @@ impl Browser {
 
     /// Adds tabs that have not been opened with new_tab to the list of tabs
     pub fn register_missing_tabs(&self) {
-        let targets = self.call_method(GetTargets { filter: None });
+        let targets = match self.call_method(GetTargets { filter: None }) {
+            Ok(t) => t,
+            Err(e) => {
+                warn!("register_missing_tabs: GetTargets failed: {e}");
+                return;
+            }
+        };
 
         let mut tabs_lock = self.inner.tabs.lock().unwrap();
         let mut previous_target_id: String = String::default();
-        for target in targets.unwrap().target_infos {
+        for target in targets.target_infos {
+            // Match `TargetCreated` handling: only top-level page targets. Do not treat
+            // `!target.attached` as "already handled" — new pages often report attached=false
+            // until we call `AttachToTarget` via `Tab::new` (fixes empty-browser bootstrap).
+            if target.Type != "page" || target.url.starts_with("devtools://") {
+                previous_target_id = target.target_id.clone();
+                continue;
+            }
             let target_id = target.target_id.clone();
 
             if tabs_lock
                 .iter()
-                .any(|t| t.get_target_id().clone() == target_id || !target.attached)
+                .any(|t| t.get_target_id().clone() == target_id)
             {
                 previous_target_id = target.target_id;
                 continue;
             }
 
-            let tab = Tab::new(target, self.inner.transport.clone());
-            if let Ok(tab) = tab {
-                if let Some(index) = tabs_lock
-                    .iter()
-                    .position(|x| x.get_target_id().clone() == previous_target_id)
-                {
-                    tabs_lock.insert(index, Arc::new(tab));
-                } else {
-                    tabs_lock.push(Arc::new(tab));
+            match Tab::new(target, self.inner.transport.clone()) {
+                Ok(tab) => {
+                    if let Some(index) = tabs_lock
+                        .iter()
+                        .position(|x| x.get_target_id().clone() == previous_target_id)
+                    {
+                        tabs_lock.insert(index, Arc::new(tab));
+                    } else {
+                        tabs_lock.push(Arc::new(tab));
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "register_missing_tabs: Tab::new failed for target {}: {e}",
+                        target_id
+                    );
                 }
             }
 
@@ -397,9 +420,12 @@ impl Browser {
                                         Ok(new_tab) => {
                                             tabs.lock().unwrap().push(Arc::new(new_tab));
                                         }
-                                        Err(_tab_creation_err) => {
-                                            info!("Failed to create a handle to new tab");
-                                            break;
+                                        Err(tab_creation_err) => {
+                                            // Do not tear down the browser loop: transient attach
+                                            // failures or odd targets should not break later tabs.
+                                            info!(
+                                                "Failed to create a handle to new tab: {tab_creation_err}"
+                                            );
                                         }
                                     }
                                 }

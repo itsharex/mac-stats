@@ -13,6 +13,10 @@ use tokio::sync::Mutex;
 
 const MODEL_LIST_TTL: Duration = Duration::from_secs(5 * 60);
 
+/// Visible in `~/.mac-stats/debug.log` message text: the file log layer omits tracing `target`, so
+/// operators should `rg '\[ollama/model_cache\]'` (or the human-readable phrases) to audit stale serves.
+const MCACHE_LOG_TAG: &str = "[ollama/model_cache]";
+
 type FetchResult = Result<ListResponse, String>;
 type BoxFetch = Pin<Box<dyn Future<Output = FetchResult> + Send>>;
 type SharedFetch = futures_util::future::Shared<BoxFetch>;
@@ -114,7 +118,8 @@ async fn run_bg_refresh(endpoint: String, api_key: Option<String>) {
             ent.last_success = Some((Instant::now(), list.clone()));
             mac_stats_info!(
                 "ollama/model_cache",
-                "Background model list refresh succeeded ({} models) for {}",
+                "{} Background model list refresh succeeded ({} models) for {}",
+                MCACHE_LOG_TAG,
                 list.models.len(),
                 endpoint
             );
@@ -122,14 +127,16 @@ async fn run_bg_refresh(endpoint: String, api_key: Option<String>) {
         Ok(list) => {
             mac_stats_warn!(
                 "ollama/model_cache",
-                "Background model list refresh returned empty ({} models in response); cache not updated",
+                "{} Background model list refresh returned empty ({} models in response); cache not updated",
+                MCACHE_LOG_TAG,
                 list.models.len()
             );
         }
         Err(e) => {
             mac_stats_warn!(
                 "ollama/model_cache",
-                "Background model list refresh failed for {}: {}",
+                "{} Background model list refresh failed for {}: {}",
+                MCACHE_LOG_TAG,
                 endpoint,
                 e
             );
@@ -171,7 +178,8 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
                         tokio::spawn(run_bg_refresh(ep_clone, ak));
                         mac_stats_warn!(
                             "ollama/model_cache",
-                            "Model list is stale (last successful refresh {}s ago); serving cached result ({} models) while refreshing in background",
+                            "{} Model list is stale (last successful refresh {}s ago); serving cached result ({} models) while refreshing in background",
+                            MCACHE_LOG_TAG,
                             age.as_secs(),
                             list.models.len()
                         );
@@ -179,7 +187,8 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
                     }
                     mac_stats_warn!(
                         "ollama/model_cache",
-                        "Model list is stale ({}s since success); background refresh already in progress; serving cached result ({} models)",
+                        "{} Model list is stale ({}s since success); background refresh already in progress; serving cached result ({} models)",
+                        MCACHE_LOG_TAG,
                         age.as_secs(),
                         list.models.len()
                     );
@@ -218,7 +227,8 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
             Ok(list) => {
                 mac_stats_warn!(
                     "ollama/model_cache",
-                    "Ollama returned empty model list ({} entries); not replacing cached data",
+                    "{} Ollama returned empty model list ({} entries); not replacing cached data",
+                    MCACHE_LOG_TAG,
                     list.models.len()
                 );
                 if let Some((age_start, stale)) =
@@ -227,7 +237,8 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
                     let age = Instant::now().duration_since(*age_start);
                     mac_stats_warn!(
                         "ollama/model_cache",
-                        "Serving stale model list (last success {}s ago, {} models) after empty /api/tags",
+                        "{} Serving stale model list (last success {}s ago, {} models) after empty /api/tags",
+                        MCACHE_LOG_TAG,
                         age.as_secs(),
                         stale.models.len()
                     );
@@ -239,7 +250,8 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
             Err(e) => {
                 mac_stats_warn!(
                     "ollama/model_cache",
-                    "Model list fetch failed: {}; not updating cache",
+                    "{} Model list fetch failed: {}; not updating cache",
+                    MCACHE_LOG_TAG,
                     e
                 );
                 if let Some((age_start, stale)) =
@@ -248,7 +260,8 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
                     let age = Instant::now().duration_since(*age_start);
                     mac_stats_warn!(
                         "ollama/model_cache",
-                        "Serving stale model list (last success {}s ago, {} models) after fetch error",
+                        "{} Serving stale model list (last success {}s ago, {} models) after fetch error",
+                        MCACHE_LOG_TAG,
                         age.as_secs(),
                         stale.models.len()
                     );

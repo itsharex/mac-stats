@@ -69,7 +69,7 @@ fn print_failure_hints(port: u16) {
 pub fn run_browser_doctor_stdio() -> i32 {
     let port = Config::browser_cdp_port();
     let http_secs = Config::browser_cdp_http_timeout_secs();
-    let ws_secs = Config::browser_cdp_ws_connect_timeout_secs();
+    let idle_secs = Config::browser_cdp_idle_timeout_secs();
     let vw = Config::browser_viewport_width();
     let vh = Config::browser_viewport_height();
     let tools_on = Config::browser_tools_enabled();
@@ -84,7 +84,10 @@ pub fn run_browser_doctor_stdio() -> i32 {
     println!("  browserToolsEnabled:            {}", tools_on);
     println!("  browserCdpPort:                 {}", port);
     println!("  browserCdpHttpTimeoutSecs:      {}", http_secs);
-    println!("  browserCdpWsConnectTimeoutSecs: {}", ws_secs);
+    println!(
+        "  browserCdpIdleTimeoutSecs:      {} (CDP WebSocket idle; legacy key browserCdpWsConnectTimeoutSecs still honored when idle unset)",
+        idle_secs
+    );
     println!("  viewport (width × height):      {} × {}", vw, vh);
     match Config::browser_cdp_emulate_viewport_dimensions() {
         Some((ew, eh)) => println!(

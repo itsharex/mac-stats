@@ -1,0 +1,49 @@
+# CLOSED — browser-use click fallback and element discovery (2026-03-21)
+
+## Goal
+
+Align **BROWSER_CLICK** behaviour with browser-use-style resilience: **CDP pointer → JS `element.click()`** when appropriate; optional **HTTP `click_http`** when CDP fails and `should_use_http_fallback_after_browser_action_error` allows it; **stale-index / DOM reorder** recovery via identity-based **element discovery** (`find_unique_identity_match`).
+
+## References
+
+- `src-tauri/src/browser_agent/mod.rs` — `cdp_js_click_element`, occlusion handling, `find_unique_identity_match`, `click_by_index_inner_with_downloads`
+- `src-tauri/src/commands/browser_tool_dispatch.rs` — `BROWSER_CLICK` index path + HTTP fallback branch
+- `src-tauri/src/commands/browser_helpers.rs` — `should_use_http_fallback_after_browser_action_error`
+
+## Acceptance criteria
+
+1. **Build:** `cargo check` in `src-tauri/` succeeds.
+2. **Tests:** `cargo test` in `src-tauri/` succeeds (no new failures attributable to click / fallback / remapping paths).
+3. **Static verification:** Source still contains CDP click JS fallback, HTTP fallback gate for index clicks, and identity remapping helper (spot-check via `rg` or read).
+
+## Verification commands
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test
+```
+
+Optional spot-check:
+
+```bash
+rg -n "should_use_http_fallback_after_browser_action_error|click_http" src-tauri/src/commands/browser_tool_dispatch.rs
+rg -n "find_unique_identity_match|cdp_js_click_element" src-tauri/src/browser_agent/mod.rs
+```
+
+## Test report
+
+**Date:** 2026-03-27 (local operator environment).
+
+**Preflight:** The path `tasks/UNTESTED-20260321-1620-browser-use-click-fallback-and-element-discovery.md` was not present in the workspace at the start of this run; the task body was (re)materialized as `UNTESTED-…`, then renamed to `TESTING-…` per `003-tester/TESTER.md` before verification. No other `UNTESTED-*` file was used.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 tests in `mac_stats` library; 0 failed; 1 doc-test ignored)
+
+**Static spot-check**
+
+- `browser_tool_dispatch.rs`: `should_use_http_fallback_after_browser_action_error` + `click_http` on the `BROWSER_CLICK` index error path (e.g. lines ~834–839).
+- `browser_agent/mod.rs`: `find_unique_identity_match` (~2321), `cdp_js_click_element` (~2884), unit coverage references ~9849+.
+
+**Outcome:** All acceptance criteria satisfied for this verification pass. Live CDP click / HTTP fallback flows were not exercised end-to-end in this automated run (operator smoke optional).

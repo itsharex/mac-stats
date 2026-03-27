@@ -55,7 +55,7 @@ use std::os::raw::c_void;
 use sysinfo::{Disks, System};
 
 // Re-export logging functions (macros are auto-exported via #[macro_export])
-pub use logging::{init_tracing, set_verbosity};
+pub use logging::{init_tracing, set_verbosity, sync_debug_log_best_effort};
 // IOReport types kept for future use (extern block still references them)
 use core_foundation::base::{CFTypeRef, TCFType};
 use core_foundation::dictionary::{CFDictionaryRef, CFMutableDictionary, CFMutableDictionaryRef};
@@ -231,6 +231,26 @@ fn run_internal(open_cpu_window: bool) {
                 );
             }
         };
+    }
+
+    // SIGINT/SIGTERM/SIGHUP often terminate the process without Tauri emitting `RunEvent::Exit`
+    // first. Register a handler so `close_browser_session()` still runs (browser-use-style safety).
+    match ctrlc::set_handler(|| {
+        crate::browser_agent::close_browser_session();
+    }) {
+        Ok(()) => {
+            tracing::debug!(
+                target: "mac_stats::browser_shutdown",
+                "Registered signal handler (SIGINT/SIGTERM/SIGHUP) for browser session cleanup"
+            );
+        }
+        Err(e) => {
+            tracing::debug!(
+                target: "mac_stats::browser_shutdown",
+                "Could not register signal handler for browser cleanup: {}",
+                e
+            );
+        }
     }
 
     tauri::Builder::default()
@@ -1659,6 +1679,10 @@ fn run_internal(open_cpu_window: bool) {
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                tracing::debug!(
+                    target: "mac_stats::browser_shutdown",
+                    "Tauri RunEvent::Exit: closing browser session"
+                );
                 crate::browser_agent::close_browser_session();
             }
         });

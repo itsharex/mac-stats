@@ -212,10 +212,8 @@ fn push_cdp_diagnostic_event(
             if raw_text.is_empty() {
                 return;
             }
-            let normalized = normalize_diagnostic_text(
-                raw_text,
-                DIAG_MAX_UNCAUGHT_EXC_CHARS_PER_MESSAGE,
-            );
+            let normalized =
+                normalize_diagnostic_text(raw_text, DIAG_MAX_UNCAUGHT_EXC_CHARS_PER_MESSAGE);
             if normalized.is_empty() {
                 return;
             }
@@ -641,7 +639,7 @@ const BROWSER_NAV_LIFECYCLE_POLL: Duration = Duration::from_millis(50);
 const BROWSER_NAV_NETWORK_IDLE_TIMEOUT_SAME_DOMAIN: Duration = Duration::from_secs(4);
 /// Max time to wait for `networkIdle` / `networkAlmostIdle` after cross-host navigation.
 const BROWSER_NAV_NETWORK_IDLE_TIMEOUT_CROSS_DOMAIN: Duration = Duration::from_secs(10);
-/// Default post-navigate minimum dwell is **0.25s** via `Config::browser_post_navigate_min_dwell_secs()`
+/// Default post-navigate minimum dwell is **1.5s** via `Config::browser_post_navigate_min_dwell_secs()`
 /// (replaces this former fixed constant).
 /// After BROWSER_CLICK / coordinate click when the page may be settling.
 const BROWSER_AFTER_CLICK_OR_COORD_SETTLE: Duration = Duration::from_millis(800);
@@ -795,10 +793,10 @@ fn connect_browser_to_ws_url(ws_url: &str) -> Result<Browser, String> {
         .unwrap_or_else(|| crate::config::Config::browser_cdp_port());
     let ws_redacted = cdp_url::redact_cdp_url(ws_url);
 
-    let ws_connect_timeout =
-        Duration::from_secs(crate::config::Config::browser_cdp_ws_connect_timeout_secs());
+    let cdp_transport_idle =
+        Duration::from_secs(crate::config::Config::browser_cdp_idle_timeout_secs());
     let res: Result<Browser, String> = (|| {
-        let browser = Browser::connect_with_timeout(ws_url.to_string(), ws_connect_timeout)
+        let browser = Browser::connect_with_timeout(ws_url.to_string(), cdp_transport_idle)
             .map_err(|e| format!("CDP connect (ws={}): {}", ws_redacted, e))?;
         wait_for_cdp_targets_ready_after_attach(&browser)?;
         Ok(browser)
@@ -1102,6 +1100,13 @@ fn launch_via_headless_chrome() -> Result<Browser, String> {
             .map_err(|e| format!("Invalid browserChromiumUserDataDir: {}", e))?;
         builder = builder.user_data_dir(Some(udd));
     }
+    let idle = Duration::from_secs(crate::config::Config::browser_cdp_idle_timeout_secs());
+    builder = builder.idle_browser_timeout(idle);
+    mac_stats_debug!(
+        "browser/cdp",
+        "Browser agent [CDP]: headless Chrome launch — CDP transport idle timeout {}s (no browser events; agent/LLM gaps)",
+        idle.as_secs()
+    );
     let opts = builder
         .build()
         .map_err(|e| format!("Launch options: {}", e))?;
@@ -1264,6 +1269,14 @@ function __macStatsInteractableNodes() {
         rr = String(rr).trim().toLowerCase();
         if (goodRole[rr]) add(elr);
       }
+    }
+
+    var ceNodes = root.querySelectorAll('[contenteditable]');
+    for (var ci = 0; ci < ceNodes.length; ci++) {
+      var cel = ceNodes[ci];
+      try {
+        if (cel.isContentEditable) add(cel);
+      } catch (errCe) {}
     }
 
     var scope = root.querySelectorAll('*');
@@ -1734,8 +1747,8 @@ fn default_interactables_js_dpr() -> f64 {
 
 #[derive(Debug, Deserialize)]
 struct InteractablesJsEnvelope {
+    /// Parsed for forward compatibility; viewport scaling uses CDP elsewhere.
     #[serde(default = "default_interactables_js_dpr")]
-    #[allow(dead_code)]
     dpr: f64,
     nodes: Vec<InteractableRow>,
 }
@@ -1748,6 +1761,7 @@ fn parse_interactables_json_envelope(json_str: &str) -> Result<Vec<InteractableR
     }
     let env: InteractablesJsEnvelope =
         serde_json::from_str(json_str).map_err(|e| format!("Parse interactables JSON: {}", e))?;
+    let _ = env.dpr;
     Ok(env.nodes)
 }
 
@@ -2765,6 +2779,30 @@ fn pick_viewport_click_point_from_content_quads(
     best2.map(|(_, vx, vy)| (vx, vy))
 }
 
+/// Fallback when [`DOM::GetContentQuads`] is empty or yields no in-viewport point: `DOM.getBoxModel` content quad
+/// is in the same document space as content quads, so we reuse [`pick_viewport_click_point_from_content_quads`].
+fn cdp_viewport_click_point_from_box_model(
+    tab: &headless_chrome::Tab,
+    object_id: &str,
+    sx: f64,
+    sy: f64,
+    vw: f64,
+    vh: f64,
+) -> Option<(f64, f64)> {
+    let o = tab
+        .call_method(DOM::GetBoxModel {
+            node_id: None,
+            backend_node_id: None,
+            object_id: Some(object_id.to_string()),
+        })
+        .ok()?;
+    if o.model.content.len() < 8 {
+        return None;
+    }
+    let q: Vec<f64> = o.model.content.iter().map(|x| *x as f64).collect();
+    pick_viewport_click_point_from_content_quads(std::slice::from_ref(&q), sx, sy, vw, vh)
+}
+
 fn viewport_midpoint_via_js(
     tab: &headless_chrome::Tab,
     object_id: &str,
@@ -2903,23 +2941,33 @@ fn cdp_viewport_point_for_object_id(
 
     let (sx, sy, vw, vh) = cdp_scroll_metrics(tab)?;
 
-    let (vx, vy) = match tab.call_method(DOM::GetContentQuads {
+    let mut pt = None;
+    if let Ok(o) = tab.call_method(DOM::GetContentQuads {
         node_id: None,
         backend_node_id: None,
         object_id: Some(object_id.to_string()),
     }) {
-        Ok(o) if !o.quads.is_empty() => {
+        if !o.quads.is_empty() {
             let quads: Vec<Vec<f64>> = o
                 .quads
                 .iter()
                 .map(|q| q.iter().map(|x| *x as f64).collect())
                 .collect();
-            pick_viewport_click_point_from_content_quads(&quads, sx, sy, vw, vh)
-                .or_else(|| viewport_midpoint_via_js(tab, object_id).ok())
+            pt = pick_viewport_click_point_from_content_quads(&quads, sx, sy, vw, vh);
         }
-        _ => viewport_midpoint_via_js(tab, object_id).ok(),
     }
-    .ok_or_else(|| "no click point from geometry".to_string())?;
+    if pt.is_none() {
+        if let Some(p) = cdp_viewport_click_point_from_box_model(tab, object_id, sx, sy, vw, vh) {
+            mac_stats_debug!(
+                "browser/cdp",
+                "Browser agent [CDP]: pointer geometry from DOM.getBoxModel (after empty or unusable getContentQuads)"
+            );
+            pt = Some(p);
+        }
+    }
+    let (vx, vy) = pt
+        .or_else(|| viewport_midpoint_via_js(tab, object_id).ok())
+        .ok_or_else(|| "no click point from geometry".to_string())?;
     Ok((vx, vy))
 }
 
@@ -3467,7 +3515,23 @@ fn format_browser_state_for_llm_impl(
     state: &BrowserState,
     tabs_ctx: Option<(&Browser, usize)>,
 ) -> String {
-    record_viewport_css_for_llm_coord_scaling(viewport_width(), viewport_height());
+    let (vw_record, vh_record) = state
+        .layout_metrics
+        .map(|m| (m.viewport_width, m.viewport_height))
+        .filter(|(w, h)| *w > 0 && *h > 0)
+        .unwrap_or_else(|| (viewport_width(), viewport_height()));
+    record_viewport_css_for_llm_coord_scaling(vw_record, vh_record);
+    mac_stats_debug!(
+        "browser/llm_screenshot",
+        "viewport recorded for LLM coord scaling: {}x{} ({})",
+        vw_record,
+        vh_record,
+        if state.layout_metrics.is_some() {
+            "from layout_metrics (innerWidth/innerHeight)"
+        } else {
+            "from config browserViewportWidth/Height (no layout_metrics)"
+        }
+    );
     let mut s = String::new();
     if url_or_title_suggests_certificate_interstitial(
         state.current_url.as_str(),
@@ -4115,6 +4179,35 @@ fn truncate_target_id_for_log(id: &str) -> String {
     } else {
         format!("{}…", t.chars().take(N).collect::<String>())
     }
+}
+
+/// Smoke-test hook: CDP **`Page.crash`** on the **current automation tab** in the same cached session
+/// mac-stats uses for BROWSER_* tools. Intended for CLI **`--browser-debug-crash-tab`** so testers do not
+/// need a second CDP client or a mismatched headless vs visible endpoint.
+///
+/// Flow: refreshes active target id → **`Page.crash`** → expect **`Target.targetCrashed`** on the side
+/// listener, **`browser/cdp`** WARN, session clear. Callers should **wait briefly** before process exit
+/// so the side WebSocket thread can handle the event and flush logs.
+pub fn debug_page_crash_current_automation_tab() -> Result<String, String> {
+    with_connection_retry(|| debug_page_crash_current_automation_tab_inner())
+}
+
+fn debug_page_crash_current_automation_tab_inner() -> Result<String, String> {
+    // Use `get_current_tab` so empty Chrome gets `about:blank` bootstrap (same as BROWSER_* tools).
+    let (_browser, tab) = get_current_tab()?;
+    let tid = tab.get_target_id().clone();
+    let tid_log = truncate_target_id_for_log(&tid);
+    mac_stats_info!(
+        "browser/cdp",
+        "Browser agent [CDP]: debug smoke — sending Page.crash for automation tab target_id={}",
+        tid_log
+    );
+    tab.call_method(Page::Crash(None))
+        .map_err(|e| format!("Page.crash: {}", e))?;
+    Ok(format!(
+        "Page.crash sent for automation tab target_id={} (check ~/.mac-stats/debug.log for browser/cdp WARN Target.targetCrashed; wait ~1s before exit so the side listener can run)",
+        tid_log
+    ))
 }
 
 fn launch_mutex() -> &'static Mutex<()> {
@@ -5007,11 +5100,14 @@ fn clear_cached_browser_session(reason: &str) {
 
 /// Clear the cached browser session so the next use will reconnect or relaunch.
 /// Used for CDP transport errors and for explicit **Browser unresponsive** results from `check_browser_alive`.
+///
+/// Health-check failures often include connection-closed substrings (`is_connection_error`); those must still
+/// clear as **health check** and must not trigger a same-call CDP reconnect (`with_connection_retry`).
 fn clear_browser_session_on_error(err_msg: &str) {
-    if is_connection_error(err_msg) {
-        clear_cached_browser_session("connection error");
-    } else if err_msg.contains("Browser unresponsive") {
+    if err_msg.contains("Browser unresponsive") {
         clear_cached_browser_session("browser unresponsive (health check)");
+    } else if is_connection_error(err_msg) {
+        clear_cached_browser_session("connection error");
     }
 }
 
@@ -5138,6 +5234,10 @@ fn should_retry_cdp_after_clearing_session(err_msg: &str) -> bool {
     // `check_browser_alive` already clears the session on "Browser unresponsive"; a second
     // `with_connection_retry` pass would reconnect to a fresh/blank tab and surface
     // SESSION_RESET_MSG instead of the health-check error (slow and confusing for the LLM).
+    // Compound messages may match `is_connection_error` too — health path wins (no retry).
+    if err_msg.contains("Browser unresponsive") {
+        return false;
+    }
     is_connection_error(err_msg)
         || err_msg.contains("Tab liveness failed")
         || err_msg.contains("Browser tab renderer crashed")
@@ -5296,9 +5396,9 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     if !prefer_headless {
         mac_stats_debug!(
             "browser/cdp",
-            "Browser agent [CDP]: effective client timeouts for new visible session — HTTP /json/version={:?}, WebSocket connect={:?} (discovery host {})",
+            "Browser agent [CDP]: effective client timeouts for new visible session — HTTP /json/version={:?}, CDP WebSocket idle (no events)={:?} (discovery host {})",
             cdp_discovery_http_timeout_duration(),
-            Duration::from_secs(crate::config::Config::browser_cdp_ws_connect_timeout_secs()),
+            Duration::from_secs(crate::config::Config::browser_cdp_idle_timeout_secs()),
             CDP_DISCOVERY_HTTP_HOST,
         );
     }
@@ -5425,22 +5525,6 @@ fn get_or_create_browser(port: u16) -> Result<Browser, String> {
     cookie_storage::mark_cookie_restore_pending();
     record_session_created_this_turn(port, false, now);
     Ok(browser)
-}
-
-/// Normalize URL for display/filename (add https if no scheme).
-fn normalize_url_for_screenshot(url: &str) -> String {
-    let u = url.trim();
-    if u.is_empty() {
-        return "page".to_string();
-    }
-    if u.len() >= 7 && u[..7].eq_ignore_ascii_case("file://") {
-        return u.to_string();
-    }
-    if !u.starts_with("http://") && !u.starts_with("https://") {
-        format!("https://{}", u)
-    } else {
-        u.to_string()
-    }
 }
 
 /// Ellipsis long URLs for debug logs (query strings can be noisy or sensitive).
@@ -5719,11 +5803,9 @@ fn cdp_redirect_chain_first_hop_matches_request(first_hop: &str, requested: &str
     let p1 = u1.port_or_known_default();
     let p2 = u2.port_or_known_default();
     let ports_align = p1 == p2
-        || (matches!(s1.as_str(), "http" | "https") && matches!(s2.as_str(), "http" | "https")
-            && matches!(
-                (p1, p2),
-                (Some(80), Some(443)) | (Some(443), Some(80))
-            ));
+        || (matches!(s1.as_str(), "http" | "https")
+            && matches!(s2.as_str(), "http" | "https")
+            && matches!((p1, p2), (Some(80), Some(443)) | (Some(443), Some(80))));
     if !ports_align {
         return false;
     }
@@ -6710,6 +6792,10 @@ fn get_current_tab() -> Result<(Browser, Arc<headless_chrome::Tab>), String> {
                 *guard = idx;
             }
             new_tab.bring_to_front().ok();
+            mac_stats_debug!(
+                "browser/cdp",
+                "Browser agent [CDP]: empty-browser bootstrap ok (about:blank tab ready)"
+            );
             new_tab
         } else {
             let idx = *current_tab_index().lock().map_err(|e| e.to_string())?;
@@ -6855,7 +6941,8 @@ fn navigate_and_get_state_inner(
     let mut diag_uncaught_excs: Option<Arc<Mutex<VecDeque<String>>>> = None;
     let mut diag_listener_weak: Option<CdpDiagListenerWeak> = None;
     if include_diag {
-        if let Some((console_buf, exc_buf, w)) = try_attach_bounded_cdp_page_diagnostics(tab.as_ref())
+        if let Some((console_buf, exc_buf, w)) =
+            try_attach_bounded_cdp_page_diagnostics(tab.as_ref())
         {
             diag_listener_weak = Some(w);
             diag_console_lines = Some(console_buf);
@@ -7047,24 +7134,23 @@ fn navigate_and_get_state_inner(
         }
     }
 
-    let diagnostics_section =
-        if include_diag {
-            if let (Some(c), Some(e)) = (&diag_console_lines, &diag_uncaught_excs) {
-                let n_c = c.lock().map(|q| q.len()).unwrap_or(0);
-                let n_e = e.lock().map(|q| q.len()).unwrap_or(0);
-                mac_stats_debug!(
-                    "browser/cdp",
-                    "Browser agent [CDP]: captured diagnostics console_lines={} uncaught_exceptions={}",
-                    n_c,
-                    n_e
-                );
-                format_bounded_page_diagnostics_tool_section(c, e)
-            } else {
-                String::new()
-            }
+    let diagnostics_section = if include_diag {
+        if let (Some(c), Some(e)) = (&diag_console_lines, &diag_uncaught_excs) {
+            let n_c = c.lock().map(|q| q.len()).unwrap_or(0);
+            let n_e = e.lock().map(|q| q.len()).unwrap_or(0);
+            mac_stats_debug!(
+                "browser/cdp",
+                "Browser agent [CDP]: captured diagnostics console_lines={} uncaught_exceptions={}",
+                n_c,
+                n_e
+            );
+            format_bounded_page_diagnostics_tool_section(c, e)
         } else {
             String::new()
-        };
+        }
+    } else {
+        String::new()
+    };
 
     cleanup_nav();
 
@@ -8689,7 +8775,7 @@ fn search_page_text_inner(pattern: &str, css_scope: Option<&str>) -> Result<Stri
 "#,
         scope_init, pattern_escaped, MAX_RESULTS, CONTEXT_CHARS, CONTEXT_CHARS, MAX_RESULTS
     );
-    let result = tab.evaluate(&js, false).map_err(|e| {
+    let result = tab.evaluate_return_by_value(&js, false).map_err(|e| {
         let s = format!("Search page evaluate: {}", e);
         clear_browser_session_on_error(&s);
         s
@@ -8830,7 +8916,7 @@ fn browser_query_inner(selector: &str, attrs_csv: Option<&str>) -> Result<String
         attrs_json = attrs_json,
         max = BROWSER_QUERY_MAX_RESULTS
     );
-    let result = tab.evaluate(&js, false).map_err(|e| {
+    let result = tab.evaluate_return_by_value(&js, false).map_err(|e| {
         let s = format!("BROWSER_QUERY evaluate: {}", e);
         clear_browser_session_on_error(&s);
         s
@@ -9254,10 +9340,7 @@ fn take_screenshot_inner(url: &str) -> Result<PathBuf, String> {
     let (browser, tab) = get_current_tab().inspect_err(|e| {
         clear_browser_session_on_error(e);
     })?;
-    let focused_tab_index = current_tab_index()
-        .lock()
-        .map(|g| *g)
-        .unwrap_or(0);
+    let focused_tab_index = current_tab_index().lock().map(|g| *g).unwrap_or(0);
     mac_stats_debug!(
         "browser/cdp",
         "Browser agent [CDP]: take_screenshot URL path: using focused tab index {} (get_current_tab / CURRENT_TAB_INDEX)",
@@ -9533,8 +9616,7 @@ mod tests {
             let mut q = buf.lock().unwrap();
             q.push_back(("L1".to_string(), "https://other.example/".to_string()));
         }
-        assert!(cdp_validate_redirect_chain_from_rws_buffer(&buf, "https://nope.example/")
-            .is_ok());
+        assert!(cdp_validate_redirect_chain_from_rws_buffer(&buf, "https://nope.example/").is_ok());
     }
 
     #[test]
@@ -9550,6 +9632,26 @@ mod tests {
         assert!(!is_new_tab_page_url("chrome://settings"));
         assert!(!is_new_tab_page_url(""));
         assert!(!is_new_tab_page_url("About:blank"));
+    }
+
+    #[test]
+    fn cdp_retry_skipped_when_health_error_also_looks_like_connection_error() {
+        let msg = "Browser unresponsive (JavaScript engine not responding): Unable to make method calls because underlying connection is closed";
+        assert!(
+            !should_retry_cdp_after_clearing_session(msg),
+            "health-check failures must not trigger same-call CDP reconnect even with connection substrings"
+        );
+        assert!(
+            is_connection_error(msg),
+            "fixture should still be a connection-shaped error for regression coverage"
+        );
+    }
+
+    #[test]
+    fn cdp_retry_allowed_for_plain_connection_error_without_health_prefix() {
+        assert!(should_retry_cdp_after_clearing_session(
+            "Unable to make method calls because underlying connection is closed"
+        ));
     }
 
     #[test]

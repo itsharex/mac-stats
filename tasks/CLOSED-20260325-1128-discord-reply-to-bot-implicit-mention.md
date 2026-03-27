@@ -1,0 +1,45 @@
+# Discord: reply to bot counts as mention in MentionOnly
+
+## Goal
+
+In **MentionOnly** channels, a human message that **replies** to a message authored by the bot (Discord message reference) should activate the router as if the user had @mentioned the bot, without requiring a literal `<@bot>` mention.
+
+## Acceptance criteria
+
+1. **`discord_mentions_bot_effective`** returns true when the incoming message has a message reference to a message whose author is the bot (using `referenced_message` when the gateway provides it, else cache, else `get_message` fallback).
+2. **Gateway `message` handler:** For non-DM, `ChannelMode::MentionOnly`, the early return that ignores non-mentions uses `mentions_bot_effective` (not only literal `mentions`), so reply-to-bot passes the gate.
+3. **Observability:** Debug logs distinguish activation via reference vs literal mention (existing `MentionOnly activation via message reference` / `could not resolve referenced message for implicit mention` strings).
+4. **Build:** `cargo check` in `src-tauri/` succeeds.
+
+## Verification
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test outbound_attachment_path_allowlist -- --nocapture
+```
+
+Wiring / presence:
+
+```bash
+rg -n "discord_mentions_bot_effective|mentions_bot_effective" src-tauri/src/discord/mod.rs
+```
+
+Optional: manual Discord — MentionOnly channel, reply to the bot’s last message without @mention; expect the bot to process the message (live token required; not required for this automated pass).
+
+## Test report
+
+**Preflight:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no estaba** en el working tree al inicio del run; se escribió el cuerpo de la tarea en esa ruta y se renombró a `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` según `003-tester/TESTER.md`. No se usó ningún otro archivo `UNTESTED-*`.
+
+**Date:** 2026-03-27 (local, macOS).
+
+| Step | Command | Result |
+|------|---------|--------|
+| Compile | `cd src-tauri && cargo check` | **pass** |
+| Unit test (discord module) | `cd src-tauri && cargo test outbound_attachment_path_allowlist -- --nocapture` | **pass** (1 test) |
+| Wiring | `rg -n discord_mentions_bot_effective src-tauri/src/discord/mod.rs` (y `mentions_bot_effective` en el mismo archivo) | **pass** — definición ~1852; gateway ~2787–2788; filtro MentionOnly ~2814; router ~1956 |
+
+**Code review:** `discord_mentions_bot_effective` comprueba mención literal, luego `message_reference` + `referenced_message` o caché o `get_message`; logs de debug para activación por referencia y fallo de resolución (líneas ~1865–1917 en `discord/mod.rs`).
+
+**Notes:** Prueba manual en Discord con bot real **no** ejecutada en esta corrida.
+
+**Outcome:** **CLOSED** — criterios de aceptación cubiertos por revisión de código + `cargo check` + grep; verificación automatizada del task pasó.

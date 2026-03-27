@@ -236,7 +236,12 @@ mod tests {
         let path = awareness_json_path();
 
         record_if_new("dup-key-test", Some("sched-a"), 999001, "first body");
-        record_if_new("dup-key-test", Some("sched-a"), 999001, "second body ignored");
+        record_if_new(
+            "dup-key-test",
+            Some("sched-a"),
+            999001,
+            "second body ignored",
+        );
 
         let raw = std::fs::read_to_string(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();

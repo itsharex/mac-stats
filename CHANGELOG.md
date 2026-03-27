@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.66] - 2026-03-27
+
+### Added
+- **CDP transport idle timeout** — Config **`browserCdpIdleTimeoutSecs`** / env **`MAC_STATS_BROWSER_CDP_IDLE_TIMEOUT_SECS`** (default **600s**, clamped **30–3600**); applies to attach and headless launch via **`idle_browser_timeout`**. Legacy **`browserCdpWsConnectTimeoutSecs`** / **`MAC_STATS_BROWSER_CDP_WS_CONNECT_TIMEOUT_SECS`** still honored when the new key is unset. (`config/mod.rs`, `browser_agent/mod.rs`, `vendor/headless_chrome`.)
+- **Browser cleanup on signals** — **`ctrlc`** handler closes the CDP session on **SIGINT/SIGTERM/SIGHUP** (in addition to **`RunEvent::Exit`**). (`lib.rs`, `Cargo.toml`.)
+- **CLI** — **`--browser-debug-crash-tab`** invokes **`Page.crash`** on the automation tab for **`Target.targetCrashed`** diagnostics. (`main.rs`, `browser_agent/mod.rs`.)
+- **CPU window / dashboard chat** — Ori **orient** + **prefetch** wired like the agent router when Mnemos vault is configured (after history prep, empty-session signal aligned). (`commands/ollama_frontend_chat.rs`.)
+- **Vendored headless_chrome** — **`Tab::evaluate_return_by_value`** (**`returnByValue: true`**) for JSON-serializable results. (`vendor/headless_chrome/src/browser/tab/mod.rs`.)
+- **Example** — **`managed_tab_cap_smoke.rs`** for managed-tab cap behaviour.
+- **Discord debounce** — Unit tests for merged debounced strings. (`discord/message_debounce.rs`.)
+- **Tasks / tester notes** — Under **`tasks/`** and **`003-tester/TESTER.md`**.
+
+### Changed
+- **Post-navigate dwell** — Default **`browserPostNavigateMinDwellSecs`** **0.25s → 1.5s** for SPA hydration before readiness capture. (`config/mod.rs`, `browser_agent/mod.rs`.)
+- **`BROWSER_SCREENSHOT`** — Optional concrete **http(s)/file** URL navigates the **focused** automation tab and captures (same SSRF/navigation path as navigate); invalid tokens get a clear error instead of a blanket reject. (`commands/browser_tool_dispatch.rs`.)
+- **`BROWSER_NAVIGATE`** — On **CDP navigation timeout**, skip the second CDP attempt and HTTP fallback so slow loads are not masked by fetch success; **info** log for operators. (`commands/browser_tool_dispatch.rs`.)
+- **Scheduler heartbeat** — **`turn_timeout_secs`** passed into the Ollama run matches the outer wall-clock band (clamped to **`AGENT_ROUTER_SESSION_WALL_CLOCK_MAX_SECS`**). Extra **abort_cutoff** debug on stale heartbeat events. (`scheduler/heartbeat.rs`.)
+- **Interactables / clicks** — Scan **`[contenteditable]`** nodes; viewport click uses **`DOM.getBoxModel`** when **`GetContentQuads`** yields no in-viewport point. (`browser_agent/mod.rs`.)
+- **Model list cache, delivery awareness, prompts, docs** — Minor logging and copy updates; browser automation and related agent docs refreshed; OpenClaw reviewer timestamp in **`005-openclaw-reviewer/005-openclaw-reviewer.md`**.
+
 ## [0.1.65] - 2026-03-27
 
 ### Added

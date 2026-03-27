@@ -145,6 +145,8 @@ async fn run_one_beat(settings: &HeartbeatSettings) {
     let ollama_k = session_key.clone();
     let hb_tick_ts = Utc::now();
     let hb_mid = format!("heartbeat:{}", hb_tick_ts.timestamp_millis());
+    let turn_wall_secs =
+        timeout_secs.clamp(60, crate::config::AGENT_ROUTER_SESSION_WALL_CLOCK_MAX_SECS);
     let result = crate::keyed_queue::run_serial(session_key, async move {
         tokio::time::timeout(
             timeout_dur,
@@ -164,6 +166,9 @@ async fn run_one_beat(settings: &HeartbeatSettings) {
                     compaction_hook_source: Some("heartbeat".to_string()),
                     partial_progress_capture: Some(partial),
                     ollama_queue_key: Some(ollama_k),
+                    // Match scheduler/heartbeat outer cap so the agent-router wall-clock fires in band
+                    // with `schedulerTaskTimeoutSecs` instead of the shorter remote default alone.
+                    turn_timeout_secs: Some(turn_wall_secs),
                     ..Default::default()
                 },
             ),
@@ -178,6 +183,10 @@ async fn run_one_beat(settings: &HeartbeatSettings) {
                 &e,
                 crate::commands::ollama_run_error::OllamaRunError::StaleInboundAfterAbort
             ) {
+                crate::mac_stats_debug!(
+                    "ollama/chat",
+                    "abort_cutoff: inbound event dropped (heartbeat Ollama, stale vs session cutoff)"
+                );
                 mac_stats_info!(
                     "scheduler/heartbeat",
                     "Heartbeat: skipped (stale vs abort cutoff for delivery channel)"
@@ -263,7 +272,7 @@ async fn run_one_beat(settings: &HeartbeatSettings) {
     }
 }
 
-async fn heartbeat_loop() {
+pub(crate) async fn heartbeat_loop() {
     loop {
         let settings = Config::heartbeat_settings();
         if !settings.enabled {
@@ -285,18 +294,17 @@ async fn heartbeat_loop() {
     }
 }
 
-/// Background thread: when `config.json` → `heartbeat.enabled` is true, runs checklist turns on `intervalSecs`.
+/// Background task on the **app** Tokio runtime (Tauri): when `config.json` → `heartbeat.enabled` is true,
+/// runs checklist turns on `intervalSecs`. Uses the same runtime as the rest of mac-stats so Ollama queue
+/// waits, `tokio::time` deadlines, and browser CDP health checks (`block_in_place` + `block_on`) cannot
+/// deadlock on an isolated per-thread runtime (see task WIP-20260308-1640).
 pub fn spawn_heartbeat_thread() {
-    std::thread::spawn(|| {
-        let rt = match tokio::runtime::Runtime::new() {
-            Ok(r) => r,
-            Err(e) => {
-                error!("Heartbeat: failed to create tokio runtime: {}", e);
-                return;
-            }
-        };
-        mac_stats_info!("scheduler/heartbeat", "Heartbeat thread spawned");
-        rt.block_on(heartbeat_loop());
+    tauri::async_runtime::spawn(async {
+        mac_stats_info!(
+            "scheduler/heartbeat",
+            "Heartbeat loop started (app async runtime; same Tokio as Tauri)"
+        );
+        heartbeat_loop().await;
     });
 }
 

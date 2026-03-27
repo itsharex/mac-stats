@@ -30,5 +30,5 @@ Types are JSON-serializable: `HealthStatus` (`ok` \| `degraded` \| `unavailable`
 
 - `src-tauri/src/feature_health.rs` — probes, cache, logging, command
 - `src-tauri/src/ffi/ioreport.rs` — `probe_cpu_performance_channels_available()`
-- `src-tauri/src/discord/mod.rs` — `discord_bot_token_configured()`, `discord_bot_gateway_ready()`, `discord_last_shard_stage()`, `discord_gateway_client_started_at()`; logs shard transitions under `mac_stats::discord/gateway`
+- `src-tauri/src/discord/mod.rs` — `discord_bot_token_configured()`, `discord_bot_gateway_ready()`, `discord_last_shard_stage()`, `discord_gateway_client_started_at()`; shard transitions use tracing target `mac_stats::discord/gateway`, and because the file log omits targets, each line includes **`[discord/gateway]`** in the message for `grep`/`rg`
 - `src-tauri/src/scheduler/mod.rs` — `schedule_entry_count()`

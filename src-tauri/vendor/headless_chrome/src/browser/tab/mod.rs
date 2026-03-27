@@ -1522,6 +1522,38 @@ impl Tab {
         Ok(result)
     }
 
+    /// Like [`Self::evaluate`], but sets Chrome DevTools **`returnByValue: true`** so structured
+    /// results are serialized into [`Runtime::RemoteObject::value`]. Use this when the expression
+    /// returns a plain JSON-serializable object; with `returnByValue: false`, object handles often
+    /// omit `value` and only expose `objectId`.
+    pub fn evaluate_return_by_value(
+        &self,
+        expression: &str,
+        await_promise: bool,
+    ) -> Result<Runtime::RemoteObject> {
+        let result = self
+            .call_method(Runtime::Evaluate {
+                expression: expression.to_string(),
+                return_by_value: Some(true),
+                generate_preview: Some(false),
+                silent: Some(false),
+                await_promise: Some(await_promise),
+                include_command_line_api: Some(false),
+                user_gesture: Some(false),
+                object_group: None,
+                context_id: None,
+                throw_on_side_effect: None,
+                timeout: None,
+                disable_breaks: None,
+                repl_mode: None,
+                allow_unsafe_eval_blocked_by_csp: None,
+                unique_context_id: None,
+                serialization_options: None,
+            })?
+            .result;
+        Ok(result)
+    }
+
     /// Adds event listener to Event
     ///
     /// Make sure you are enabled domain you are listening events to.

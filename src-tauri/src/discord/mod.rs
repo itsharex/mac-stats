@@ -2128,12 +2128,12 @@ async fn run_discord_ollama_router_locked(
     let inbound_mid_abort = new_message.id.get().to_string();
     if crate::commands::abort_cutoff::should_skip(coord_abort, &inbound_mid_abort, inbound_ts_abort)
     {
-        debug!(
-            target: "mac_stats::ollama/chat",
+        crate::mac_stats_debug!(
+            "ollama/chat",
             channel_id = channel_id_u64,
             message_id = %inbound_mid_abort,
             ts = %inbound_ts_abort,
-            "Discord: inbound message dropped (abort cutoff, stale event)"
+            "abort_cutoff: inbound event dropped (Discord message, stale vs session cutoff)"
         );
         return;
     }
@@ -2318,11 +2318,18 @@ async fn run_discord_ollama_router_locked(
             e,
             crate::commands::ollama_run_error::OllamaRunError::StaleInboundAfterAbort
         ) {
-            debug!(
-                target: "mac_stats::ollama/chat",
+            crate::mac_stats_debug!(
+                "ollama/chat",
                 channel_id = channel_id_u64,
-                "Discord: router skipped (stale inbound after abort cutoff)"
+                "abort_cutoff: inbound event dropped (Discord router, stale vs session cutoff)"
             );
+            if let Some(ref d) = discord_draft {
+                info!(
+                    target: "discord/draft",
+                    "draft editor stopped (stale inbound after abort; placeholder left unchanged)"
+                );
+                d.stop();
+            }
             typing_cancel.cancel();
             let _ = typing_task.await;
             let _ = status_task.await;
@@ -2751,7 +2758,7 @@ impl EventHandler for Handler {
     async fn shard_stage_update(&self, _ctx: Context, event: ShardStageUpdateEvent) {
         crate::mac_stats_info!(
             "discord/gateway",
-            "Shard stage {:?} -> {:?} (shard {:?})",
+            "[discord/gateway] Shard stage {:?} -> {:?} (shard {:?})",
             event.old,
             event.new,
             event.shard_id

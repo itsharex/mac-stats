@@ -268,9 +268,9 @@ pub(crate) fn extract_screenshot_recommendation(question: &str) -> Option<String
         || q_lower.contains("www.");
     if has_screenshot_intent && has_browser_or_url_context {
         if let Some(url) = extract_url_from_question(q) {
-            let rec = format!("BROWSER_NAVIGATE: {}\nBROWSER_SCREENSHOT: current", url);
+            let rec = format!("BROWSER_SCREENSHOT: {}", url);
             tracing::info!(
-                "Agent router: pre-routed to BROWSER_NAVIGATE + BROWSER_SCREENSHOT (browser-use style): {}",
+                "Agent router: pre-routed to BROWSER_SCREENSHOT (URL, focused tab): {}",
                 crate::logging::ellipse(&url, 60)
             );
             return Some(rec);

@@ -1,0 +1,36 @@
+# Browser use: CDP download detection
+
+## Summary
+
+Auxiliary CDP WebSocket listens for `Browser.downloadWillBegin` / `Browser.downloadProgress` (`state == "completed"`) while the main tab session runs; downloads go to `browser_downloads_dir()`; after navigate/click the stack waits `POST_ACTION_DOWNLOAD_WAIT` (~3s), merges CDP paths with a directory snapshot diff, and ignores partial names (`.crdownload`, `.part`). Spec: `docs/029_browser_automation.md` (Downloads).
+
+## Acceptance criteria
+
+1. `src-tauri/src/browser_agent/cdp_downloads.rs` implements `Browser.setDownloadBehavior`, `spawn_download_aux_listener`, and handles `Browser.downloadProgress` with `completed` + `filePath` normalization under the download dir.
+2. `merge_with_directory_diff` combines CDP paths with new files on disk and skips partial download filenames.
+3. `browser_agent/mod.rs` wires pre-action snapshots, aux listener, wait, and `format_download_attachment_note` for tool output / attachments.
+4. `cargo check` and `cargo test --lib` succeed in `src-tauri/`.
+
+## Verification (automated)
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test --lib
+rg -n "Browser\.downloadProgress|merge_with_directory_diff|spawn_download_aux_listener" src/browser_agent/cdp_downloads.rs src/browser_agent/mod.rs
+```
+
+Optional manual: trigger a real download via **BROWSER_NAVIGATE** / **BROWSER_CLICK** and confirm `**Download:**` / `[download: …]` lines and files under `~/.mac-stats/browser-downloads/`.
+
+## Test report
+
+- **Date:** 2026-03-27, hora local del entorno donde se ejecutaron los comandos (no UTC fijada).
+- **Note:** En el árbol de trabajo **no existía** `tasks/UNTESTED-20260322-0120-browser-use-cdp-download-detection.md`; se creó `TESTING-20260322-0120-browser-use-cdp-download-detection.md` con criterios alineados a `docs/029_browser_automation.md` y al código actual, cumpliendo el espíritu del paso **UNTESTED → TESTING** de `003-tester/TESTER.md` sin tocar otros archivos `UNTESTED-*` (no había ninguno).
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cd src-tauri && cargo check` | **pass** |
+| Lib tests | `cd src-tauri && cargo test --lib` | **pass** — 854 passed, 0 failed |
+| Symbols | `rg -n "Browser\.downloadProgress\|merge_with_directory_diff\|spawn_download_aux_listener" src/browser_agent/cdp_downloads.rs src/browser_agent/mod.rs` | **pass** — coincidencias en `cdp_downloads.rs` (módulo, handler CDP, merge, spawn) y múltiples usos en `mod.rs` |
+
+- **Manual CDP / descarga real:** no ejecutado en esta corrida (opcional en la tarea).
+- **Outcome:** Criterios automatizados y presencia del cableado CDP/diff cumplidos → **CLOSED**.

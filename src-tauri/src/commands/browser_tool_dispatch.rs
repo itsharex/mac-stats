@@ -236,19 +236,7 @@ pub(crate) async fn handle_browser_screenshot(
 
     let url_arg = arg.trim().to_string();
     let is_current = url_arg.is_empty() || url_arg.eq_ignore_ascii_case("current");
-    if !is_current {
-        info!(
-            "Agent router: rejecting BROWSER_SCREENSHOT: {} — use NAVIGATE first, then SCREENSHOT: current",
-            crate::logging::ellipse(&url_arg, 60)
-        );
-        BrowserScreenshotResult {
-            message: format!(
-                "BROWSER_SCREENSHOT only works on the current page. Use BROWSER_NAVIGATE: {} first, then BROWSER_SCREENSHOT: current. Never use BROWSER_SCREENSHOT: <url>.",
-                url_arg
-            ),
-            attachment_path: None,
-        }
-    } else {
+    if is_current {
         send_status(status_tx, "📸 Taking screenshot of current page");
         match tokio::task::spawn_blocking(crate::browser_agent::take_screenshot_current_page).await
         {
@@ -272,6 +260,58 @@ pub(crate) async fn handle_browser_screenshot(
                     e
                 );
                 let msg = append_browser_readiness_context(base_msg, true, None);
+                BrowserScreenshotResult {
+                    message: msg,
+                    attachment_path: None,
+                }
+            }
+            Err(e) => BrowserScreenshotResult {
+                message: format!("Screenshot task error: {}", e),
+                attachment_path: None,
+            },
+        }
+    } else {
+        let Some(url_for_shot) = extract_browser_navigation_target(&url_arg) else {
+            info!(
+                "Agent router [{}]: BROWSER_SCREENSHOT: no concrete URL in argument: {}",
+                request_id,
+                crate::logging::ellipse(&url_arg, 80)
+            );
+            return BrowserScreenshotResult {
+                message: "BROWSER_SCREENSHOT with URL requires a concrete http(s) or file:// target as the first token (same as BROWSER_NAVIGATE), e.g. BROWSER_SCREENSHOT: https://example.com"
+                    .to_string(),
+                attachment_path: None,
+            };
+        };
+        send_status(status_tx, "📸 Navigating focused tab for screenshot…");
+        info!(
+            "Agent router [{}]: BROWSER_SCREENSHOT: URL on focused tab: {}",
+            request_id,
+            crate::logging::ellipse(&url_for_shot, 80)
+        );
+        let url_owned = url_for_shot.clone();
+        match tokio::task::spawn_blocking(move || crate::browser_agent::take_screenshot(&url_owned))
+            .await
+        {
+            Ok(Ok(path)) => BrowserScreenshotResult {
+                message: format!(
+                    "Screenshot saved to: {} (focused CDP tab was navigated for this capture).\n\nTell the user the screenshot was taken; the app will attach it in Discord when applicable.",
+                    path.display()
+                ),
+                attachment_path: Some(path),
+            },
+            Ok(Err(e)) => {
+                info!(
+                    "Agent router [{}]: BROWSER_SCREENSHOT (URL) failed: {}",
+                    request_id,
+                    crate::logging::ellipse(&e, 200)
+                );
+                let nav_url_changed = nav_url_changed_hint_if_navigation_timeout(&e);
+                let base_msg = format!(
+                    "BROWSER_SCREENSHOT with URL failed: {}. The URL is applied to the **focused** automation tab (same index as BROWSER_NAVIGATE / new_tab), with the same SSRF and navigation checks as BROWSER_NAVIGATE. Chromium must listen on browserCdpPort (default 9222).",
+                    e
+                );
+                let msg = append_browser_readiness_context(base_msg, true, nav_url_changed);
                 BrowserScreenshotResult {
                     message: msg,
                     attachment_path: None,
@@ -387,6 +427,21 @@ pub(crate) async fn handle_browser_navigate(
         {
             Ok(Ok((state_str, dls))) => (state_str, dls),
             Ok(Err(cdp_err)) => {
+                if is_cdp_navigation_timeout_error(&cdp_err) {
+                    // Slow/stuck loads won't recover from an immediate second full navigate with the
+                    // same deadline; skipping retry avoids ~2× timeout latency and guarantees the
+                    // operator-visible INFO line for grep in ~/.mac-stats/debug.log.
+                    crate::mac_stats_info!(
+                        "browser/tools",
+                        "BROWSER_NAVIGATE: CDP navigation timeout on first attempt; skipping CDP retry and HTTP fallback so tool error is not masked by fetch success"
+                    );
+                    let nav_url_changed = nav_url_changed_hint_if_navigation_timeout(&cdp_err);
+                    let base = format!("BROWSER_NAVIGATE failed: {}", cdp_err);
+                    return (
+                        append_browser_readiness_context(base, true, nav_url_changed),
+                        vec![],
+                    );
+                }
                 let cdp_port = crate::config::Config::browser_cdp_port();
                 info!(
                     "BROWSER_NAVIGATE CDP failed, ensuring Chromium on port {} and retrying: {}",
@@ -411,7 +466,7 @@ pub(crate) async fn handle_browser_navigate(
                     Ok(Ok((state_str, dls))) => (state_str, dls),
                     Ok(Err(cdp_err2)) => {
                         if is_cdp_navigation_timeout_error(&cdp_err2) {
-                            crate::mac_stats_debug!(
+                            crate::mac_stats_info!(
                                 "browser/tools",
                                 "BROWSER_NAVIGATE: CDP navigation timeout after retry; skipping HTTP fallback so tool error is not masked by fetch success"
                             );
@@ -442,7 +497,11 @@ pub(crate) async fn handle_browser_navigate(
                                         http_err
                                     );
                                     (
-                                        append_browser_readiness_context(base, false, nav_url_changed),
+                                        append_browser_readiness_context(
+                                            base,
+                                            false,
+                                            nav_url_changed,
+                                        ),
                                         vec![],
                                     )
                                 }

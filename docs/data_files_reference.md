@@ -65,7 +65,7 @@ Top-level object key `heartbeat` (optional):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | boolean | `false` | When true, the heartbeat thread runs. |
+| `enabled` | boolean | `false` | When true, the heartbeat loop runs on the app Tokio runtime (see **docs/009_scheduler_agent.md** § Heartbeat). |
 | `intervalSecs` | number | `1800` | Seconds between runs (clamped 60–86400). Overridden by env `MAC_STATS_HEARTBEAT_INTERVAL_SECS` when set. |
 | `checklistPath` | string | omit | Path to markdown checklist (`~/…` allowed). If missing or unreadable, `checklistPrompt` or a built-in default is used. |
 | `checklistPrompt` | string | omit | Inline checklist text when no file or as fallback after file read failure. |

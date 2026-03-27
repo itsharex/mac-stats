@@ -24,8 +24,8 @@ fn augment_cpu_system_with_scheduler_awareness(base: String) -> String {
     if block.is_empty() {
         base
     } else {
+        // Default target is `module_path!()` so `-vv` (`mac_stats=debug`) reliably includes this line in debug.log.
         debug!(
-            target: "mac_stats::scheduler/delivery_awareness",
             block_chars = block.chars().count(),
             "CPU chat: prepending scheduler→Discord delivery awareness to system prompt"
         );
@@ -130,6 +130,13 @@ pub async fn ollama_chat_with_execution(
             .unwrap_or(0)
     );
     if crate::commands::abort_cutoff::should_skip(coord_ui, &ui_event_id, ui_event_ts) {
+        debug!(
+            target: "mac_stats::ollama/chat",
+            coord_key = coord_ui,
+            msg_id = %ui_event_id,
+            ts = %ui_event_ts,
+            "abort_cutoff: inbound event dropped (CPU chat, stale vs session cutoff)"
+        );
         return Err(
             "Chat request skipped (stale vs a recent abort on the non-Discord session slot)."
                 .to_string(),
@@ -147,13 +154,6 @@ pub async fn ollama_chat_with_execution(
 
     // Include gathered metrics so the model can answer accurately when the user asks about CPU, RAM, etc.
     let context_message = fragments::cpu_window_user_turn_with_metrics(&request.question);
-
-    // Get system prompt: use soul.md (~/.mac-stats/agents/soul.md or bundled default) + tools when not overridden
-    let system_prompt = augment_cpu_system_with_scheduler_awareness(
-        request
-            .system_prompt
-            .unwrap_or_else(default_non_agent_system_prompt),
-    );
 
     let raw_prior: Vec<crate::ollama::ChatMessage> = request
         .conversation_history
@@ -195,6 +195,43 @@ pub async fn ollama_chat_with_execution(
         compacted_prior.len(),
         CONVERSATION_HISTORY_CAP
     );
+
+    // Soul + tools after history prep so Ori orient uses the same "empty session" signal as the agent router.
+    let mut system_prompt = augment_cpu_system_with_scheduler_awareness(
+        request
+            .system_prompt
+            .unwrap_or_else(default_non_agent_system_prompt),
+    );
+
+    const CPU_ORI_HOOK_SOURCE: &str = "cpu";
+    const CPU_ORI_SESSION_ID: u64 = 0;
+    let ori_vault = crate::commands::ori_lifecycle::resolved_vault_root();
+    if let Some(ref v) = ori_vault {
+        if let Some(s) = crate::commands::ori_lifecycle::maybe_build_orient_section(
+            v,
+            CPU_ORI_HOOK_SOURCE,
+            CPU_ORI_SESSION_ID,
+            compacted_prior.is_empty(),
+        ) {
+            crate::commands::ori_lifecycle::mark_session_oriented(
+                CPU_ORI_HOOK_SOURCE,
+                CPU_ORI_SESSION_ID,
+            );
+            system_prompt.push_str(&s);
+        }
+    }
+    let ori_prefetch = match &ori_vault {
+        Some(v) => crate::commands::ori_lifecycle::maybe_run_prefetch_section(
+            v,
+            CPU_ORI_HOOK_SOURCE,
+            CPU_ORI_SESSION_ID,
+            &request.question,
+        )
+        .await
+        .unwrap_or_default(),
+        None => String::new(),
+    };
+    system_prompt.push_str(&ori_prefetch);
 
     let mut messages = ContextAssembler::assemble(
         &FrontendContextAssembler,

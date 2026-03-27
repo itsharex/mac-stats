@@ -549,10 +549,10 @@ async fn execute_task(
                     &e,
                     crate::commands::ollama_run_error::OllamaRunError::StaleInboundAfterAbort
                 ) {
-                    debug!(
-                        target: "mac_stats::ollama/chat",
+                    crate::mac_stats_debug!(
+                        "ollama/chat",
                         schedule_id = %schedule_id_log,
-                        "Scheduler: Ollama run skipped (stale vs abort cutoff)"
+                        "abort_cutoff: inbound event dropped (scheduler Ollama, stale vs session cutoff)"
                     );
                     return Ok(None);
                 }

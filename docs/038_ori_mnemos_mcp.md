@@ -79,6 +79,8 @@ Restart mac-stats after editing `.config.env`.
 
 Built-in memory files (`~/.mac-stats/agents/memory.md`, per-channel `memory-discord-*.md`, `memory-main.md`) are loaded into the system prompt and appended via **`MEMORY_APPEND`**; compaction can append lesson lines there. An Ori **vault is a separate directory tree** — mac-stats does **not** sync between them automatically.
 
+Optional **lifecycle** hooks (session briefing, server-side prefetch, compaction/reset capture) are **env-gated** and documented in [ori-lifecycle.md](ori-lifecycle.md); they use the same vault path as MCP when enabled.
+
 | Doctrine | When to use | mac-stats `memory.md` / `MEMORY_APPEND` | Ori vault |
 |----------|-------------|----------------------------------------|-----------|
 | **A — Dual (default)** | General use | Quick bullets, compaction lessons, channel habits | Durable graph, linked notes, multi-hop retrieval |

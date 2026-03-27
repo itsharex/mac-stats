@@ -393,7 +393,9 @@ mod tests {
         let c = &built.content;
         let i_mem = c.find("<<MEMORY_BLOCK>>").expect("memory");
         let i_brief = c.find("## Ori session briefing").expect("brief");
-        let i_pref = c.find("## Possibly relevant vault notes").expect("prefetch");
+        let i_pref = c
+            .find("## Possibly relevant vault notes")
+            .expect("prefetch");
         let i_met = c.find("<<METRICS>>").expect("metrics");
         assert!(i_mem < i_brief && i_brief < i_pref && i_pref < i_met);
     }

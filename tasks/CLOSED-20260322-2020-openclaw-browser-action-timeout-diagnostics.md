@@ -1,0 +1,48 @@
+# CLOSED — OpenClaw-style browser action timeout diagnostics (2026-03-22)
+
+## Goal
+
+Verify that when **BROWSER_*** CDP work hits **navigation / action timeouts**, mac-stats surfaces **operator-actionable diagnostics**: clear timeout text, compact **`context:`** lines (including **`navchg=0|1`** when relevant), **dispatcher** behaviour that does not mask CDP timeouts with HTTP fallback, and **`--browser-doctor`** for CDP readiness — aligned with `docs/029_browser_automation.md` (OpenClaw-style visibility).
+
+## References
+
+- `src-tauri/src/browser_doctor.rs` — `run_browser_doctor_stdio`, effective CDP timeouts / probe
+- `src-tauri/src/commands/browser_helpers.rs` — `is_cdp_navigation_timeout_error`, unit test `cdp_navigation_timeout_detection_matches_tool_errors`
+- `src-tauri/src/commands/browser_tool_dispatch.rs` — `nav_url_changed_hint_if_navigation_timeout`, `format_last_browser_error_context`, skip HTTP fallback on CDP nav timeout
+- `src-tauri/src/browser_agent/mod.rs` — `navigation_timeout_error_with_proxy_hint`, `record_nav_timeout_url_changed_hint`, `format_last_browser_error_context`, `format_context_suffix_from_health`
+- `docs/029_browser_automation.md` — navigation timeout, `navchg`, proxy hint, `mac_stats --browser-doctor`
+
+## Acceptance criteria
+
+1. **Build:** `cargo check` in `src-tauri/` succeeds.
+2. **Tests:** `cargo test` in `src-tauri/` succeeds (including `browser_helpers` timeout detection test).
+3. **Static verification:** Timeout diagnostics paths still present (`rg` spot-check below).
+
+## Verification commands
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test
+```
+
+Optional spot-check:
+
+```bash
+rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_proxy_hint|is_cdp_navigation_timeout_error|run_browser_doctor_stdio" src-tauri/src/browser_agent/mod.rs src-tauri/src/commands/browser_tool_dispatch.rs src-tauri/src/commands/browser_helpers.rs src-tauri/src/browser_doctor.rs
+```
+
+## Test report
+
+**Date:** 2026-03-27 (local workspace time).
+
+**Preflight:** `tasks/UNTESTED-20260322-2020-openclaw-browser-action-timeout-diagnostics.md` was **not** present on disk at the start of this run. The task body was written to that path, then renamed to `TESTING-20260322-2020-openclaw-browser-action-timeout-diagnostics.md` per `003-tester/TESTER.md`. No other `UNTESTED-*` file was used in this run.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 tests in `mac_stats` library; 0 failed; 1 doc-test ignored)
+- Optional `rg` spot-check (symbols in `browser_agent`, `browser_tool_dispatch`, `browser_helpers`, `browser_doctor`) — **pass** (matches for `format_last_browser_error_context`, `navchg=`, `navigation_timeout_error_with_proxy_hint`, `is_cdp_navigation_timeout_error`, `run_browser_doctor_stdio`)
+
+**Notes:** Live CDP navigation timeouts against a real Chrome instance and manual `mac_stats --browser-doctor` were not exercised in this automated run; acceptance was build + unit tests + static presence of diagnostic paths.
+
+**Outcome:** All acceptance criteria satisfied → file prefix **`CLOSED-`**.

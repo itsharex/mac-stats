@@ -14,9 +14,7 @@
 //! Use **`-vv`** on the mac-stats binary or `RUST_LOG=mac_stats=debug` when running this example
 //! to see **`post-navigate tab reconciliation`** lines in the process output.
 
-use mac_stats::browser_agent::{
-    go_back, go_forward, navigate_and_get_state, reload_current_tab,
-};
+use mac_stats::browser_agent::{go_back, go_forward, navigate_and_get_state, reload_current_tab};
 
 fn main() {
     let _ = tracing_subscriber::fmt()

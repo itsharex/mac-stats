@@ -943,13 +943,13 @@ pub fn answer_with_ollama_and_fetch(
             "\n\nYou are replying as the Ollama model: **{}**. If the user asks which model you are (or what model you run on), name this model.",
             effective_model
         );
-        // When Discord user asked for screenshots to be sent here, remind executor to actually run BROWSER_NAVIGATE + BROWSER_SCREENSHOT per URL.
+        // When Discord user asked for screenshots to be sent here, remind executor to run BROWSER_SCREENSHOT: <url> and/or NAVIGATE + SCREENSHOT: current per URL.
         let discord_screenshot_reminder = if discord_reply_channel_id.is_some() {
             let q = question.to_lowercase();
             if q.contains("screenshot")
                 && (q.contains("send") || q.contains("here") || q.contains("discord"))
             {
-                "\n\n**Discord:** The user asked for screenshot(s) to be sent here. You MUST call BROWSER_NAVIGATE then BROWSER_SCREENSHOT: current for each URL; the app will attach the images to the reply."
+                "\n\n**Discord:** The user asked for screenshot(s) to be sent here. For each URL use **BROWSER_SCREENSHOT: <url>** (navigates the **focused** CDP tab and captures, same safety as BROWSER_NAVIGATE) or **BROWSER_NAVIGATE** then **BROWSER_SCREENSHOT: current**; the app will attach the images to the reply."
             } else {
                 ""
             }
