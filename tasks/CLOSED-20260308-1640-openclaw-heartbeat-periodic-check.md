@@ -87,3 +87,16 @@ cd src-tauri && cargo check && cargo test scheduler::heartbeat --no-fail-fast
 - `cd src-tauri && cargo test scheduler::heartbeat --no-fail-fast` — **pass** (5 tests)
 
 **Outcome:** Criterios de aceptación cumplidos — **CLOSED**.
+
+### Run: 2026-03-27 22:43 UTC
+
+**Preflight:** El operador pidió probar solo `tasks/UNTESTED-20260308-1640-openclaw-heartbeat-periodic-check.md`; ese fichero no existía (no se eligió otro `UNTESTED-*`). La tarea estaba como `CLOSED-…`; según `003-tester/TESTER.md` se renombró `CLOSED-…` → `TESTING-…`, se ejecutaron las verificaciones del cuerpo del task y el resultado final vuelve a ser `CLOSED-…`.
+
+**Commands run**
+
+- `rg 'spawn_heartbeat_thread|async_runtime::spawn|heartbeat_loop' src-tauri/src/lib.rs src-tauri/src/scheduler/heartbeat.rs` — **pass** (`spawn_heartbeat_thread` → `tauri::async_runtime::spawn` + `heartbeat_loop().await`; `lib.rs` llama `scheduler::heartbeat::spawn_heartbeat_thread()`).
+- `rg 'block_on|check_browser_alive|evaluate_one_plus_one_blocking_timeout' src-tauri/src/browser_agent/mod.rs | head` — **pass** (comentario contra `Handle::block_on` + `tokio::time::timeout`; `evaluate_one_plus_one_blocking_timeout` / `check_browser_alive`).
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test scheduler::heartbeat --no-fail-fast` — **pass** (5 tests)
+
+**Outcome:** Criterios de aceptación cumplidos — **CLOSED**.

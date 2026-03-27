@@ -138,3 +138,21 @@ rg -n "enqueue_or_run_router|discord_message_bypasses_debounce|discard_pending_b
 - `rg -n "enqueue_or_run_router|discord_message_bypasses_debounce|discard_pending_batches_on_shutdown" src-tauri/src/discord/mod.rs` — coincidencias para `enqueue_or_run_router` y `discard_pending_batches_on_shutdown`. `discord_message_bypasses_debounce` no aparece por nombre en `mod.rs` (definido y usado en `message_debounce.rs`), coherente con informes anteriores.
 
 **Outcome:** Criterios de aceptación 1 y 2 cumplidos. Criterio 3: el `rg` en `mod.rs` refleja las dos referencias directas; el bypass sigue en `message_debounce.rs`. Resultado del renombrado del archivo de tarea: **`CLOSED-`** (no WIP).
+
+## Test report
+
+**Date:** 2026-03-27, hora local del entorno del operador (fecha de pared explícita).
+
+**Preflight / rename (TESTER.md paso 2):** `tasks/UNTESTED-20260322-0100-openclaw-inbound-message-debounce.md` **no existía**. Se renombró `tasks/CLOSED-20260322-0100-openclaw-inbound-message-debounce.md` → `tasks/TESTING-20260322-0100-openclaw-inbound-message-debounce.md` para esta ejecución. No se usó ningún otro archivo `UNTESTED-*`.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test merge_empty` — **pass** (`discord::message_debounce::merge_tests::merge_empty`)
+- `cd src-tauri && cargo test` — **pass** (854 tests en la librería `mac_stats`; 0 failed; 1 doc-test ignored)
+
+**Static spot-check**
+
+- `rg -n "enqueue_or_run_router|discord_message_bypasses_debounce|discard_pending_batches_on_shutdown" src-tauri/src/discord/mod.rs` — coincidencias para `enqueue_or_run_router` y `discard_pending_batches_on_shutdown`. `discord_message_bypasses_debounce` no aparece por nombre en `mod.rs` (definido y usado en `message_debounce.rs`), coherente con informes previos.
+
+**Outcome:** Criterios 1 y 2 cumplidos. Criterio 3 (tres identificadores en `mod.rs`): dos visibles en `mod.rs`; el bypass permanece en `message_debounce.rs`. Renombrado final del archivo de tarea: **`CLOSED-`** (no WIP).
