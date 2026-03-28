@@ -528,3 +528,19 @@ rg -n "fn search_page_text|pub fn browser_query" src-tauri/src/browser_agent/mod
 
 **Resultado:** Criterios de aceptación cumplidos. Tras este informe, `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`** (no `WIP-`). CDP en vivo extremo a extremo no ejecutado en esta pasada.
 
+### Test report (2026-03-28, hora local; verificación ejecutada en esta conversación)
+
+**Preflight:** Mismo caso: `tasks/UNTESTED-20260321-1635-browser-use-in-page-search-and-css-query.md` ausente; `CLOSED-…` → `TESTING-…` al inicio de esta pasada. Ningún otro `UNTESTED-*`.
+
+**Comandos ejecutados**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 passed, 0 failed en la librería `mac_stats`; 1 doc-test ignorado)
+
+**Comprobación estática (`rg`)**
+
+- `browser_tool_dispatch.rs`: handlers y parsers de búsqueda/consulta presentes (coincide con criterio 3).
+- `browser_agent/mod.rs`: `search_page_text`, `browser_query` presentes.
+
+**Resultado:** Criterios de aceptación cumplidos. Tras este informe, `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`** (no `WIP-`). CDP en vivo extremo a extremo no ejecutado en esta pasada.
+

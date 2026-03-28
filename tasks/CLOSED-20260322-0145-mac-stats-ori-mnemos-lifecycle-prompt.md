@@ -388,3 +388,15 @@ cd src-tauri && cargo test prompts:: --no-fail-fast
 | Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-2a05ccc23cd3a554`); `ori_briefing_and_prefetch_follow_memory_before_metrics` ok; 849 filtered out |
 
 - **Outcome:** Criterios de aceptación cumplidos → **CLOSED**.
+
+## Test report
+
+- **Date:** 2026-03-28, hora local (macOS del agente; no UTC fijada).
+- **Note:** El operador pidió `tasks/UNTESTED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md`; ese path **no existe** en el repo (la tarea estaba como `CLOSED-*`). Flujo `003-tester/TESTER.md` solo sobre este basename: `CLOSED-*` → `TESTING-*`, verificación en esta sesión, este informe, luego `TESTING-*` → `CLOSED-*`. No se abrió ningún otro archivo `UNTESTED-*`.
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cd src-tauri && cargo check` | **pass** — `Finished dev profile` en ~0.21s |
+| Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-2a05ccc23cd3a554`); `ori_briefing_and_prefetch_follow_memory_before_metrics` ok; 849 filtered out |
+
+- **Outcome:** Criterios de aceptación cumplidos → **CLOSED**.

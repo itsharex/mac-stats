@@ -938,3 +938,34 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
 | Manual opcional (Discord en vivo con herramientas) | **No ejecutado** |
 
 **Conclusión:** **CLOSED** — todos los criterios automatizados del cuerpo de la tarea cumplidos; el nombre del archivo vuelve a `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.
+
+### Test report — TESTER.md pass (2026-03-28, agent run)
+
+**Date:** 2026-03-28, hora local del entorno (shell en workspace mac-stats); no se fijó `TZ` explícitamente.
+
+**Workflow**
+
+- **UNTESTED → TESTING:** `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` **no existe** en el repo; no se eligió ningún otro `UNTESTED-*`. Se renombró `CLOSED-…` → `TESTING-…` para esta pasada según `003-tester/TESTER.md`.
+
+**Comandos ejecutados**
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test discord_draft_stream::
+rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs
+rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs
+```
+
+**Resultados**
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| `cargo check` (src-tauri) | **Pass** (`Finished dev profile` en 0.23s) |
+| `cargo test discord_draft_stream::` | **Pass** — 2 passed, 0 failed; 852 filtered out en `lib.rs` tests |
+| `spawn_discord_draft_editor` en `discord/mod.rs` | **Pass** (L2172) |
+| `DiscordDraftHandle` en `tool_loop.rs` | **Pass** (L14, L152) |
+| `DiscordDraftHandle` en `turn_lifecycle.rs` | **Pass** (L10, L95) |
+| `DiscordDraftHandle` en `ollama.rs` | **Pass** (L109) |
+| Manual opcional (Discord en vivo con herramientas) | **No ejecutado** |
+
+**Conclusión:** **CLOSED** — criterios automatizados del bloque **Verification** cumplidos; el nombre del archivo vuelve a `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.

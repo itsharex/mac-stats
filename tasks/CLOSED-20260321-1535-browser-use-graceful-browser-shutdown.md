@@ -478,3 +478,17 @@ rg -n "pub fn close_browser_session" src-tauri/src/browser_agent/mod.rs
 - `rg -n "pub fn close_browser_session" src-tauri/src/browser_agent/mod.rs` — **pass** (línea 4266)
 
 **Outcome:** Todos los criterios de aceptación satisfechos. **Nombre final:** `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`.
+
+### Tester run — 2026-03-28 (Cursor agent; `003-tester/TESTER.md`; corrida operador)
+
+**Date:** 2026-03-28 (hora local del workspace; no UTC).
+
+**Note:** Pedido explícito: solo `tasks/UNTESTED-20260321-1535-browser-use-graceful-browser-shutdown.md`; no existe. Misma tarea: `CLOSED-…` → `TESTING-20260321-1535-browser-use-graceful-browser-shutdown.md` → verificación → este bloque → `CLOSED-`. Ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 passed, 0 failed, 0 ignored en la librería `mac_stats`; ~1.16s; 1 doc-test ignored)
+- Spot-check (`rg` en `lib.rs` y `browser_agent/mod.rs`, criterio 3) — **pass** (líneas 236–239, 1681–1686; `pub fn close_browser_session` línea 4266)
+
+**Outcome:** Todos los criterios de aceptación satisfechos. **Nombre final:** `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`.
