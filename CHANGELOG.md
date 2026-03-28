@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Tasks / docs** — Further **CLOSED** task **test report** / closing-reviewer appendices (**~2026-03-28T19:02–19:08Z** UTC): CDP health ping, in-page search/CSS query, draft stream throttle, keyed async queue (extra `cargo test keyed_queue` + `rg` rows), Ori Mnemos lifecycle, Ollama warmup **verify #13** (full `cargo clippy` / `build --release` **v0.1.70** bar), browser action timeout diagnostics, Discord reply-to-bot implicit mention; **`docs/022_feature_review_plan.md`** — checklist **verify #12** / **verify #13**.
+- **OpenClaw reviewer** — Independent re-run **`2026-03-28T19:02:18Z`**; **OpenClaw** **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 - **Tasks** — **CLOSED** task **test report** blocks (**2026-03-28T18:50Z** UTC) on nine browser / OpenClaw / Discord tracks (~**+168** lines: `rg` spot-checks, `cargo check` / `cargo test` rows, TESTING→CLOSED rename-flow notes).
 - **Tasks / docs** — Ollama startup-gate task **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #11** (alcance con path literal **`TESTING-…`** vía **`git mv`**, barra **v0.1.70**); **`docs/022_feature_review_plan.md`** — checklist **verify #11** (**2026-03-28T18:44:15Z**).
 - **Tasks / docs** — Further **CLOSED** task tester / closing-reviewer appendices (~**+167** lines on the same nine browser / OpenClaw / Discord **CLOSED** tracks: extra verification rows, regression notes, and operator guidance).
