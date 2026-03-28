@@ -173,7 +173,7 @@ rg -n "run_spa_blank_page_retry_if_needed|browser_spa_retry_enabled|SPA readines
 
 **Date:** 2026-03-28 (local, entorno del agente al ejecutar esta corrida)
 
-**Prerrequisito:** El operador indicó `tasks/UNTESTED-20260321-1530-browser-use-spa-blank-page-retry.md`; ese archivo no existía (no se eligió otro `UNTESTED-*`). La tarea estaba como `tasks/CLOSED-20260321-1530-browser-use-spa-blank-page-retry.md`. Se aplicó **`CLOSED` → `TESTING`** como equivalente al paso **UNTESTED → TESTING** de `003-tester/TESTER.md` para esta única tarea.
+**Prerrequisito:** El operador pidió probar solo `tasks/UNTESTED-20260321-1530-browser-use-spa-blank-page-retry.md`; ese path no existía (no se eligió otro `UNTESTED-*`). El archivo de la tarea estaba como `tasks/CLOSED-20260321-1530-browser-use-spa-blank-page-retry.md`. Se aplicó **`CLOSED` → `TESTING`** como equivalente al paso **UNTESTED → TESTING** de `003-tester/TESTER.md`.
 
 **Commands run**
 
