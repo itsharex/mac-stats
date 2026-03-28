@@ -128,6 +128,13 @@ impl Default for HeartbeatSettings {
 /// Default values in config stay short (interactive/menu-bar responsiveness); operators may raise up to 48 hours for long unattended runs.
 pub const AGENT_ROUTER_SESSION_WALL_CLOCK_MAX_SECS: u64 = 172800;
 
+#[inline]
+fn clamp_ollama_global_concurrency_n(n: u32) -> u32 {
+    const MIN_N: u32 = 1;
+    const MAX_N: u32 = 16;
+    n.clamp(MIN_N, MAX_N)
+}
+
 impl Config {
     /// Get the log file path
     ///
@@ -506,19 +513,17 @@ impl Config {
     /// `MAC_STATS_OLLAMA_GLOBAL_CONCURRENCY`. Clamped to 1..=16. Read once on first queue use per process.
     pub fn ollama_global_concurrency() -> u32 {
         const DEFAULT_N: u32 = 1;
-        const MIN_N: u32 = 1;
-        const MAX_N: u32 = 16;
         let from_env = std::env::var("MAC_STATS_OLLAMA_GLOBAL_CONCURRENCY")
             .ok()
             .and_then(|s| s.parse::<u32>().ok());
         if let Some(n) = from_env {
-            return n.clamp(MIN_N, MAX_N);
+            return clamp_ollama_global_concurrency_n(n);
         }
         let config_path = Self::config_file_path();
         if let Ok(content) = std::fs::read_to_string(&config_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(n) = json.get("ollamaGlobalConcurrency").and_then(|v| v.as_u64()) {
-                    return (n as u32).clamp(MIN_N, MAX_N);
+                    return clamp_ollama_global_concurrency_n(n as u32);
                 }
             }
         }
@@ -3483,7 +3488,7 @@ fn parse_hhmm_local(raw: &str) -> Option<(u32, u32)> {
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{clamp_ollama_global_concurrency_n, Config};
 
     #[test]
     fn paragraph_key_first_line() {
@@ -3599,5 +3604,15 @@ mod tests {
     #[test]
     fn planning_history_cap_default() {
         assert_eq!(Config::planning_history_cap(), 6);
+    }
+
+    #[test]
+    fn ollama_global_concurrency_clamps_to_allowed_range() {
+        assert_eq!(clamp_ollama_global_concurrency_n(0), 1);
+        assert_eq!(clamp_ollama_global_concurrency_n(1), 1);
+        assert_eq!(clamp_ollama_global_concurrency_n(8), 8);
+        assert_eq!(clamp_ollama_global_concurrency_n(16), 16);
+        assert_eq!(clamp_ollama_global_concurrency_n(17), 16);
+        assert_eq!(clamp_ollama_global_concurrency_n(u32::MAX), 16);
     }
 }

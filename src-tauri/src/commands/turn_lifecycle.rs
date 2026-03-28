@@ -160,8 +160,8 @@ pub async fn finalize_turn_timeout(
     unregister_if_matches(coord_key, request_id);
 
     let mut text = format!(
-        "**Limit: agent router session wall-clock** — The full agent run exceeded its wall-clock budget (**{}s**). \
-         This is separate from a single Ollama HTTP call timeout (`ollamaChatTimeoutSecs`).\n\n\
+        "**Turn timed out** — The full agent run exceeded its wall-clock budget (**{}s**). \
+         (This is separate from a single Ollama HTTP call timeout: `ollamaChatTimeoutSecs`.)\n\n\
          The run was stopped so the channel or UI does not hang. For long unattended jobs you may raise \
          `agentRouterTurnTimeoutSecsDiscord`, `agentRouterTurnTimeoutSecsUi`, or `agentRouterTurnTimeoutSecsRemote` in `~/.mac-stats/config.json` (up to 48h). Defaults stay short for menu-bar responsiveness.\n\n\
          If this keeps happening, try a narrower question, a faster model, or widen the matching `agentRouterTurnTimeoutSecs*` value.",

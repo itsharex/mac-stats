@@ -4295,67 +4295,87 @@ pub fn close_browser_session() {
     let ws = cdp_downloads::peek_cdp_ws_url();
     cdp_trace_archive::stop_and_persist_best_effort(ws.as_deref(), "app shutdown");
     cdp_downloads::clear_stored_cdp_ws_url();
-    let taken = match browser_session().lock() {
+
+    // Avoid blocking forever if another thread holds the session mutex (e.g. mid-CDP call on SIGTERM).
+    // Still sweep headless Chrome by profile signature so orphans do not outlive the process.
+    let taken = match browser_session().try_lock() {
         Ok(mut g) => g.take(),
-        Err(e) => {
+        Err(std::sync::TryLockError::Poisoned(p)) => {
             mac_stats_warn!(
                 "browser",
-                "Browser agent: could not lock session for shutdown (poisoned mutex: {}); skipping browser close",
-                e
+                "Browser agent: session mutex poisoned during shutdown; recovering guard to drop session"
             );
+            p.into_inner().take()
+        }
+        Err(std::sync::TryLockError::WouldBlock) => {
+            mac_stats_warn!(
+                "browser",
+                "Browser agent: shutdown could not lock session (busy); sweeping orphaned headless Chrome only"
+            );
+            #[cfg(unix)]
+            kill_orphaned_browser_processes();
+            crate::logging::sync_debug_log_best_effort();
             return;
         }
     };
-    let Some((browser, _created_at, _last_used, was_headless)) = taken else {
+
+    if let Some((browser, _created_at, _last_used, was_headless)) = taken {
+        clear_cdp_js_dialog_history();
+
+        #[cfg(unix)]
+        let headless_pid = if was_headless {
+            browser.get_process_id()
+        } else {
+            None
+        };
+
+        drop(browser);
+
+        #[cfg(unix)]
+        if was_headless {
+            if let Some(pid) = headless_pid.filter(|p| *p > 0) {
+                match Command::new("kill").arg(pid.to_string()).status() {
+                    Ok(status) if status.success() => {
+                        mac_stats_debug!(
+                            "browser",
+                            "Browser agent: sent SIGTERM to headless Chrome PID {} (shutdown safety net)",
+                            pid
+                        );
+                    }
+                    Ok(status) => {
+                        mac_stats_debug!(
+                            "browser",
+                            "Browser agent: shutdown safety-net kill for PID {} exited with status {:?}",
+                            pid,
+                            status.code()
+                        );
+                    }
+                    Err(e) => {
+                        mac_stats_debug!(
+                            "browser",
+                            "Browser agent: shutdown safety-net kill for PID {} failed: {}",
+                            pid,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        mac_stats_info!("browser", "Browser session closed on shutdown");
+    } else {
         mac_stats_debug!(
             "browser",
             "Browser agent: no cached browser session to close on shutdown"
         );
-        return;
-    };
-    clear_cdp_js_dialog_history();
-
-    #[cfg(unix)]
-    let headless_pid = if was_headless {
-        browser.get_process_id()
-    } else {
-        None
-    };
-
-    drop(browser);
-
-    #[cfg(unix)]
-    if was_headless {
-        if let Some(pid) = headless_pid.filter(|p| *p > 0) {
-            match Command::new("kill").arg(pid.to_string()).status() {
-                Ok(status) if status.success() => {
-                    mac_stats_debug!(
-                        "browser",
-                        "Browser agent: sent SIGTERM to headless Chrome PID {} (shutdown safety net)",
-                        pid
-                    );
-                }
-                Ok(status) => {
-                    mac_stats_debug!(
-                        "browser",
-                        "Browser agent: shutdown safety-net kill for PID {} exited with status {:?}",
-                        pid,
-                        status.code()
-                    );
-                }
-                Err(e) => {
-                    mac_stats_debug!(
-                        "browser",
-                        "Browser agent: shutdown safety-net kill for PID {} failed: {}",
-                        pid,
-                        e
-                    );
-                }
-            }
-        }
     }
 
-    mac_stats_info!("browser", "Browser session closed on shutdown");
+    // Same pgrep-based sweep as startup: catches leftover rust-headless-chrome-profile processes if the
+    // root PID kill was insufficient or the session was already cleared while Chrome kept running.
+    #[cfg(unix)]
+    kill_orphaned_browser_processes();
+
+    crate::logging::sync_debug_log_best_effort();
 }
 
 /// Last page's element list (index → label) for status messages. Set after each navigate/click/input so "Clicking element 7 (Accept all)…" can show the label.
@@ -9904,5 +9924,35 @@ mod tests {
             sample_interactable(2, "button", Some("Go"), "Go"),
         ];
         assert!(super::find_unique_identity_match(&stale, &fresh).is_err());
+    }
+
+    #[test]
+    fn managed_tab_cap_focus_index_closes_tab_before_focus() {
+        assert_eq!(new_focus_index_after_close(3, 1, 5), 2);
+    }
+
+    #[test]
+    fn managed_tab_cap_focus_index_closes_tab_after_focus() {
+        assert_eq!(new_focus_index_after_close(2, 4, 4), 2);
+    }
+
+    #[test]
+    fn managed_tab_cap_focus_index_closes_focused_nonzero() {
+        assert_eq!(new_focus_index_after_close(2, 2, 4), 1);
+    }
+
+    #[test]
+    fn managed_tab_cap_focus_index_closes_focused_zero() {
+        assert_eq!(new_focus_index_after_close(0, 0, 3), 0);
+    }
+
+    #[test]
+    fn managed_tab_cap_focus_index_empty_tabs() {
+        assert_eq!(new_focus_index_after_close(2, 0, 0), 0);
+    }
+
+    #[test]
+    fn managed_tab_cap_focus_index_clamps_high() {
+        assert_eq!(new_focus_index_after_close(10, 0, 3), 2);
     }
 }

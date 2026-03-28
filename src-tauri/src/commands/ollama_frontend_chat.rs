@@ -13,6 +13,7 @@ use crate::commands::ollama_chat::{
     ollama_chat, send_ollama_chat_messages, send_ollama_chat_messages_streaming, OllamaHttpQueue,
 };
 use crate::commands::ollama_config::{default_non_agent_system_prompt, ChatRequest};
+use crate::commands::ollama_memory::load_memory_block_for_request;
 use crate::commands::session_history::{
     prepare_conversation_history, CompactionLifecycleContext, CONVERSATION_HISTORY_CAP,
 };
@@ -202,6 +203,17 @@ pub async fn ollama_chat_with_execution(
             .system_prompt
             .unwrap_or_else(default_non_agent_system_prompt),
     );
+
+    // Same ordering as agent-router execution prompt (docs/ori-lifecycle.md): markdown memory before Ori sections.
+    let memory_block = load_memory_block_for_request(None, true);
+    if !memory_block.is_empty() {
+        debug!(
+            target: "mac_stats::ollama/chat",
+            chars = memory_block.chars().count(),
+            "CPU chat: injected markdown memory before Ori lifecycle sections"
+        );
+    }
+    system_prompt.push_str(&memory_block);
 
     const CPU_ORI_HOOK_SOURCE: &str = "cpu";
     const CPU_ORI_SESSION_ID: u64 = 0;
@@ -427,9 +439,18 @@ pub async fn ollama_chat_continue_with_result(
     let token_budget =
         crate::commands::context_assembler::resolve_default_chat_context_token_budget().await;
 
-    let system_prompt = augment_cpu_system_with_scheduler_awareness(
+    let mut system_prompt = augment_cpu_system_with_scheduler_awareness(
         system_prompt.unwrap_or_else(default_non_agent_system_prompt),
     );
+    let memory_block = load_memory_block_for_request(None, true);
+    if !memory_block.is_empty() {
+        debug!(
+            target: "mac_stats::ollama/chat",
+            chars = memory_block.chars().count(),
+            "CPU chat continue: injected markdown memory (no Ori re-inject on code ping-pong)"
+        );
+    }
+    system_prompt.push_str(&memory_block);
 
     let follow_up_message = format!(
         "I have executed your last codeblocks and the result is: {}\n\nCan you now answer the original question: {}?",

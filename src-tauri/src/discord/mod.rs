@@ -2865,6 +2865,9 @@ impl EventHandler for Handler {
         }
 
         let debounce_ms = effective_discord_debounce_ms(&chan);
+        // Full-router debounce: `message_debounce::enqueue_or_run_router` batches text;
+        // bypass rules (attachments, `/`, session reset, `debounce_ms == 0`) live in
+        // `message_debounce::discord_message_bypasses_debounce`.
         message_debounce::enqueue_or_run_router(
             ctx,
             new_message,

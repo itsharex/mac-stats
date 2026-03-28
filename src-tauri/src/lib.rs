@@ -236,7 +236,14 @@ fn run_internal(open_cpu_window: bool) {
     // SIGINT/SIGTERM/SIGHUP often terminate the process without Tauri emitting `RunEvent::Exit`
     // first. Register a handler so `close_browser_session()` still runs (browser-use-style safety).
     match ctrlc::set_handler(|| {
+        // INFO so shutdown survives default -vv filters and hits debug.log before any session locks.
+        tracing::info!(
+            target: "mac_stats::browser_shutdown",
+            "Signal-driven shutdown: invoking close_browser_session (SIGINT/SIGTERM/SIGHUP)"
+        );
+        crate::logging::sync_debug_log_best_effort();
         crate::browser_agent::close_browser_session();
+        crate::logging::sync_debug_log_best_effort();
     }) {
         Ok(()) => {
             tracing::debug!(
@@ -1674,11 +1681,13 @@ fn run_internal(open_cpu_window: bool) {
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
-                tracing::debug!(
+                tracing::info!(
                     target: "mac_stats::browser_shutdown",
                     "Tauri RunEvent::Exit: closing browser session"
                 );
+                crate::logging::sync_debug_log_best_effort();
                 crate::browser_agent::close_browser_session();
+                crate::logging::sync_debug_log_best_effort();
             }
         });
 

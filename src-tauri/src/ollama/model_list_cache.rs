@@ -50,6 +50,22 @@ fn norm_endpoint(endpoint: &str) -> String {
     endpoint.trim().trim_end_matches('/').to_string()
 }
 
+/// Apply poisoned-cache rules: empty `Ok` or `Err` does not replace a prior non-empty list.
+fn merge_tags_fetch_result(fetched: FetchResult, prior: Option<ListResponse>) -> FetchResult {
+    match fetched {
+        Ok(list) if !list.models.is_empty() => Ok(list),
+        Ok(list) => Ok(
+            prior
+                .filter(|p| !p.models.is_empty())
+                .unwrap_or(list),
+        ),
+        Err(e) => prior
+            .filter(|p| !p.models.is_empty())
+            .map(Ok)
+            .unwrap_or(Err(e)),
+    }
+}
+
 /// Drop cached entries (e.g. after Ollama endpoint change).
 pub async fn clear_all() {
     let mut g = cache().lock().await;
@@ -218,59 +234,128 @@ pub async fn fetch_tags_cached(endpoint: &str, api_key: Option<&str>) -> FetchRe
     let out = {
         let mut g = cache().lock().await;
         g.inflight.remove(&ep);
-        match &result {
+        match result {
             Ok(list) if !list.models.is_empty() => {
                 let ent = g.endpoints.entry(ep.clone()).or_default();
                 ent.last_success = Some((Instant::now(), list.clone()));
-                result.clone()
+                Ok(list)
             }
             Ok(list) => {
+                let prior_snapshot = g.endpoints.get(&ep).and_then(|e| e.last_success.clone());
+                let prior_list = prior_snapshot.as_ref().map(|(_, l)| l.clone());
                 mac_stats_warn!(
                     "ollama/model_cache",
                     "{} Ollama returned empty model list ({} entries); not replacing cached data",
                     MCACHE_LOG_TAG,
                     list.models.len()
                 );
-                if let Some((age_start, stale)) =
-                    g.endpoints.get(&ep).and_then(|e| e.last_success.as_ref())
-                {
-                    let age = Instant::now().duration_since(*age_start);
-                    mac_stats_warn!(
-                        "ollama/model_cache",
-                        "{} Serving stale model list (last success {}s ago, {} models) after empty /api/tags",
-                        MCACHE_LOG_TAG,
-                        age.as_secs(),
-                        stale.models.len()
-                    );
-                    Ok(stale.clone())
-                } else {
-                    Ok(list.clone())
+                let merged = merge_tags_fetch_result(Ok(list), prior_list);
+                if let Some((age_start, stale)) = prior_snapshot.as_ref() {
+                    if !stale.models.is_empty() {
+                        let age = Instant::now().duration_since(*age_start);
+                        mac_stats_warn!(
+                            "ollama/model_cache",
+                            "{} Serving stale model list (last success {}s ago, {} models) after empty /api/tags",
+                            MCACHE_LOG_TAG,
+                            age.as_secs(),
+                            stale.models.len()
+                        );
+                    }
                 }
+                merged
             }
             Err(e) => {
+                let prior_snapshot = g.endpoints.get(&ep).and_then(|e| e.last_success.clone());
+                let prior_list = prior_snapshot.as_ref().map(|(_, l)| l.clone());
                 mac_stats_warn!(
                     "ollama/model_cache",
                     "{} Model list fetch failed: {}; not updating cache",
                     MCACHE_LOG_TAG,
                     e
                 );
-                if let Some((age_start, stale)) =
-                    g.endpoints.get(&ep).and_then(|e| e.last_success.as_ref())
-                {
-                    let age = Instant::now().duration_since(*age_start);
-                    mac_stats_warn!(
-                        "ollama/model_cache",
-                        "{} Serving stale model list (last success {}s ago, {} models) after fetch error",
-                        MCACHE_LOG_TAG,
-                        age.as_secs(),
-                        stale.models.len()
-                    );
-                    Ok(stale.clone())
-                } else {
-                    Err(e.clone())
+                let merged = merge_tags_fetch_result(Err(e), prior_list);
+                if let Some((age_start, stale)) = prior_snapshot.as_ref() {
+                    if !stale.models.is_empty() {
+                        let age = Instant::now().duration_since(*age_start);
+                        mac_stats_warn!(
+                            "ollama/model_cache",
+                            "{} Serving stale model list (last success {}s ago, {} models) after fetch error",
+                            MCACHE_LOG_TAG,
+                            age.as_secs(),
+                            stale.models.len()
+                        );
+                    }
                 }
+                merged
             }
         }
     };
     out
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::merge_tags_fetch_result;
+    use crate::ollama::{ListResponse, ModelSummary};
+
+    fn model(name: &str) -> ModelSummary {
+        ModelSummary {
+            name: name.to_string(),
+            modified_at: None,
+            size: None,
+            digest: None,
+            details: None,
+        }
+    }
+
+    fn list_with(names: &[&str]) -> ListResponse {
+        ListResponse {
+            models: names.iter().copied().map(model).collect(),
+        }
+    }
+
+    #[test]
+    fn nonempty_ok_passthrough() {
+        let fresh = list_with(&["a"]);
+        let out = merge_tags_fetch_result(Ok(fresh.clone()), Some(list_with(&["b"]))).unwrap();
+        assert_eq!(out.models.len(), 1);
+        assert_eq!(out.models[0].name, "a");
+    }
+
+    #[test]
+    fn empty_ok_keeps_prior_when_nonempty() {
+        let prior = list_with(&["keep"]);
+        let empty = ListResponse { models: vec![] };
+        let out = merge_tags_fetch_result(Ok(empty), Some(prior.clone())).unwrap();
+        assert_eq!(out.models.len(), 1);
+        assert_eq!(out.models[0].name, "keep");
+    }
+
+    #[test]
+    fn empty_ok_no_prior_returns_empty() {
+        let empty = ListResponse { models: vec![] };
+        let out = merge_tags_fetch_result(Ok(empty.clone()), None).unwrap();
+        assert!(out.models.is_empty());
+    }
+
+    #[test]
+    fn err_with_prior_non_empty_returns_ok_stale() {
+        let prior = list_with(&["x"]);
+        let out = merge_tags_fetch_result(Err("boom".to_string()), Some(prior.clone())).unwrap();
+        assert_eq!(out.models[0].name, "x");
+    }
+
+    #[test]
+    fn err_without_prior_returns_err() {
+        let out = merge_tags_fetch_result(Err("nope".to_string()), None);
+        assert_eq!(out.unwrap_err(), "nope");
+    }
+
+    #[test]
+    fn prior_empty_does_not_block_empty_ok() {
+        let prior = ListResponse { models: vec![] };
+        let empty = ListResponse { models: vec![] };
+        let out = merge_tags_fetch_result(Ok(empty.clone()), Some(prior)).unwrap();
+        assert!(out.models.is_empty());
+    }
 }

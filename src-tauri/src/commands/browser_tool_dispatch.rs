@@ -835,12 +835,24 @@ pub(crate) async fn handle_browser_click(
                         "BROWSER_CLICK",
                         &cdp_err,
                     ) {
+                        info!(
+                            "Agent router [{}]: BROWSER_CLICK index {} CDP failed; attempting click_http fallback ({})",
+                            request_id,
+                            idx,
+                            crate::logging::ellipse(&cdp_err, 120)
+                        );
                         match tokio::task::spawn_blocking(move || {
                             crate::browser_agent::click_http(idx)
                         })
                         .await
                         {
-                            Ok(Ok(state_str)) => (state_str, vec![]),
+                            Ok(Ok(state_str)) => {
+                                info!(
+                                    "Agent router [{}]: BROWSER_CLICK index {} click_http fallback succeeded",
+                                    request_id, idx
+                                );
+                                (state_str, vec![])
+                            }
                             Ok(Err(e)) => {
                                 let base = format!("BROWSER_CLICK failed: {}", e);
                                 let base = append_browser_readiness_context(base, false, None);

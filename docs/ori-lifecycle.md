@@ -23,6 +23,8 @@ When skill/agent overlay is **not** active, the execution system prompt is built
 3. **Possibly relevant vault notes** (`ori query similar` JSON → titles)
 4. Live metrics, reminders, plan
 
+CPU window chat (`ollama_chat_with_execution`): the default system prompt is soul + tools; the backend then appends the same markdown memory block (`load_memory_block_for_request(None, true)`), then orient + prefetch when enabled. Live metrics stay in the user turn (`cpu_window_user_turn_with_metrics`), not in the system message.
+
 Skill/agent overlay **omits** memory and Ori sections (unchanged historical behaviour).
 
 ## Session briefing vs MCP `ori_orient`

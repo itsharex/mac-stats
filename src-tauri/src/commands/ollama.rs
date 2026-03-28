@@ -1644,6 +1644,11 @@ pub fn answer_with_ollama_and_fetch(
             }
             Err(_) => {
                 crate::commands::turn_lifecycle::gate_close(&output_gate);
+                crate::mac_stats_warn!(
+                    "ollama/chat",
+                    "Agent router [{}]: closing output gate after turn wall-clock timeout",
+                    request_id_for_timeout
+                );
                 crate::commands::turn_lifecycle::finalize_turn_timeout(
                     coord_key,
                     &request_id_for_timeout,
