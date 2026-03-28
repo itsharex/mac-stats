@@ -56,6 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tasks / docs** — Continued expansion of **CLOSED** task tester / closing-reviewer appendices (~**+340** lines total on **2026-03-28** in this **Unreleased** churn: CDP health ping, in-page search/CSS query, hung-turn event gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup **verify #9**, browser action timeout diagnostics, Discord reply-to-bot implicit mention; test reports with **`cargo check` / `cargo test`** and **`rg`** spot-checks).
 - **OpenClaw reviewer** — Independent re-runs **`2026-03-28T18:37:57Z`** (latest), **`2026-03-28T18:14:50Z`**, and **`2026-03-28T18:01:58Z`**; **OpenClaw** **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 
+## [0.1.71] - 2026-03-29
+
+### Changed
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #31**; **`docs/022_feature_review_plan.md`** — checklist **verify #31** (**2026-03-28T23:13:34Z** UTC).
+- **OpenClaw reviewer** — Independent re-run **`2026-03-29T00:45:00Z`**; digest incremental range **2 commits** (`81432d6b7e2d..dc382b09be3a`: MS Teams Bot Framework / Entra service tokens, CI test-planner extension batch concurrency cap); local **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
+- **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — further **`003-tester`** **test report** appendices (**2026-03-29** batch, ~**+170** lines across nine **`tasks/CLOSED-*.md`** files): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup task body, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **`cargo test --no-fail-fast`**, **`rg`** where noted).
+
 ## [0.1.70] - 2026-03-28
 
 ### Changed
