@@ -732,3 +732,15 @@ cd src-tauri && cargo test prompts:: --no-fail-fast
 | Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-ad89fe1b68f1007b`); incluye `ori_briefing_and_prefetch_follow_memory_before_metrics`; 866 filtered out |
 
 - **Outcome:** Criterios de aceptación cumplidos → **CLOSED** (`TESTING-*` → `CLOSED-*`).
+
+## Test report
+
+- **Date:** 2026-03-28, hora local del entorno del agente (macOS; no UTC fijada).
+- **Note:** El operador indicó `tasks/UNTESTED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md`; ese path **no existe** en el árbol (solo `CLOSED-*` con este basename). Flujo `003-tester/TESTER.md` solo sobre esta tarea: `CLOSED-*` → `TESTING-*`, comandos ejecutados en esta sesión (Cursor), este apéndice, luego `TESTING-*` → `CLOSED-*` al pasar (en fallo: `WIP-*` según TESTER.md; el operador también mencionó `TESTED-*` para fallo). No se abrió ningún otro archivo `UNTESTED-*`.
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cd src-tauri && cargo check` | **pass** — `Finished dev profile` en 0.25s |
+| Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-ad89fe1b68f1007b`); incluye `ori_briefing_and_prefetch_follow_memory_before_metrics`; 866 filtered out |
+
+- **Outcome:** Criterios de aceptación cumplidos → **CLOSED** (`TESTING-*` → `CLOSED-*`).

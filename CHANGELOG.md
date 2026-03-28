@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #20**; **`docs/022_feature_review_plan.md`** — checklist **verify #20** (**2026-03-28T20:29:19Z** UTC).
+- **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — further **`003-tester`** **test report** / re-verify appendices (**~2026-03-28T20:24–20:29Z** UTC): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **`cargo test`** / filtered suites where noted, **`rg`** spot-checks).
 - **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #19**; **`docs/022_feature_review_plan.md`** — checklist **verify #19** (**2026-03-28T20:18:20Z** UTC).
 - **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — appended **`003-tester`** **test report** blocks (**~2026-03-28T20:13–20:18Z** UTC): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **`cargo test --no-fail-fast`**, **`rg`** spot-checks).
 - **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #18**; **`docs/022_feature_review_plan.md`** — checklist **verify #18** and **#12–#18** wording (**2026-03-28T20:06:52Z** UTC).
