@@ -501,3 +501,26 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **E2E manual Discord** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en esta corrida (sin Discord en vivo).
 
 **Resultado global:** **PASS** (criterios numerados + preflight). **Renombrado final:** se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Según `003-tester/TESTER.md`, fallo/bloqueo sería **`WIP-`**; el operador pidió **`TESTED-`** ante fallo de verificación — no aplica.
+
+---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; `003-tester/TESTER.md`; operador: solo `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`).
+
+**Rename `UNTESTED→TESTING`:** **Omitido** — no existe `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` en este workspace; la tarea con este slug está solo como `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. No se usó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → líneas 1852, 1956, 2016, 2796–2797, 2823.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → líneas 1867, 1888, 1901, 1915; `debug!` con `target: "mac_stats::discord"` (confirmado en fuente).
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno.
+
+**Overall:** **PASS** (criterios numerados + preflight). **Renombrado final:** se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. (`003-tester/TESTER.md`: ante fallo/bloqueo sería **`WIP-`**; convención del operador: **`TESTED-`** ante fallo de verificación — no aplica.)
+
+---
