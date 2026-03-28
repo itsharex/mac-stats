@@ -550,3 +550,21 @@ rg -n "enqueue_or_run_router|discord_message_bypasses_debounce|discard_pending_b
 - `rg -n "enqueue_or_run_router|discord_message_bypasses_debounce|discard_pending_batches_on_shutdown" src-tauri/src/discord/mod.rs` — matches at **2868** (`enqueue_or_run_router`) and **2918** (`discard_pending_batches_on_shutdown`). `discord_message_bypasses_debounce` is not named in `mod.rs` (defined/used in `message_debounce.rs`), consistent with prior reports and acceptance note for criterion 3.
 
 **Outcome:** All acceptance criteria pass for this run. Rename **`TESTING-`** → **`CLOSED-`** (not **WIP-**). Live Discord debounce timing was not exercised.
+
+## Test report
+
+**Fecha:** 2026-03-28, hora local del host del agente (sábado 2026-03-28 según `user_info` del workspace); zona horaria no fijada.
+
+**Preflight / rename (TESTER.md paso 2):** `tasks/UNTESTED-20260322-0100-openclaw-inbound-message-debounce.md` **no existía** en disco. Solo se trató esta tarea (**no** se eligió ningún otro `UNTESTED-*`). Equivalente al paso UNTESTED→TESTING: `tasks/CLOSED-20260322-0100-openclaw-inbound-message-debounce.md` → `tasks/TESTING-20260322-0100-openclaw-inbound-message-debounce.md` al inicio de esta ejecución.
+
+**Comandos ejecutados**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test merge_empty` — **pass** (`discord::message_debounce::merge_tests::merge_empty`)
+- `cd src-tauri && cargo test` — **pass** (854 tests en la librería `mac_stats`; 0 failed; 1 doc-test ignored)
+
+**Verificación estática**
+
+- `rg -n "enqueue_or_run_router|discord_message_bypasses_debounce|discard_pending_batches_on_shutdown" src-tauri/src/discord/mod.rs` — coincidencias en **2868** (`enqueue_or_run_router`) y **2918** (`discard_pending_batches_on_shutdown`). `discord_message_bypasses_debounce` no aparece por nombre en `mod.rs` (definido y usado en `message_debounce.rs`), alineado con criterio 3 e informes previos.
+
+**Outcome:** Todos los criterios de aceptación cumplen en esta corrida. Renombrar **`TESTING-`** → **`CLOSED-`** (no **WIP-**). No se probó debounce en vivo contra Discord.

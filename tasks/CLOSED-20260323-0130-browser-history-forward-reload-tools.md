@@ -563,3 +563,23 @@ cd src-tauri && cargo run --example example_com_history_reload_smoke
 - **Criterios:** 1, 2 y 4 **cumplidos** por comprobación automática. Criterio 3: el ejemplo **existe, documenta el flujo y compila**; la **corrida E2E completa del smoke** **no se completó** en este entorno (sesión CDP inestable / conexión cerrada durante el bootstrap sin pestañas).
 - **Outcome:** **`WIP-…`** — Chromium/Chrome con depuración remota estable y al menos una pestaña usable (o corregir bootstrap/reconexión CDP) y repetir `example_com_history_reload_smoke` hasta la línea `DONE:`.
 
+### Test report — trigésima pasada (2026-03-28)
+
+- **Fecha:** 2026-03-28, hora local del entorno de ejecución (no fijada a UTC).
+- **Preflight:** El operador pidió `tasks/UNTESTED-20260323-0130-browser-history-forward-reload-tools.md`; ese path **no existe** en el working tree (la tarea estaba como `WIP-…` antes de `WIP-…` → `TESTING-…` en esta corrida). Según `003-tester/TESTER.md`, se usó el **mismo id de tarea**. **No se tocó ningún otro archivo `UNTESTED-*`.**
+
+| Paso | Comando | Resultado |
+|------|---------|-----------|
+| Check | `cd src-tauri && cargo check` | **pass** |
+| Lib tests | `cd src-tauri && cargo test --lib` | **pass** — 854 passed, 0 failed |
+| Dispatch | `rg -n "handle_browser_go_back\|handle_browser_go_forward\|handle_browser_reload" src/commands/browser_tool_dispatch.rs` (cwd `src-tauri`) | **pass** — líneas 534, 555, 577 |
+| Agent API | `rg -n "pub fn go_back\|pub fn go_forward\|pub fn reload_current_tab" src/browser_agent/mod.rs` | **pass** — líneas 7232, 7290, 7348 |
+| Wiring | `rg` `BROWSER_GO_BACK` / `BROWSER_GO_FORWARD` / `BROWSER_RELOAD` en `tool_parsing.rs`, `tool_registry.rs` | **pass** |
+| tool_loop | `rg` mismos nombres en `tool_loop.rs` | **pass** (líneas 46–48, 593–595, 1090–1104) |
+| Ejemplo | `cd src-tauri && cargo build --example example_com_history_reload_smoke` | **pass** |
+| Integración (opcional) | `perl -e 'alarm 25; exec @ARGV' cargo run --example example_com_history_reload_smoke` (cwd `src-tauri`) | **inconcluso (timeout)** — Chrome visible no abrió CDP en 9222 a tiempo; fallback headless; navegación a example.com avanzó pero **SIGALRM** a ~25 s antes de terminar el flujo |
+| Integración (opcional) | `perl -e 'alarm 120; exec @ARGV' cargo run --example example_com_history_reload_smoke` (cwd `src-tauri`) | **pass** — Steps 1–5 (`BROWSER_NAVIGATE` ×2, `BROWSER_GO_BACK`, `BROWSER_GO_FORWARD`, `BROWSER_RELOAD`); salida **`DONE: history + reload smoke completed`** |
+
+- **Criterios:** 1, 2, 3 y 4 **cumplidos**: comprobación automática + **smoke E2E completo** con margen de ~120 s de reloj (el primer intento corto no alcanzó el final por límite de tiempo).
+- **Outcome:** **`CLOSED-…`** — renombrar `TESTING-…` → `CLOSED-…`.
+

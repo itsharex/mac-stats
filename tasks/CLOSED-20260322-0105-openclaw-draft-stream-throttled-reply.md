@@ -874,3 +874,35 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
 | Optional manual (live Discord with tools) | **Not run** |
 
 **Conclusion:** **CLOSED** — automated acceptance criteria and **Verification** block pass; filename restored to `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.
+
+### Test report — TESTER.md pass (2026-03-28, segunda ejecución en esta sesión)
+
+**Date:** 2026-03-28, hora local del shell del workspace mac-stats (TZ no exportada en la sesión).
+
+**Workflow**
+
+- **UNTESTED → TESTING:** el path `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` **no existe** en el repo; no se eligió ningún otro `UNTESTED-*`. La tarea estaba como `CLOSED-…`; se renombró a `TESTING-…` para esta pasada según `003-tester/TESTER.md`, se ejecutó la verificación y, al pasar todo, se restaura `CLOSED-…`.
+
+**Comandos ejecutados**
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test discord_draft_stream::
+rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs
+rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs
+```
+
+**Resultados**
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| `cargo check` (src-tauri) | **Pass** (`Finished dev profile` en ~0.21s) |
+| `cargo test discord_draft_stream::` | **Pass** — 2 tests (`clamp_under_limit_unchanged`, `clamp_truncates_with_ellipsis`); 852 filtrados en el binario de tests principal |
+| `spawn_discord_draft_editor` en `discord/mod.rs` | **Pass** (L2172) |
+| `DiscordDraftHandle` en `tool_loop.rs` | **Pass** (L14, L152) |
+| `DiscordDraftHandle` en `turn_lifecycle.rs` | **Pass** (L10, L95) |
+| `DiscordDraftHandle` en `ollama.rs` | **Pass** (L109) |
+| Criterio: `discord_draft_throttle_ms` / `MAC_STATS_DISCORD_DRAFT_THROTTLE_MS` en `config/mod.rs` (L454+) | **Pass** (revisión rápida en código) |
+| Manual opcional (Discord en vivo con herramientas) | **No ejecutado** |
+
+**Conclusión:** **CLOSED** — criterios de aceptación y bloque **Verification** cumplidos; el nombre del archivo vuelve a `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.
