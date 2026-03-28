@@ -841,3 +841,36 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
 | Optional manual (live Discord with tools) | **Not run** |
 
 **Conclusion:** **CLOSED** — acceptance criteria and **Verification** block satisfied; filename restored to `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.
+
+### Test report — TESTER.md pass (2026-03-28, Cursor; operator path: UNTESTED-20260322-0105)
+
+**Date:** 2026-03-28, local time in the mac-stats workspace shell (TZ not exported).
+
+**Workflow**
+
+- **UNTESTED → TESTING:** `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` **does not exist** in the repo; no other `UNTESTED-*` file was used. The task was `CLOSED-…`; renamed to `TESTING-…` for this pass per `003-tester/TESTER.md`, then renamed back to `CLOSED-…` after verification.
+
+**Commands run**
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test discord_draft_stream::
+rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs
+rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs
+```
+
+**Results**
+
+| Check | Result |
+|-------|--------|
+| `cargo check` (src-tauri) | **Pass** (`Finished dev profile` in 0.20s) |
+| `cargo test discord_draft_stream::` | **Pass** — 2 tests (`clamp_under_limit_unchanged`, `clamp_truncates_with_ellipsis`); 852 filtered in main lib test binary |
+| `spawn_discord_draft_editor` in `discord/mod.rs` | **Pass** (L2172) |
+| `DiscordDraftHandle` in `tool_loop.rs` | **Pass** (L14, L152) |
+| `DiscordDraftHandle` in `turn_lifecycle.rs` | **Pass** (L10, L95) |
+| `DiscordDraftHandle` in `ollama.rs` | **Pass** (L109) |
+| Acceptance: `src-tauri/src/commands/discord_draft_stream.rs` | **Pass** (present) |
+| Acceptance: `discord_draft_throttle_ms()` / `MAC_STATS_DISCORD_DRAFT_THROTTLE_MS`, clamp `200..=60_000` (`config/mod.rs` L456–477) | **Pass** (code review) |
+| Optional manual (live Discord with tools) | **Not run** |
+
+**Conclusion:** **CLOSED** — automated acceptance criteria and **Verification** block pass; filename restored to `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.

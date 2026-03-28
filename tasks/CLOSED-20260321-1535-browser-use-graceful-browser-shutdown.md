@@ -434,3 +434,17 @@ rg -n "pub fn close_browser_session" src-tauri/src/browser_agent/mod.rs
 - `rg -n "pub fn close_browser_session" src-tauri/src/browser_agent/mod.rs` — **pass** (line 4266)
 
 **Outcome:** All acceptance criteria satisfied. **Final filename:** `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`.
+
+### Tester run — 2026-03-28 (local workspace; `003-tester/TESTER.md`)
+
+**Date:** 2026-03-28, hora local del workspace (no UTC).
+
+**Note:** El operador pidió probar solo `tasks/UNTESTED-20260321-1535-browser-use-graceful-browser-shutdown.md`; ese archivo no existe en el repo. La misma tarea estaba como `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`, renombrada a `TESTING-20260321-1535-browser-use-graceful-browser-shutdown.md` según `003-tester/TESTER.md`. No se usó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 passed, 0 failed, 0 ignored en tests de librería `mac_stats`; ~1.16s; 1 doc-test ignored)
+- `rg` en `lib.rs` y `browser_agent/mod.rs` (criterio 3 / spot-check) — **pass** (`ctrlc::set_handler` y `RunEvent::Exit` llaman `close_browser_session`; `pub fn close_browser_session` en línea ~4266)
+
+**Outcome:** Todos los criterios de aceptación satisfechos. **Nombre final:** `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`.
