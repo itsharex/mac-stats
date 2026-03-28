@@ -137,3 +137,15 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
   - `rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs` — matches in all three files (import/struct/parameter).
 - **Acceptance (automated):** Criterios de la tarea cumplidos: `discord_draft_stream.rs`, cableado, tests `clamp_discord_content`; throttle en `config/mod.rs` (`discord_draft_throttle_ms` / `MAC_STATS_DISCORD_DRAFT_THROTTLE_MS`, clamp 200–60_000 ms).
 - **Result:** **Pass** — criterios automáticos OK; pasos opcionales Discord en vivo no ejecutados. Archivo renombrado a `CLOSED-*`.
+
+### Tester run (2026-03-28 UTC, TESTER.md — solo `UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md`)
+
+- **Date:** 2026-03-28 UTC (entorno del operador: sábado 28 mar 2026).
+- **Note:** `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` no existía; la tarea estaba como `CLOSED-*`. Paso 2 de `003-tester/TESTER.md`: `CLOSED` → `TESTING`, verificación, informe, `TESTING` → `CLOSED`. No se usó ningún otro `UNTESTED-*`.
+- **Commands run:**
+  - `cd src-tauri && cargo check` — pass.
+  - `cd src-tauri && cargo test discord_draft_stream::` — pass (2 tests: `clamp_under_limit_unchanged`, `clamp_truncates_with_ellipsis`).
+  - `rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs` — match at line 2172.
+  - `rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs` — matches in all three files.
+- **Acceptance (automated):** `discord_draft_stream.rs` presente; `spawn_discord_draft_editor` y `DiscordDraftHandle` cableados según criterios; `Config::discord_draft_throttle_ms()` en `config/mod.rs` con `discord_draft_throttle_ms` / `MAC_STATS_DISCORD_DRAFT_THROTTLE_MS` y clamp **200..=60_000** ms.
+- **Result:** **Pass** — criterios automáticos cumplidos; pasos opcionales Discord en vivo / override de throttle no ejecutados en esta pasada.

@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Tasks / docs** — Further expanded **CLOSED** task tester / closing-reviewer appendices (~**+169** lines across CDP health ping, in-page search/CSS query, hung-turn event gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup, browser action timeout diagnostics, Discord reply-to-bot implicit mention).
-- **OpenClaw reviewer** — Independent re-run **`2026-03-28T18:01:58Z`**; **OpenClaw** **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
+- **Tasks / docs** — Continued expansion of **CLOSED** task tester / closing-reviewer appendices (~**+340** lines total on **2026-03-28** in this **Unreleased** churn: CDP health ping, in-page search/CSS query, hung-turn event gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup **verify #9**, browser action timeout diagnostics, Discord reply-to-bot implicit mention; test reports with **`cargo check` / `cargo test`** and **`rg`** spot-checks).
+- **OpenClaw reviewer** — Independent re-runs **`2026-03-28T18:14:50Z`** (latest) and **`2026-03-28T18:01:58Z`**; **OpenClaw** **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 
 ## [0.1.70] - 2026-03-28
 
