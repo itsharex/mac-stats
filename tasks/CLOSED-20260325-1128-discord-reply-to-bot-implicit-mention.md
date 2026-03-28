@@ -305,3 +305,29 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Manual Discord E2E** (task steps 1–8): **not executed** in this environment.
 
 **Overall:** **PASS** (numbered criteria + preflight). **Outcome rename:** **CLOSED-** retained (already correct). Per `003-tester/TESTER.md`, a failed or blocked run would use **WIP-** prefix, not `TESTED-`.
+
+---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (local run aligned with user_info “today”; timezone for the timestamp: **UTC**).
+
+**Rename `UNTESTED→TESTING`:** **No aplicado** — en `tasks/` no existe `UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. La única copia con este slug es `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. No se usó ningún otro `UNTESTED-*` (TESTER.md).
+
+**Comandos ejecutados**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (perfil dev, 0 errores).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → líneas 1852, 1956, 2016, 2796–2797, 2823.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → líneas 1867, 1888, 1901, 1915; `debug!` con `target: "mac_stats::discord"` (verificado en fuente).
+
+**Criterios de aceptación**
+
+1. **PASS** — `discord_mentions_bot_effective`: `referenced_message`, caché, `get_message`, log de fallo.
+2. **PASS** — MentionOnly usa `!mentions_bot_effective` (≈2823).
+3. **PASS** — Mensajes de depuración con las cadenas indicadas y target `mac_stats::discord` (el texto en código incluye el prefijo `Discord:` antes de `MentionOnly activation…`).
+4. **PASS** — `cargo check` OK.
+
+**E2E manual Discord** (pasos 1–8 de la tarea: canal `mention_only`, reply sin @, mensaje plano, `rg` en `~/.mac-stats/debug.log`): **no ejecutado** en este entorno.
+
+**Resultado global:** **PASS** (criterios numerados + preflight). **Renombrado final:** se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (criterio del operador: `TESTED-` solo ante fallo de verificación automatizada/revisión de código).
