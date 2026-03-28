@@ -744,3 +744,27 @@ cd src-tauri && cargo test prompts:: --no-fail-fast
 | Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-ad89fe1b68f1007b`); incluye `ori_briefing_and_prefetch_follow_memory_before_metrics`; 866 filtered out |
 
 - **Outcome:** Criterios de aceptación cumplidos → **CLOSED** (`TESTING-*` → `CLOSED-*`).
+
+## Test report
+
+- **Date:** 2026-03-28, hora local del entorno del agente (macOS; no UTC fijada).
+- **Note:** El operador nombró `tasks/UNTESTED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md`; ese path **no existía** en el árbol (la tarea estaba como `CLOSED-*`). Flujo `003-tester/TESTER.md` solo sobre este basename: `CLOSED-*` → `TESTING-*`, verificación en esta corrida, este apéndice, luego `TESTING-*` → `CLOSED-*` al pasar (en fallo: `TESTED-*` según instrucción del operador). No se abrió ningún otro archivo `UNTESTED-*`.
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cd src-tauri && cargo check` | **pass** — `Finished dev profile` en 0.20s |
+| Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-ad89fe1b68f1007b`); incluye `ori_briefing_and_prefetch_follow_memory_before_metrics`; 866 filtered out |
+
+- **Outcome:** Criterios de aceptación cumplidos → **CLOSED** (`TESTING-*` → `CLOSED-*`).
+
+## Test report
+
+- **Date:** 2026-03-28, hora local del entorno del agente (macOS; no UTC fijada).
+- **Note:** Petición en este hilo: probar solo `tasks/UNTESTED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md` según `003-tester/TESTER.md`. El prefijo `UNTESTED-*` **no existía**; se renombró `CLOSED-*` → `TESTING-*`, se ejecutaron los comandos de verificación en el shell del agente y se añade este informe. No se abrió ningún otro archivo `UNTESTED-*`.
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cd src-tauri && cargo check` | **pass** — `Finished dev profile` en 0.20s |
+| Prompt tests | `cd src-tauri && cargo test prompts:: --no-fail-fast` | **pass** — 5 passed, 0 failed en `lib` (`mac_stats-ad89fe1b68f1007b`); incluye `ori_briefing_and_prefetch_follow_memory_before_metrics`; 866 filtered out |
+
+- **Outcome:** Criterios de aceptación cumplidos → **CLOSED** (`TESTING-*` → `CLOSED-*`).

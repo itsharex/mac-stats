@@ -7,7 +7,9 @@ Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (siblin
 **OpenClaw root:** `../openclaw`  
 **OpenClaw `HEAD`:** `55dc6a8bb28dd9b6f4c4c1a8e8497fa48f7cc254` (short: `55dc6a8bb28d`)  
 **References:** `AGENTS.md` (repo guidelines), `package.json` (scripts), `vitest.config.ts` (coverage; `vitest.unit.config.ts` extends it for `pnpm test:coverage`).  
-**Last check:** `2026-03-28T19:50:31Z`
+**Last check:** `2026-03-28T20:36:06Z`
+
+**Independent re-run:** `2026-03-28T20:36:06Z` — `HEAD` `55dc6a8bb28d` (full `55dc6a8bb28dd9b6f4c4c1a8e8497fa48f7cc254`, unchanged); `agents/.loop-cache/latest/README.md` **absent** in mac-stats (read attempted) and under `~/projects` (no `.loop-cache/latest/README.md`); no referenced digest files to follow. Verification used §7 scope only. Re-checked layout (`src/channel-web.ts`, no `provider-web.ts`, `src/cli`, `src/commands`, `src/infra`, `src/media`, `src/channels/`, `src/routing/`, `src/plugins/`, root `extensions/`, `docs/channels/`, no bogus `src/telegram`), `pnpm check` chain (`format:check` → `pnpm tsgo`, no `"tsgo"` script key; `@typescript/native-preview` `7.0.0-dev.20260322.1`), `pnpm format` / `format:fix` / `format:check`, Vitest thresholds 70/70/55/70 and `vitest.unit.config.ts` extends base; §7 table (**Aligned**). **browser-use** / extra mac-stats paths not read (no digest index). No new FEAT files (nothing actionable).
 
 **Independent re-run:** `2026-03-28T19:50:31Z` — `HEAD` `55dc6a8bb28d` (full `55dc6a8bb28dd9b6f4c4c1a8e8497fa48f7cc254`, unchanged); `agents/.loop-cache/latest/README.md` **absent** in mac-stats (read attempted) and in `../openclaw`; no referenced digest files to follow. Verification used §7 scope only. Re-checked layout (`src/channel-web.ts`, no `provider-web.ts`, `src/cli`, `src/commands`, `src/infra`, `src/media`, `src/channels/`, `src/routing/`, `src/plugins/`, root `extensions/`, `docs/channels/`, no bogus `src/telegram`), `pnpm check` chain (`format:check` → `pnpm tsgo`, no `"tsgo"` script key; `@typescript/native-preview` `7.0.0-dev.20260322.1`), `pnpm format` / `format:fix` / `format:check`, Vitest thresholds 70/70/55/70 and `vitest.unit.config.ts` extends base; §7 table (**Aligned**). **browser-use** / extra mac-stats paths not read (no digest index). No new FEAT files (nothing actionable).
 
@@ -488,7 +490,7 @@ Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (siblin
 
 Earlier the same day, `AGENTS.md` had stale paths (`provider-web.ts`, old channel dirs), wrong format wording, and wrong branch threshold. Those were corrected upstream; the table above confirms the current tree matches the doc.
 
-**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of 2026-03-28 (`55dc6a8bb28d`; last check `2026-03-28T19:50:31Z`).
+**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of 2026-03-28 (`55dc6a8bb28d`; last check `2026-03-28T20:36:06Z`).
 
 ---
 
