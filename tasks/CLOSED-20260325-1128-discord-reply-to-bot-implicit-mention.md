@@ -739,3 +739,26 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** → after this report, file **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`** → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Per operator instruction, **`TESTED-`** would apply on automated verification failure (N/A).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (local run: mac-stats workspace; `003-tester/TESTER.md`).
+
+**Operator path:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` — **no existe** en este repo; la tarea con el mismo slug estaba como `CLOSED-*` y, para el flujo de estado sin tocar otro `UNTESTED-*`, se aplicó **`CLOSED-…` → `TESTING-…`** al inicio de esta corrida.
+
+**Rename `UNTESTED→TESTING`:** No aplicable (sin archivo `UNTESTED-*`); equivalente de estado: **`CLOSED-…` → `TESTING-…`** antes de la verificación.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (Finished `dev` profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (líneas ~1865–1917 en `mod.rs`).
+
+**Acceptance criteria 1–4:** **PASS** (preflight + revisión de código).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno.
+
+**Overall:** **PASS**. **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (fallo de verificación automatizada sería **`TESTED-`** según el operador; `003-tester/TESTER.md` sugiere **`WIP-`** — no aplica).
+
+---

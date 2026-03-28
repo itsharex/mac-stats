@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #27**; **`docs/022_feature_review_plan.md`** — checklist **verify #27** (**2026-03-28T22:23:54Z** UTC).
 - **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — further **`003-tester`** **test report** appendices (**~2026-03-28T22:05Z** UTC): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup task body, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **`cargo test --no-fail-fast`**, **`rg`** where noted).
 - **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #26**; **`docs/022_feature_review_plan.md`** — checklist **verify #26** (**2026-03-28T21:58:19Z** UTC).
 - **OpenClaw reviewer** — Independent re-run **`2026-03-28T22:15:00Z`**; digest incremental range **2 commits** (`216796f1e3e2..cb00d44ae485`: Matrix crypto-node ESM fix + changelog backfill); local **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)

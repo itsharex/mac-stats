@@ -306,3 +306,14 @@ rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_ti
   - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src-tauri/src` — matches in `ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs`
 - **Acceptance criteria:** All satisfied (`TurnOutputGate` / `gate_allows_send`; `finalize_turn_timeout` with `**Turn timed out**` and budget seconds; `turn wall-clock timeout` / `closing output gate and running cleanup` in `turn_lifecycle.rs`; `closing output gate after turn wall-clock timeout` in `ollama.rs`; `cargo check` / `cargo test` green).
 - **Outcome:** **PASS** — final filename after this run: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.
+
+### Re-verify — 2026-03-28 UTC (`003-tester/TESTER.md`, operator path `UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` only)
+
+- **Rename UNTESTED → TESTING:** `tasks/UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` was **not present**; no other `UNTESTED-*` file was used. **TESTING phase:** renamed **`CLOSED-…` → `TESTING-…`** at the start of this run; after **PASS**, restored **`TESTING-…` → `CLOSED-…`**. (`003-tester/TESTER.md`: fail/block → `WIP-…`; el mensaje del operador mencionaba `TESTED-…` en fallo — el procedimiento del repo usa `WIP-…`.)
+- **Commands run:**
+  - `cd src-tauri && cargo check` — pass
+  - `cd src-tauri && cargo test` — pass (library crate: **871** passed, 0 failed)
+  - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src/` — no matches (el bloque de la tarea cita `src/`; el Rust está en `src-tauri/src/`)
+  - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src-tauri/src` — coincidencias en `ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs`
+- **Acceptance criteria:** Todas satisfechas (`TurnOutputGate` / `gate_allows_send`; `finalize_turn_timeout` con `**Turn timed out**` y presupuesto en segundos; cadenas de log en `turn_lifecycle.rs` y `ollama.rs`; `cargo check` / `cargo test` en verde).
+- **Outcome:** **PASS** — nombre final tras este run: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.

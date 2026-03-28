@@ -1085,3 +1085,39 @@ rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_p
 
 - Manual / smoke steps §4.3 **not** run (optional per task).
 - After this report: file renamed **`TESTING-` → `CLOSED-`** (pass).
+
+---
+
+## Test report
+
+- **Date:** 2026-03-28 22:22 UTC (tester run; `date -u` on host)
+- **Preflight:** `tasks/UNTESTED-20260322-2020-openclaw-browser-action-timeout-diagnostics.md` was **not present** in the workspace; the task file was `CLOSED-…` and was renamed **`CLOSED-` → `TESTING-`** at the start of this run (operational equivalent to TESTER.md step UNTESTED→TESTING). **No other** `UNTESTED-*` file was used.
+- **Outcome:** Pass (acceptance criteria §3.1–§3.3)
+
+### Commands run
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test
+```
+
+Static spot-check (§4), from repo root:
+
+```bash
+rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_proxy_hint|is_cdp_navigation_timeout_error|run_browser_doctor_stdio" \
+  src-tauri/src/browser_agent/mod.rs \
+  src-tauri/src/commands/browser_tool_dispatch.rs \
+  src-tauri/src/commands/browser_helpers.rs \
+  src-tauri/src/browser_doctor.rs
+```
+
+### Results
+
+- `cargo check`: exit 0.
+- `cargo test`: exit 0 — crate `mac_stats` (lib): **871** passed, **0** failed; `commands::browser_helpers::tests::cdp_navigation_timeout_detection_matches_tool_errors` **ok**.
+- `rg` spot-check: exit 0; symbols present in all four listed files.
+
+### Notes
+
+- Manual / smoke steps §4.3 **not** run (optional per task).
+- After this report: file renamed **`TESTING-` → `CLOSED-`** (pass).
