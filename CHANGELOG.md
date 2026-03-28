@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Tasks / docs** — Further expanded **CLOSED** task tester / closing-reviewer appendices (~**+170** lines: CDP health ping, in-page search/CSS query, hung-turn event gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup **verify #4**, browser action timeout diagnostics, Discord reply-to-bot implicit mention); **`docs/022_feature_review_plan.md`** — warmup checklist **verify #4**.
+- **Tasks / docs** — Additional **CLOSED** task closing-reviewer appendices (~**+167** lines across the same browser / OpenClaw / Discord **CLOSED** set); **`docs/022_feature_review_plan.md`** — Ollama warmup checklist **verify #6** (**2026-03-28T17:43:14Z**).
 - **Tasks** — **CDP health check ping** tracking file is **`tasks/CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`** again (drops **`tasks/TESTED-20260321-1345-browser-use-cdp-health-check-ping.md`**).
 - **OpenClaw reviewer** — Independent re-run **`2026-03-28T17:27:27Z`**; **OpenClaw** **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 
