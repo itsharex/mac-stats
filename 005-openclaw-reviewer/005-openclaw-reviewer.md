@@ -7,7 +7,9 @@ Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (siblin
 **OpenClaw root:** `../openclaw`  
 **OpenClaw `HEAD`:** `55dc6a8bb28dd9b6f4c4c1a8e8497fa48f7cc254` (short: `55dc6a8bb28d`)  
 **References:** `AGENTS.md` (repo guidelines), `package.json` (scripts), `vitest.config.ts` (coverage; `vitest.unit.config.ts` extends it for `pnpm test:coverage`).  
-**Last check:** `2026-03-28T21:11:37Z`
+**Last check:** `2026-03-28T21:25:13Z`
+
+**Independent re-run:** `2026-03-28T21:25:13Z` — Pre-built digest: read `../mac-stats-reviewer/agents/.loop-cache/latest/README.md` and only its table files (`signals.txt`, `openclaw-git-summary.txt`, `browser-use-git-summary.txt`, `log-errors-digest.txt`, `gh-mac-stats-issues.txt`); mac-stats tree still has **no** `agents/.loop-cache/latest/README.md`. Signals: `NEEDS_OPENCLAW_AGENT=1`, `OPENCLAW_RANGE_COMMITS=1`; digest range `17479ceb439a..703e68a749b7` changes **`src/gateway/*` only** (OpenAI-compatible HTTP `operator.write` scope). Locally `HEAD` remains `55dc6a8bb28d`; `703e68a749b7` is **after** that commit (`git merge-base --is-ancestor HEAD 703e68a` succeeds) — **`git pull` in openclaw** picks up the gateway fix. **browser-use:** digest reports **no** new commits — not read beyond summary. **mac-stats:** log digest empty; GitHub issues list failed (401). §7 re-checked on local `../openclaw` (layout, `pnpm check` → `format:check` → `pnpm tsgo` without a `"tsgo"` script key, `@typescript/native-preview` `7.0.0-dev.20260322.1`, Vitest 70/70/55/70, unit config extends base): **Aligned**. No new FEAT files (nothing actionable).
 
 **Independent re-run:** `2026-03-28T21:11:37Z` — `HEAD` `55dc6a8bb28d` (full `55dc6a8bb28dd9b6f4c4c1a8e8497fa48f7cc254`, unchanged); `agents/.loop-cache/latest/README.md` **absent** in mac-stats (`read` attempted); no referenced digest files to follow. Verification used §7 scope only. Re-checked layout (`src/channel-web.ts`, no `provider-web.ts`, `src/cli`, `src/commands`, `src/infra`, `src/media`, `src/channels/`, `src/routing/`, `src/plugins/`, root `extensions/`, `docs/channels/`, no bogus `src/telegram`), `pnpm check` chain (`format:check` → `pnpm tsgo`, no `"tsgo"` script key; `@typescript/native-preview` `7.0.0-dev.20260322.1`), `pnpm format` / `format:fix` / `format:check`, Vitest thresholds 70/70/55/70 and `vitest.unit.config.ts` extends base; §7 table (**Aligned**). **browser-use** / extra mac-stats paths not read (no digest index). No new FEAT files (nothing actionable).
 
@@ -492,7 +494,7 @@ Cross-check **OpenClaw** `AGENTS.md` against the **openclaw** repository (siblin
 
 Earlier the same day, `AGENTS.md` had stale paths (`provider-web.ts`, old channel dirs), wrong format wording, and wrong branch threshold. Those were corrected upstream; the table above confirms the current tree matches the doc.
 
-**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` as of 2026-03-28 (`55dc6a8bb28d`; last check `2026-03-28T21:11:37Z`).
+**Upstream status:** `../openclaw/AGENTS.md` matches `package.json`, `vitest.config.ts`, and `src/` layout as verified on local `HEAD` `55dc6a8bb28d` (last check `2026-03-28T21:25:13Z`). Digest notes additional gateway commits ahead on default branch (`703e68a749b7`); not required for §7 alignment.
 
 ---
 

@@ -1,4 +1,4 @@
-# TESTED — OpenClaw-style keyed async queue per conversation (2026-03-22)
+# CLOSED — OpenClaw-style keyed async queue per conversation (2026-03-22)
 
 ## Goal
 
@@ -1177,3 +1177,21 @@ rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs
 - `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (líneas 1143, 1347, 1934 `run_serial`; 2310 `ollama_queue_key` con `discord:{}`)
 
 **Outcome:** **Fail** — el criterio 2 de la tarea («`cargo test` en `src-tauri/` succeeds») no se cumple por un fallo ajeno directamente a `keyed_queue`, pero bloquea el cierre. Renombrado final del fichero: **TESTING- → TESTED-** tras este informe (según instrucción del operador en caso de fallo). Discord en vivo no probado.
+
+## Test report (corrida — agente Cursor, 2026-03-28, `003-tester/TESTER.md`, solo tarea `20260322-0110`)
+
+**Date:** 2026-03-28, hora local del sistema donde se ejecutó `cargo` (no normalizada a UTC).
+
+**Preflight / nombres:** El operador indicó únicamente `tasks/UNTESTED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md` (sin otro `UNTESTED-*`). Ese path **no existía**; el fichero en disco era `tasks/TESTED-20260322-0110-…` (estado tras un fallo previo documentado). No se eligió ningún otro `UNTESTED-*`. Se renombró **TESTED → TESTING** (mismo basename) para ejecutar la fase de verificación de `003-tester/TESTER.md`. El H1 del documento quedó en **TESTING** durante la corrida.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test keyed_queue` — **pass** (`same_key_runs_sequentially`, `different_keys_may_overlap`; 2 passed, 869 filtered en el binario de tests de `lib.rs`)
+- `cd src-tauri && cargo test` — **pass** (871 passed, 0 failed en tests de la lib `mac_stats`; 1 doc-test ignored en doc-tests del crate)
+
+**Static spot-check**
+
+- `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (líneas 1143, 1347, 1934 `run_serial`; 2310 `ollama_queue_key` con `discord:{}`)
+
+**Outcome:** **Pass** — todos los criterios de aceptación cumplidos en esta corrida (incluido `cargo test` completo; el fallo previo de `outbound_attachment_path_allowlist` ya no se reproduce). Renombrado final del fichero: **TESTING- → CLOSED-** tras este informe. Discord en vivo no probado.

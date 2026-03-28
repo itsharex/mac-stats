@@ -655,3 +655,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** → archivo **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada, el operador pidió prefijo **`TESTED-`** (no aplica).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; `003-tester/TESTER.md`; operator path `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` only).
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` was **not present** in this workspace. Per `003-tester/TESTER.md` (only this slug; no other `UNTESTED-*`), the existing file was renamed **`CLOSED-…` → `TESTING-…`** for the active verification pass. No other `UNTESTED-*` task was touched.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`; 1 passed).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823** (definition, router, MentionOnly gate).
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; adjacent `debug!` uses `target: "mac_stats::discord"` at **1866, 1887, 1900, 1914**.
+
+**Acceptance criteria (1–4):** **PASS** (code paths + task preflight).
+
+**Manual Discord E2E** (task steps 1–8: live `mention_only`, reply without `@`, plain message, `rg` on `~/.mac-stats/debug.log`): **not executed** in this environment.
+
+**Outcome rename:** **PASS** — rename **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure, operator convention is **`TESTED-`** (not used here). `003-tester/TESTER.md` specifies **`WIP-`** for blocked/failed runs.
+
+---
