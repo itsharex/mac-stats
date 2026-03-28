@@ -980,3 +980,15 @@ rg -n "fn search_page_text|pub fn browser_query" src-tauri/src/browser_agent/mod
 
 **Resultado:** **PASS** — criterios de aceptación 1–3 cumplidos. Tras este informe: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`** (en fallo habría sido `TESTED-…` según instrucción del operador). CDP en vivo extremo a extremo no ejecutado en esta pasada.
 
+### Test report (2026-03-28, hora local del entorno; `003-tester/TESTER.md`, ejecución agente)
+
+**Preflight:** El path `tasks/UNTESTED-20260321-1635-browser-use-in-page-search-and-css-query.md` no existía; solo esta tarea (mismo id): `CLOSED-…` → `TESTING-…` al inicio de esta pasada (equivalente al paso 2 de `TESTER.md`). No se usó ningún otro `UNTESTED-*`.
+
+**Comandos ejecutados**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (librería `mac_stats`: 871 passed, 0 failed; `Doc-tests mac_stats`: 1 ignored)
+- Spot-check `rg` (opcional del cuerpo de la tarea): handlers/parsers en `src-tauri/src/commands/browser_tool_dispatch.rs`; `search_page_text` / `browser_query` en `src-tauri/src/browser_agent/mod.rs` — **pass**
+
+**Resultado:** **PASS** — criterios de aceptación 1–3 cumplidos. Tras este informe: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`** (en fallo habría sido `TESTED-…` según el operador; `TESTER.md` usa `WIP-` para bloqueos). CDP en vivo extremo a extremo no ejecutado en esta pasada.
+

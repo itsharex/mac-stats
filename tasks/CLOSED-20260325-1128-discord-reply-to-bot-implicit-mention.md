@@ -592,3 +592,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** — keep **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Operator rule: **`TESTED-`** only on verification failure (not applicable).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; `003-tester/TESTER.md`; operador: solo `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`).
+
+**Rename `UNTESTED→TESTING`:** El path `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no existe** en este workspace. Para respetar el flujo de estado sin tocar otro `UNTESTED-*`, se renombró **`CLOSED-…` → `TESTING-…`**, se ejecutó la verificación y, al pasar, **`TESTING-…` → `CLOSED-…`** (esta corrida).
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823** (definición, router, puerta MentionOnly).
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (verificado en fuente, líneas 1865–1917).
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight del cuerpo de la tarea).
+
+**Manual Discord E2E** (pasos 1–8: canal `mention_only`, reply sin @, mensaje plano, `rg` en `~/.mac-stats/debug.log`): **no ejecutado** en este entorno (sin Discord en vivo).
+
+**Outcome rename:** **PASS** — archivo final **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Convención del operador: **`TESTED-`** solo ante fallo de verificación automatizada; no aplica. `003-tester/TESTER.md` sugiere **`WIP-`** ante bloqueo/fallo; no aplica.
+
+---
