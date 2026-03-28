@@ -210,3 +210,21 @@ cd src-tauri && cargo run --example example_com_history_reload_smoke
 
 - **Criterios:** 1, 2 y 4 **cumplidos** por comprobación automática. Criterio 3: el ejemplo **existe, documenta el flujo y compila**; la **corrida E2E completa del smoke** **no se completó** en este entorno (bloqueo en bootstrap CDP sin pestañas).
 - **Outcome:** **`WIP-…`** — usar una instancia Chromium/Chrome con depuración remota receptiva (o corregir el bootstrap bajo el perfil actual) y volver a ejecutar `example_com_history_reload_smoke` hasta ver la línea `DONE:`.
+
+### Test report — undécima pasada (2026-03-28)
+
+- **Fecha:** 2026-03-28, hora local del entorno de ejecución (no fijada a UTC).
+- **Preflight:** El operador pidió `tasks/UNTESTED-20260323-0130-browser-history-forward-reload-tools.md`; ese path **no existe** en el working tree (la tarea estaba como `WIP-…`). Siguiendo `003-tester/TESTER.md` sobre el **mismo id de tarea**: `WIP-…` → `TESTING-…` → verificación → este informe → `WIP-…` / `CLOSED-…`. **No se usó ningún otro archivo `UNTESTED-*`.**
+
+| Paso | Comando | Resultado |
+|------|---------|-----------|
+| Check | `cd src-tauri && cargo check` | **pass** |
+| Lib tests | `cd src-tauri && cargo test --lib` | **pass** — 854 passed, 0 failed |
+| Dispatch | `rg -n "handle_browser_go_back\|handle_browser_go_forward\|handle_browser_reload" src/commands/browser_tool_dispatch.rs` (cwd `src-tauri`) | **pass** — líneas 534, 555, 577 |
+| Agent API | `rg -n "pub fn go_back\|pub fn go_forward\|pub fn reload_current_tab" src/browser_agent/mod.rs` | **pass** — líneas 7232, 7290, 7348 |
+| Wiring | `rg -n "BROWSER_GO_BACK\|BROWSER_GO_FORWARD\|BROWSER_RELOAD" src/commands/tool_parsing.rs src/commands/tool_registry.rs` | **pass** |
+| Ejemplo | `cd src-tauri && cargo build --example example_com_history_reload_smoke` | **pass** |
+| Integración (opcional) | `perl -e 'alarm 35; exec @ARGV' sh -c 'cd src-tauri && cargo run --example example_com_history_reload_smoke'` | **fail (entorno)** — CDP en `127.0.0.1:9222`; Step 1 `BROWSER_NAVIGATE`; bootstrap `about:blank`; a los **25 s** `empty-browser tab bootstrap timed out after 25s (CreateTarget or target attach stalled)`; `navigate failed: …`; no `DONE: history + reload smoke completed` |
+
+- **Criterios:** 1, 2 y 4 **cumplidos** por comprobación automática. Criterio 3: el ejemplo **existe, documenta el flujo y compila**; la **corrida E2E completa del smoke** **no se completó** en este entorno (bootstrap CDP sin pestañas / `CreateTarget` o attach bloqueado).
+- **Outcome:** **`WIP-…`** — Chromium/Chrome con depuración remota receptiva en :9222 (o arreglar bootstrap) y repetir hasta la línea `DONE:`.
