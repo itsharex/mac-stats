@@ -192,3 +192,19 @@ rg -n "pub fn close_browser_session" src-tauri/src/browser_agent/mod.rs
 - `rg -n "pub fn close_browser_session" src-tauri/src/browser_agent/mod.rs` — **pass** (line 4266)
 
 **Outcome:** All acceptance criteria satisfied. **Final filename:** `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`.
+
+### Tester run — 2026-03-28 (Cursor agent; local; not UTC)
+
+**Note:** Misma tarea que `UNTESTED-20260321-1535-browser-use-graceful-browser-shutdown.md` (path inexistente). Archivo en disco: `CLOSED-…` → `TESTING-…` según `003-tester/TESTER.md`; no se tocó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 passed, 0 failed, 0 ignored en librería `mac_stats`; 1 doc-test ignored)
+
+**Static spot-check**
+
+- `lib.rs`: `ctrlc::set_handler` y `RunEvent::Exit` llaman a `close_browser_session` (líneas 236–239, 1681–1686).
+- `browser_agent/mod.rs`: `pub fn close_browser_session` en línea 4266.
+
+**Outcome:** Todos los criterios de aceptación satisfechos. **Nombre final:** `CLOSED-20260321-1535-browser-use-graceful-browser-shutdown.md`.
