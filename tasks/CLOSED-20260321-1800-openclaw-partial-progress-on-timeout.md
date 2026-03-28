@@ -271,3 +271,20 @@ rg -n "format_user_summary|should_attach_partial_progress|PartialProgressCapture
 - `scheduler/heartbeat.rs`: L136 `PartialProgressCapture::new`; L206 `format_user_summary` en timeout
 
 **Outcome:** Todos los criterios de aceptación cumplidos. Sin prueba end-to-end de timeouts reales Discord/Ollama. Renombrado `TESTING-…` → `CLOSED-…`.
+
+### Test report — 2026-03-28 (fecha del operador: sábado 28 mar 2026; hora local del entorno)
+
+**Preflight:** No existía `tasks/UNTESTED-20260321-1800-openclaw-partial-progress-on-timeout.md` en el árbol. Al inicio de esta corrida el archivo era `CLOSED-20260321-1800-openclaw-partial-progress-on-timeout.md`; se renombró a `TESTING-…` según `003-tester/TESTER.md`. No se tocó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (854 passed en tests de la librería `mac_stats`; 0 failed; 1 doc-test ignored)
+
+**Static spot-check (`rg`)**
+
+- `discord/mod.rs`: L2287 `PartialProgressCapture::new`; L2353–L2354 `should_attach_partial_progress` / `format_user_summary`
+- `scheduler/mod.rs`: L640 `PartialProgressCapture::new`; L654 `format_user_summary` tras timeout
+- `scheduler/heartbeat.rs`: L136 `PartialProgressCapture::new`; L206 `format_user_summary` en timeout
+
+**Outcome:** Criterios de aceptación cumplidos. No se ejecutaron timeouts reales contra Discord/Ollama. Renombrado `TESTING-…` → `CLOSED-…`.
