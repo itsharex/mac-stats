@@ -175,3 +175,29 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Manual Discord E2E** (task steps 1–8: live `mention_only` reply without @, plain message, `debug.log` grep): **not executed** in this environment.
 
 **Outcome rename:** **CLOSED-** retained (preflight + numbered criteria pass). No `TESTED-` rename.
+
+---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; operator path `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`)
+
+**Rename `UNTESTED→TESTING`:** **Omitido** — no existe `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` en este repo. La misma tarea está en `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. No se usó ningún otro `UNTESTED-*` (TESTER.md).
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → líneas 1852, 1956, 2016, 2796–2797, 2823.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → líneas 1867, 1888, 1901, 1915; `debug!` con `target: "mac_stats::discord"` (verificado en fuente).
+
+**Acceptance criteria (código + preflight)**
+
+1. **PASS** — `discord_mentions_bot_effective`: `referenced_message`, caché, `get_message`, log de fallo.
+2. **PASS** — MentionOnly usa `!mentions_bot_effective` en ≈2823.
+3. **PASS** — Cadenas de observabilidad + target `mac_stats::discord`.
+4. **PASS** — `cargo check` OK.
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno.
+
+**Outcome rename:** **CLOSED-** se mantiene (criterios numerados + preflight OK). TESTER.md indica **WIP-** ante bloqueo/fallo; el operador citó **TESTED-** en fallo — aquí no aplica renombrado.
