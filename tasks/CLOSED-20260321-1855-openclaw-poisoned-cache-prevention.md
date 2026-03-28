@@ -431,11 +431,11 @@ rg -n "not replacing cached|not updating cache|empty model list|MCACHE_LOG_TAG" 
 
 **Date:** 2026-03-28 (hora local del workspace; no UTC).
 
-**Preflight:** `tasks/UNTESTED-20260321-1855-openclaw-poisoned-cache-prevention.md` no existía; se aplicó `003-tester/TESTER.md` paso 2 renombrando `CLOSED-20260321-1855-openclaw-poisoned-cache-prevention.md` → `TESTING-20260321-1855-openclaw-poisoned-cache-prevention.md` (equivalente UNTESTED→TESTING para este id). El operador pidió probar solo ese archivo; no se usó ningún otro `UNTESTED-*`.
+**Preflight:** `tasks/UNTESTED-20260321-1855-openclaw-poisoned-cache-prevention.md` no existía al inicio; `003-tester/TESTER.md` paso 2: `CLOSED-20260321-1855-openclaw-poisoned-cache-prevention.md` → `TESTING-20260321-1855-openclaw-poisoned-cache-prevention.md` (equivalente UNTESTED→TESTING para este id). El operador pidió probar solo ese archivo; no se usó ningún otro `UNTESTED-*`.
 
 **Commands run**
 
-- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo check` — **pass** (`Finished dev profile` en ~0.20s)
 - `cd src-tauri && cargo test` — **pass** (librería `mac_stats`: 854 passed, 0 failed, 0 ignored, ~1.16s; `Doc-tests mac_stats`: 1 ignored)
 - `rg -n "not replacing cached|not updating cache|empty model list|MCACHE_LOG_TAG" src-tauri/src/ollama/model_list_cache.rs` — **pass** (`MCACHE_LOG_TAG`, lista vacía «not replacing cached data», error «not updating cache»)
 
