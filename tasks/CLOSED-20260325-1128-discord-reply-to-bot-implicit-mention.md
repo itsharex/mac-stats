@@ -852,3 +852,25 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Overall:** **PASS**. **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure, operator asked for **`TESTED-`** (not applicable). `003-tester/TESTER.md` uses **`WIP-`** for blocked/failed runs.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`; Cursor agent). **Local context:** Sunday 2026-03-29 (user_info).
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **absent** in this workspace. Per operator instruction (only this slug; no other `UNTESTED-*`), applied **`tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`** at the start of this run.
+
+**Commands run**
+
+- `mv …/tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md …/tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **ok** (exit 0).
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (Finished `dev` profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed in lib tests).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823** (router + MentionOnly gate).
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` with `target: "mac_stats::discord"` (confirmed in source ~1865–1917).
+
+**Acceptance criteria (1–4):** **PASS** (implementation review + task preflight).
+
+**Manual Discord E2E** (task steps 1–8): **not executed** (no live Discord / mac-stats traffic in this run).
+
+**Overall:** **PASS**. **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Operator rule: **`TESTED-`** on verification failure only — not applicable.
+
+---
