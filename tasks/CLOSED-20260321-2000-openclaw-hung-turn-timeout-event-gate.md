@@ -148,3 +148,15 @@ rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_ti
 - **Acceptance criteria:** All satisfied.
 - **Outcome naming:** Per `003-tester/TESTER.md`, pass keeps `CLOSED-…`; fail/block would be `WIP-…` (not `TESTED-…`).
 - **Outcome:** **PASS** — filename unchanged: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.
+
+### Re-verify — 2026-03-28 (UTC), `003-tester/TESTER.md` (operator path `UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` only)
+
+- **Rename step:** `tasks/UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` was **not present**. To follow the TESTING-phase rename without touching any other `UNTESTED-*` file, the canonical task file was renamed **`CLOSED-…` → `TESTING-…`** for this run; after verification it is renamed back to **`CLOSED-…`** (pass).
+- **Commands run:**
+  - `cd src-tauri && cargo check` — pass
+  - `cd src-tauri && cargo test` — pass (library crate: **871** passed, 0 failed)
+  - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src-tauri/src` — matches in `ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs`
+  - Task body lists `rg … src/`; top-level `src/` has no Rust matches (implementation under `src-tauri/src/`).
+- **Acceptance criteria:** All satisfied (`TurnOutputGate` / `gate_allows_send` in `tool_loop.rs`; `finalize_turn_timeout` text starts `**Turn timed out**` with budget seconds in `turn_lifecycle.rs`; router string `closing output gate after turn wall-clock timeout` in `ollama.rs`; turn-lifecycle warn strings `turn wall-clock timeout` / `closing output gate and running cleanup`; `cargo check` / `cargo test` green).
+- **Outcome naming (`003-tester/TESTER.md`):** pass → `CLOSED-…`; fail/block → `WIP-…` (not `TESTED-…` per repo procedure).
+- **Outcome:** **PASS** — file restored to `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.

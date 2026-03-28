@@ -357,3 +357,29 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Manual Discord E2E** (task steps 1–8): **not executed** in this environment (no live Discord session).
 
 **Overall:** **PASS** (numbered criteria + preflight). **Outcome rename:** keep **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Per `003-tester/TESTER.md`, a blocked or failed run would use **`WIP-`** prefix (not `TESTED-`).
+
+---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; `003-tester/TESTER.md`; operator path `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`)
+
+**Rename `UNTESTED→TESTING`:** **Skipped** — `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` is not in this workspace. The slug exists only as `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. No other `UNTESTED-*` file was used.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg` `discord_mentions_bot_effective|mentions_bot_effective` in `src-tauri/src/discord/mod.rs` → lines 1852, 1956, 2016, 2796–2797, 2823.
+- `rg` `MentionOnly activation via message reference|could not resolve referenced message for implicit mention` in `src-tauri/src/discord/mod.rs` → lines 1867, 1888, 1901, 1915; `debug!` uses `target: "mac_stats::discord"`.
+
+**Acceptance criteria**
+
+1. **PASS** — `discord_mentions_bot_effective`: literal mention; `referenced_message`; cache; `get_message` fallback; failure log string.
+2. **PASS** — MentionOnly gate uses `!mentions_bot_effective` at line 2823.
+3. **PASS** — Observability strings + `mac_stats::discord` target (log text prefixes with `Discord:`).
+4. **PASS** — `cargo check` succeeds.
+
+**Manual Discord E2E** (task steps 1–8): **not executed** in this environment.
+
+**Outcome:** **PASS** (numbered criteria + preflight). Filename remains **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Per `003-tester/TESTER.md`, failure/block would use **`WIP-`** (operator note: **`TESTED-`** on fail).
