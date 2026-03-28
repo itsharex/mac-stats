@@ -786,3 +786,25 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Overall:** **PASS**. **Renombrado final:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada, el operador pidió **`TESTED-`**; `003-tester/TESTER.md` indica **`WIP-`** para bloqueo/fallo — no aplica.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; `003-tester/TESTER.md`; operador: solo `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`).
+
+**Rename `UNTESTED→TESTING`:** El path `UNTESTED-…` **no existe** en este workspace. Equivalente de flujo (sin tocar otro `UNTESTED-*`): **`CLOSED-…` → `TESTING-…`** antes de la verificación.
+
+**Commands run**
+
+- `mv tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (Finished `dev` profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed en lib tests).
+- `rg` `discord_mentions_bot_effective|mentions_bot_effective` en `src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg` cadenas `MentionOnly activation via message reference` / `could not resolve referenced message for implicit mention` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (líneas 1865–1917 en `mod.rs`).
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight de la tarea).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno.
+
+**Overall:** **PASS**. **Renombrado final:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada habría aplicado **`TESTED-`** (instrucción del operador); `003-tester/TESTER.md` usa **`WIP-`** ante bloqueo/fallo — no aplica.
+
+---
