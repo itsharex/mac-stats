@@ -524,3 +524,29 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Overall:** **PASS** (criterios numerados + preflight). **Renombrado final:** se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. (`003-tester/TESTER.md`: ante fallo/bloqueo sería **`WIP-`**; convención del operador: **`TESTED-`** ante fallo de verificación — no aplica.)
 
 ---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (tester run; `003-tester/TESTER.md`)
+
+**Rename `UNTESTED→TESTING`:** El operador citó `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`, que **no existía** en el workspace; la misma tarea estaba como `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. Para cumplir el flujo de estado, se renombró **`CLOSED-…` → `TESTING-…`** antes de la verificación y, al pasar, **`TESTING-…` → `CLOSED-…`**. No se usó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg` `discord_mentions_bot_effective|mentions_bot_effective` en `src-tauri/src/discord/mod.rs` → líneas **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg` cadenas `MentionOnly activation via message reference` / `could not resolve referenced message for implicit mention` en `src-tauri/src/discord/mod.rs` → líneas **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (confirmado en fuente).
+
+**Acceptance criteria**
+
+1. **PASS** — `discord_mentions_bot_effective`: `referenced_message`, caché, `get_message`, log de fallo.
+2. **PASS** — MentionOnly usa `!mentions_bot_effective` en **2823** (no solo menciones literales).
+3. **PASS** — Cadenas de observabilidad y target `mac_stats::discord`.
+4. **PASS** — `cargo check` OK.
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno (sin sesión Discord en vivo).
+
+**Overall:** **PASS** (criterios numerados + preflight). **Renombrado final:** **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (convención del operador: **`TESTED-`** solo ante fallo de verificación automatizada).
+
+---
