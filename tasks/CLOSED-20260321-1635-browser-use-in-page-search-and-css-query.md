@@ -1117,3 +1117,15 @@ rg -n "fn search_page_text|pub fn browser_query" src-tauri/src/browser_agent/mod
 - `rg` on `browser_tool_dispatch.rs` and `browser_agent/mod.rs` (see task “Optional spot-check”) — **pass** (symbols present)
 
 **Outcome:** **PASS** — acceptance criteria 1–3 satisfied. Rename `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`**. Live CDP end-to-end not run in this pass.
+
+### Test report (2026-03-28, hora local del workspace; `003-tester/TESTER.md`, ejecución actual)
+
+**Preflight:** `tasks/UNTESTED-20260321-1635-browser-use-in-page-search-and-css-query.md` no existía; solo esta tarea (mismo id): `CLOSED-…` → `TESTING-…` al inicio de esta pasada. No se usó ningún otro `UNTESTED-*`.
+
+**Comandos ejecutados**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (librería `mac_stats`: 871 passed, 0 failed; `Doc-tests mac_stats`: 1 ignored)
+- Spot-check `rg` (criterio 3): símbolos en `browser_tool_dispatch.rs` y `browser_agent/mod.rs` — **pass**
+
+**Resultado:** **PASS** — criterios 1–3 cumplidos. Tras este informe: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`**. En fallo habría sido **`TESTED-…`** según instrucción del operador; `003-tester/TESTER.md` usa **`WIP-…`** para bloqueos. CDP en vivo extremo a extremo no ejecutado en esta pasada.
