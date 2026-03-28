@@ -395,3 +395,21 @@ cd src-tauri && cargo run --example example_com_history_reload_smoke
 
 - **Criteria:** 1, 2, and 4 **satisfied** by automated checks. Criterion 3: example **exists, documents the flow, and builds**; **full E2E smoke run** **not completed** in this environment (CDP `CreateTarget`/attach stall during empty-browser bootstrap).
 - **Outcome:** **`WIP-…`** — use a Chromium/Chrome remote-debugging instance that allows `CreateTarget`/attach for an empty profile (or fix bootstrap in code), then re-run `example_com_history_reload_smoke` until it prints the `DONE:` line.
+
+### Test report — twenty-first pass (2026-03-28)
+
+- **Date:** 2026-03-28, local time of the execution environment (not fixed to UTC).
+- **Preflight:** Operator requested `tasks/UNTESTED-20260323-0130-browser-history-forward-reload-tools.md`; that path **does not exist** in the working tree (task was `WIP-…`). Per `003-tester/TESTER.md`, the same task id was used: `WIP-…` → `TESTING-…` → verification → this report → `WIP-…` / `CLOSED-…`. **No other `UNTESTED-*` file was used.**
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cd src-tauri && cargo check` | **pass** |
+| Lib tests | `cd src-tauri && cargo test --lib` | **pass** — 854 passed, 0 failed |
+| Dispatch handlers | `rg -n "handle_browser_go_back\|handle_browser_go_forward\|handle_browser_reload" src/commands/browser_tool_dispatch.rs` (cwd `src-tauri`) | **pass** — lines 534, 555, 577 |
+| Agent API | `rg -n "pub fn go_back\|pub fn go_forward\|pub fn reload_current_tab" src/browser_agent/mod.rs` | **pass** — lines 7232, 7290, 7348 |
+| Tool wiring | `rg -n "BROWSER_GO_BACK\|BROWSER_GO_FORWARD\|BROWSER_RELOAD" src/commands/tool_parsing.rs src/commands/tool_registry.rs` | **pass** |
+| Example build | `cd src-tauri && cargo build --example example_com_history_reload_smoke` | **pass** |
+| Integration (optional) | `perl -e 'alarm 18; exec @ARGV' cargo run --example example_com_history_reload_smoke` (cwd `src-tauri`) | **inconclusive** — CDP on `127.0.0.1:9222`; Step 1 `BROWSER_NAVIGATE` to https://example.com/; bootstraps `about:blank`; `Target.setDiscoverTargets ok`; process ended on **18s wall alarm** with no `DONE: history + reload smoke completed` and no 25s bootstrap-timeout line in the captured window |
+
+- **Criteria:** 1, 2, and 4 **satisfied** by automated checks. Criterion 3: example **exists, documents the flow, and builds**; **full E2E smoke completion** still **not verified** in this run (optional integration stopped early; prior longer runs showed bootstrap/`CreateTarget` stall—see reports above).
+- **Outcome:** **`WIP-…`** — repeat `example_com_history_reload_smoke` with a responsive Chromium CDP profile until `DONE:` prints, or address empty-browser bootstrap in code.

@@ -605,3 +605,33 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
 | Manual opcional (Discord en vivo con herramientas) | **No ejecutado** |
 
 **Conclusión:** **CLOSED** — criterios de aceptación y verificación automatizada cumplidos; el nombre del archivo vuelve a `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.
+
+### Test report — TESTER.md pass (2026-03-28, segunda ejecución en esta sesión)
+
+**Date:** 2026-03-28, hora local del shell (workspace mac-stats; TZ no fijada en la sesión).
+
+**Workflow**
+
+- **UNTESTED → TESTING:** el path `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` **no existe** en el repo; no se eligió ningún otro `UNTESTED-*`. El fichero de esta tarea estaba como `CLOSED-…`; se renombró a `TESTING-…` para esta pasada (mismo ID `20260322-0105`), según `003-tester/TESTER.md` cuando falta el prefijo solicitado.
+
+**Comandos ejecutados**
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test discord_draft_stream::
+rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs
+rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs
+```
+
+**Resultados**
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| `cargo check` (src-tauri) | **Pass** (~0.21s) |
+| `cargo test discord_draft_stream::` | **Pass** — 2 tests (`clamp_under_limit_unchanged`, `clamp_truncates_with_ellipsis`) |
+| `spawn_discord_draft_editor` en `discord/mod.rs` | **Pass** (L2172) |
+| `DiscordDraftHandle` en `tool_loop.rs`, `turn_lifecycle.rs`, `ollama.rs` | **Pass** (L14/L152, L10/L95, L109) |
+| Criterio: `discord_draft_throttle_ms` / `MAC_STATS_DISCORD_DRAFT_THROTTLE_MS`, clamp `200..=60_000` (`config/mod.rs` L456–477) | **Pass** (revisión de código) |
+| Manual opcional (Discord en vivo con herramientas) | **No ejecutado** |
+
+**Conclusión:** **CLOSED** — criterios de aceptación y bloque **Verification** cumplidos; el nombre del archivo vuelve a `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md`.
