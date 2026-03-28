@@ -450,8 +450,8 @@ cd src-tauri && cargo check
 - `cd src-tauri && cargo test` — **pass** (**871** tests en crate `mac_stats` lib; **1** doc-test ignorado).
 - `cd src-tauri && cargo build --release` — **pass** (**v0.1.70**).
 
-**`git diff` / `CHANGELOG.md` [0.1.70] / `006-feature-coder/FEATURE-CODER.md`:** `git diff --stat` del árbol — **8** archivos **`tasks/CLOSED-*.md`** ajenos a esta tarea; **`git diff --cached`** vacío tras **`git mv`** ida/vuelta **CLOSED↔TESTING** (sin rename residual en índice). Sin **`lib.rs`** ni **FEAT-D\*** nuevos atribuibles solo al gate Ollama.
+**`git diff` / `CHANGELOG.md` [Unreleased] / `006-feature-coder/FEATURE-CODER.md`:** **`git diff --cached --stat`** — rename **CLOSED→TESTING** de esta tarea (en índice durante la corrida). **`git diff --stat`** (working tree) — **`005-openclaw-reviewer.md`** + **8** tareas en **`tasks/`** ajenas al gate Ollama. Sin **`lib.rs`** ni **FEAT-D\*** nuevos atribuibles solo al gate Ollama.
 
-**Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-28T21:04:38Z**.
+**Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-28T21:18:03Z**.
 
 **Outcome:** restaurar prefijo en disco **`CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`**.
