@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #25**; **`docs/022_feature_review_plan.md`** — checklist **verify #25** (**2026-03-28T21:42:49Z** UTC).
+- **OpenClaw reviewer** — Independent re-run **`2026-03-28T21:37:40Z`**; pre-built digest reports default branch **35 commits** ahead through **`216796f1e3e2`** (tools/plugins/secrets/docs churn); local **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
+- **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — further **`003-tester`** **test report** appendices (**~2026-03-28T21:37–21:42Z** UTC): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **`cargo test`**, **`rg`** where noted).
 - **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #24**; **`docs/022_feature_review_plan.md`** — checklist **verify #24** (**2026-03-28T21:30:37Z** UTC).
 - **Tasks** — **Keyed async queue** tracking: drop **`tasks/TESTED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md`**; restore **`tasks/CLOSED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md`** (**CLOSED** filename / body).
 - **Tasks** — **Ori Mnemos lifecycle** **`tasks/CLOSED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md`** — deduplicate stacked **`003-tester`** **test report** sections to one concise block.

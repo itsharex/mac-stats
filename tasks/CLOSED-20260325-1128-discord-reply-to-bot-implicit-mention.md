@@ -676,3 +676,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** — rename **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure, operator convention is **`TESTED-`** (not used here). `003-tester/TESTER.md` specifies **`WIP-`** for blocked/failed runs.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-28 UTC (fecha en `user_info`; hora del informe en UTC).
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no existe** en el workspace. Para seguir el flujo sin tocar otro `UNTESTED-*`, se renombró **`CLOSED-…` → `TESTING-…`** al inicio de esta corrida. No se usó ningún otro archivo `UNTESTED-*`.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (Finished dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed en el binario principal).
+- `rg` `discord_mentions_bot_effective|mentions_bot_effective` en `src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg` `MentionOnly activation via message reference|could not resolve referenced message for implicit mention` en `src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` en **1865–1917** (revisión de fuente).
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight del cuerpo de la tarea).
+
+**Manual Discord E2E** (pasos 1–8: canal `mention_only`, reply sin @, mensaje plano, grep en `~/.mac-stats/debug.log`): **no ejecutado** en este entorno.
+
+**Outcome rename:** **PASS** — tras este informe, el archivo pasa de **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`** a **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada habría aplicado **`TESTED-`** según instrucción del operador (no aplica).
+
+---
