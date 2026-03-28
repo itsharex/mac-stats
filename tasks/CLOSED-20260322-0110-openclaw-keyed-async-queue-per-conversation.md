@@ -1357,3 +1357,21 @@ rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs
 - `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (líneas 1143, 1347, 1934 `run_serial`; 2310 `ollama_queue_key` con `discord:{}`)
 
 **Outcome:** **Pass** — todos los criterios de aceptación cumplidos. Renombrado final **TESTING- → CLOSED-** tras este informe (en caso de fallo el operador pidió **TESTED-**; no aplica). Discord en vivo no probado.
+
+## Test report (corrida — agente Cursor, 2026-03-29, `003-tester/TESTER.md`, tarea UNTESTED explícita)
+
+**Date:** 2026-03-29, hora local del sistema donde se ejecutó `cargo` (no normalizada a UTC).
+
+**Preflight / nombres:** El operador indicó solo `tasks/UNTESTED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md` (sin otro `UNTESTED-*`). Ese path no existía al inicio; el fichero estaba como `CLOSED-20260322-0110-…`. Según `003-tester/TESTER.md` se aplicó la cadena **CLOSED → UNTESTED → TESTING** (mismo basename) para ejecutar el paso **UNTESTED → TESTING**. No se tocó ningún otro archivo `UNTESTED-*`. El H1 pasó a **TESTING** durante `cargo` y se restauró a **CLOSED** antes del renombrado final **TESTING- → CLOSED-**.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test keyed_queue` — **pass** (2 tests: `same_key_runs_sequentially`, `different_keys_may_overlap`; 869 filtered en el binario de tests de `lib.rs`)
+- `cd src-tauri && cargo test` — **pass** (871 passed, 0 failed en tests de la lib `mac_stats`; 1 doc-test ignored en doc-tests del crate)
+
+**Static spot-check**
+
+- `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (líneas 1143, 1347, 1934 `run_serial`; 2310 `ollama_queue_key` con `discord:{}`)
+
+**Outcome:** **Pass** — criterios de aceptación cumplidos. Archivo final **CLOSED-** (`003-tester/TESTER.md`: **WIP-** si bloqueo/fallo; el operador pidió **TESTED-** en caso de fallo — no aplica). Discord en vivo no probado.
