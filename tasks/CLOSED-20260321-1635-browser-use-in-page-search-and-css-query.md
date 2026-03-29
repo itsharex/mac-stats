@@ -1234,3 +1234,19 @@ rg -n "fn search_page_text|pub fn browser_query" src-tauri/src/browser_agent/mod
 
 **Resultado:** **PASS** — criterios de aceptación 1–3 cumplidos. Tras este informe: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`**. En caso de fallo habría correspondido **`TESTED-20260321-1635-browser-use-in-page-search-and-css-query.md`** según la instrucción del operador. CDP en vivo extremo a extremo no ejecutado en esta pasada.
 
+### Test report (2026-03-29, hora local del workspace; `003-tester/TESTER.md`)
+
+**Preflight:** `tasks/UNTESTED-20260321-1635-browser-use-in-page-search-and-css-query.md` no existía; solo esta tarea (mismo id). Paso 2: `tasks/CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md` → `tasks/TESTING-20260321-1635-browser-use-in-page-search-and-css-query.md` antes de la verificación. No se usó ningún otro `UNTESTED-*`.
+
+**Comandos ejecutados**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (librería `mac_stats`: 871 passed, 0 failed; `Doc-tests mac_stats`: 1 ignored)
+
+**Verificación estática (criterio 3; `rg`)**
+
+- `src-tauri/src/commands/browser_tool_dispatch.rs`: `parse_browser_search_page_arg`, `parse_browser_query_arg`, `handle_browser_search_page`, `handle_browser_query` y tests de parsing en módulo — **pass**
+- `src-tauri/src/browser_agent/mod.rs`: `search_page_text`, `browser_query` — **pass**
+
+**Resultado:** **PASS** — criterios de aceptación 1–3 cumplidos. Tras este informe: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`**. En fallo habría sido **`TESTED-…`** (instrucción operador); `003-tester/TESTER.md` indica `WIP-…` para bloqueo/fallo. CDP en vivo extremo a extremo no ejecutado en esta pasada.
+
