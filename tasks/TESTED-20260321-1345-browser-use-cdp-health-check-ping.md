@@ -1914,3 +1914,22 @@ cd src-tauri && cargo check && cargo test --no-fail-fast
 **Criterios de aceptación:** los tres del cuerpo de la tarea — **pass** (greps + suite).
 
 **Outcome:** **pass** — renombrar **`TESTING-` → `CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`** (criterio del operador: `CLOSED-` si pasa; `TESTED-` solo ante fallo).
+
+---
+
+## Test report
+
+**Fecha / hora:** 2026-03-29 07:19:33 UTC (`date -u`).
+
+**Flujo TESTER.md:** El operador pidió solo `tasks/UNTESTED-20260321-1345-browser-use-cdp-health-check-ping.md`; ese path **no existe**. La tarea con el mismo slug estaba como **`CLOSED-…`**; se renombró **`CLOSED-` → `TESTING-`** al inicio de esta corrida (equivalente a **`UNTESTED-` → `TESTING-`**). No se probó ningún otro fichero `UNTESTED-*`.
+
+**Commands run**
+
+- `rg 'evaluate_one_plus_one_blocking_timeout|check_browser_alive|BROWSER_CDP_HEALTH_CHECK_TIMEOUT|clear_browser_session_on_error' src-tauri/src/browser_agent/mod.rs` — **pass**
+- `rg 'block_on|Never use .Handle::block_on' src-tauri/src/browser_agent/mod.rs | head -n 20` — **pass** (comentario en `check_browser_alive` que prohíbe `Handle::block_on` + `tokio::time::timeout`; documentación en `evaluate_one_plus_one_blocking_timeout` sobre no anidar Tokio `block_on`)
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test --no-fail-fast` — **fail**: `discord::tests::outbound_attachment_path_allowlist` panic en `src/discord/mod.rs:3322` («path under screenshots_dir should be allowed»); **870 passed, 1 failed** en crate lib `mac_stats`.
+
+**Criterios de aceptación (código CDP):** los greps confirman que la implementación descrita sigue presente; la verificación formal del task incluye la suite completa, que **no** pasó.
+
+**Outcome (operador):** **fail** en el comando de verificación — renombrar **`TESTING-` → `TESTED-20260321-1345-browser-use-cdp-health-check-ping.md`** (`TESTED-` por fallo de `cargo test`; arreglar el test de Discord o la ruta allowlist y volver a ejecutar el ciclo TESTER para recuperar `CLOSED-`).

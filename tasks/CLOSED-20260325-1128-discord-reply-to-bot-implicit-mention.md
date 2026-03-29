@@ -1580,3 +1580,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Overall:** **PASS** (criterios numerados + preflight). **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (corrida tester; `003-tester/TESTER.md`). **Operador citó:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` (solo esta tarea).
+
+**Rename `UNTESTED→TESTING`:** **No aplicado** — ese path **no existe** en el workspace; la tarea con el mismo slug está solo como **`tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. No se renombró a `TESTING-` ni se tocó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (perfil dev, 0 errores).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823** (router + puerta MentionOnly).
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (revisado en fuente).
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight §0 de «Testing instructions»).
+
+**Manual Discord E2E** (pasos 1–8: reply sin `@`, mensaje plano, `rg` en `~/.mac-stats/debug.log`): **no ejecutado** en esta corrida (sin Discord en vivo).
+
+**Outcome rename (instrucción operador: `CLOSED-` si pass, `TESTED-` si fail de verificación):** **PASS** → se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (`TESTED-` no aplica). Nota: `003-tester/TESTER.md` sugiere `WIP-` ante bloqueo/fallo; aquí no aplica.
+
+---
