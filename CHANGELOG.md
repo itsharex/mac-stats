@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #47**; **`docs/022_feature_review_plan.md`** — checklist **verify #46–#47** (**2026-03-29T03:11:53Z** UTC).
 - **Tasks** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #46** (**2026-03-29T03:00:23Z** UTC).
 - **OpenClaw reviewer** — Independent re-run **`2026-03-29T02:54:06Z`**; digest incremental range **1 commit** (`dc64a86eb853..64da91659037`: TUI model search — stop hijacking j/k); local **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 - **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — further **`003-tester`** **test report** rows (**verify #46** across **`005-openclaw-reviewer.md`** + **8** **`tasks/CLOSED-*.md`**): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup gate, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **clippy** `-D warnings`, **`cargo test`**, **`cargo build --release`** **v0.1.71**, **`rg`** where noted).
