@@ -1449,3 +1449,27 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`** → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure the operator requested **`TESTED-`**; `003-tester/TESTER.md` specifies **`WIP-`** for blocked/failed runs.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`). **Timezone del informe:** UTC.
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no existe** en este workspace. Solo este slug; no se usó ningún otro `UNTESTED-*`. Equivalente de flujo: `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` al inicio de esta corrida.
+
+**Commands run**
+
+- `mv tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **ok**
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (Finished `dev` profile en 0.21s, 0 errores).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed en `lib` tests).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` en **1866, 1887, 1900, 1914**.
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight del cuerpo de la tarea).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno (sin sesión Discord en vivo).
+
+**Overall:** **PASS** (criterios numerados + preflight).
+
+**Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada habría aplicado **`TESTED-`** según el operador (`003-tester/TESTER.md` indica **`WIP-`** ante bloqueo/fallo — no aplica).
+
+---
