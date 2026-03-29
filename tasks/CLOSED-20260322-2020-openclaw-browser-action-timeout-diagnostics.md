@@ -1837,3 +1837,74 @@ rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_p
 ### Notes
 
 - Manual / smoke steps in §4.3 **not** run (optional). After this report: file renamed **`TESTING-` → `CLOSED-`** (pass). On failure, `003-tester/TESTER.md` specifies **`WIP-`** (operator message also mentioned `TESTED-`).
+
+---
+
+## Test report
+
+- **Date:** 2026-03-29 03:35:56 UTC (local: 2026-03-29 05:35:56 CEST).
+- **Preflight:** `tasks/UNTESTED-20260322-2020-openclaw-browser-action-timeout-diagnostics.md` **no existía**; solo se probó esta tarea (slug `20260322-2020-openclaw-browser-action-timeout-diagnostics`). Al inicio se renombró **`CLOSED-` → `TESTING-`** (equivalente operativo al paso UNTESTED→TESTING de `003-tester/TESTER.md`). **No se usó** ningún otro `UNTESTED-*`.
+- **Outcome:** Pass (criterios §3.1–§3.3).
+
+### Commands run
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test
+```
+
+Spot-check estático (§4), desde la raíz del repositorio:
+
+```bash
+rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_proxy_hint|is_cdp_navigation_timeout_error|run_browser_doctor_stdio" \
+  src-tauri/src/browser_agent/mod.rs \
+  src-tauri/src/commands/browser_tool_dispatch.rs \
+  src-tauri/src/commands/browser_helpers.rs \
+  src-tauri/src/browser_doctor.rs
+```
+
+### Results
+
+- `cargo check`: exit 0.
+- `cargo test`: exit 0 — lib `mac_stats`: **871** passed, **0** failed; `commands::browser_helpers::tests::cdp_navigation_timeout_detection_matches_tool_errors` **ok**.
+- `rg` spot-check: exit 0; símbolos presentes en los cuatro archivos.
+
+### Notes
+
+- Pasos manuales §4.3 **no** ejecutados (opcionales). Tras este informe: **`TESTING-` → `CLOSED-`** (pass).
+
+---
+
+## Test report
+
+- **Date:** 2026-03-29 03:48:43 UTC (tester run; `date -u` on host).
+- **Preflight:** `tasks/UNTESTED-20260322-2020-openclaw-browser-action-timeout-diagnostics.md` **was not present**; only this task (slug `20260322-2020-openclaw-browser-action-timeout-diagnostics`) was tested. Renamed **`CLOSED-` → `TESTING-`** at the start of this run (operational equivalent to `003-tester/TESTER.md` step UNTESTED→TESTING). **No other** `UNTESTED-*` file was used.
+- **Outcome:** Pass (acceptance criteria §3.1–§3.3).
+
+### Commands run
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test
+```
+
+Static spot-check (task §4), from repository root:
+
+```bash
+rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_proxy_hint|is_cdp_navigation_timeout_error|run_browser_doctor_stdio" \
+  src-tauri/src/browser_agent/mod.rs \
+  src-tauri/src/commands/browser_tool_dispatch.rs \
+  src-tauri/src/commands/browser_helpers.rs \
+  src-tauri/src/browser_doctor.rs
+```
+
+### Results
+
+- `cargo check`: exit 0.
+- `cargo test`: exit 0 — lib `mac_stats`: **871** passed, **0** failed; `commands::browser_helpers::tests::cdp_navigation_timeout_detection_matches_tool_errors` **ok**.
+- `rg` spot-check: exit 0; listed symbols present in all four files.
+
+### Notes
+
+- Manual / smoke steps in §4.3 **not** run (optional per task).
+- After this report: file renamed **`TESTING-` → `CLOSED-`** (pass). On failure, operator instruction: **`TESTED-`**; `003-tester/TESTER.md` uses **`WIP-`** for blocked or follow-up work.
