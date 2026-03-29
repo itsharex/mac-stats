@@ -1705,3 +1705,22 @@ cd src-tauri && cargo check && cargo test --no-fail-fast
 - `cd src-tauri && cargo test --no-fail-fast` — **pass** (871 passed, 0 failed en crate lib `mac_stats`; otros bins 0 tests; 1 doc-test ignored)
 
 **Outcome:** **pass** — criterios de aceptación del cuerpo de la tarea verificados. Renombrar **`TESTING-` → `CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`**. (TESTER.md: bloqueo o fallo sería prefijo `WIP-`; la variante `TESTED-` citada por el operador no aplica.)
+
+---
+
+## Test report
+
+**Fecha / hora:** 2026-03-29 04:13:24 UTC (local del host: `date -u`).
+
+**Flujo TESTER.md:** El operador citó `tasks/UNTESTED-20260321-1345-browser-use-cdp-health-check-ping.md`; ese path **no existe** en el repo (la tarea con el mismo slug ya estaba como `CLOSED-…`). En esta corrida se aplicó **`CLOSED-` → `TESTING-`** con `git mv` como sustituto de **`UNTESTED-` → `TESTING-`**. No se probó ningún otro fichero `UNTESTED-*`.
+
+**Commands run**
+
+- `rg 'evaluate_one_plus_one_blocking_timeout|check_browser_alive|BROWSER_CDP_HEALTH_CHECK_TIMEOUT|clear_browser_session_on_error' src-tauri/src/browser_agent/mod.rs` — **pass**
+- `rg 'block_on|Never use .Handle::block_on' src-tauri/src/browser_agent/mod.rs | head -n 20` — **pass** (comentario que prohíbe `Handle::block_on` + `tokio::time::timeout` en `check_browser_alive`; doc en `evaluate_one_plus_one_blocking_timeout` sobre no anidar Tokio `block_on`)
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test --no-fail-fast` — **pass** (871 passed, 0 failed en crate lib `mac_stats`; otros bins 0 tests; 1 doc-test ignored)
+
+**Criterios de aceptación (cuerpo de la tarea):** (1) ping `1+1` con `recv_timeout(BROWSER_CDP_HEALTH_CHECK_TIMEOUT)` — **pass**; (2) comentario en `check_browser_alive` contra `block_on` anidado — **pass**; (3) `clear_browser_session_on_error` / sesión ante **Browser unresponsive** y errores de conexión — **pass**.
+
+**Outcome:** **pass** — renombrar **`TESTING-` → `CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`**. (En caso de fallo, el operador pidió prefijo `TESTED-`; no aplica.)
