@@ -2024,3 +2024,21 @@ rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs
 
 **Resultado:** **Pass** — criterios de aceptación cumplidos. Archivo renombrado **TESTING- → CLOSED-** tras este informe. En fallo el operador pidió **TESTED-** (`003-tester/TESTER.md` usa **WIP-** para bloqueo/fallo). Discord en vivo no probado.
 
+## Test report
+
+**Fecha:** 2026-03-29 09:10:26 UTC (local: 2026-03-29 11:10:26 CEST).
+
+**Preflight / nombres:** Tarea fijada: `tasks/UNTESTED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md` únicamente (sin otro `UNTESTED-*`). Ese path no existía al inicio; el fichero estaba como `CLOSED-20260322-0110-…`. Según `003-tester/TESTER.md` se aplicó la cadena **CLOSED → UNTESTED → TESTING** (mismo basename) para ejecutar el paso **UNTESTED → TESTING**. No se tocó ningún otro archivo `UNTESTED-*`. El H1 del documento pasó a **TESTING** durante la verificación y se restauró a **CLOSED** antes del renombrado final **TESTING- → CLOSED-**.
+
+**Comandos ejecutados**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test keyed_queue` — **pass** (`same_key_runs_sequentially`, `different_keys_may_overlap`)
+- `cd src-tauri && cargo test` — **pass** (872 passed, 0 failed en la lib `mac_stats`; 1 doc-test ignored)
+
+**Comprobación estática**
+
+- `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (líneas 1143, 1347, 1934 `crate::keyed_queue::run_serial`; línea 2310 `ollama_queue_key` con `discord:{}`)
+
+**Resultado:** **Pass** — criterios de aceptación cumplidos. Archivo renombrado **TESTING- → CLOSED-** tras este informe. En fallo habría sido **TESTED-** según el operador (`003-tester/TESTER.md` indica **WIP-** para bloqueo/fallo). Discord en vivo no probado.
+

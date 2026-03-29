@@ -42,8 +42,11 @@ rg -n "should_skip_discord_for_heartbeat_ack|Schedule ack|schedule heartbeat ack
 ### How to test
 
 1. Run the **Verification (automated)** commands above.
-2. **E2E (optional, needs Discord + Ollama):** Add a schedule with a trivial prompt that instructs the model to answer `HEARTBEAT_OK` only, `reply_to_channel_id` set to a test channel, and a short cron (or wait for the next tick). Confirm no Discord message on that run and the log line above appears.
-3. **Regression:** Send a normal schedule task that returns a short real summary; confirm Discord still receives `[Schedule: …]` as before.
+2. **Log grep (after an ack-only run or from historical logs):**  
+   `rg 'Schedule ack — not delivering|schedule heartbeat ack — not delivering' ~/.mac-stats/debug.log`  
+   Expect a match when a skip occurred. The scheduler path logs via `mac_stats_info!("scheduler", …)` (target `mac_stats::scheduler`); the task-runner path uses `tracing::info!` on the module target—both appear in `debug.log` at INFO with default `-vv`.
+3. **E2E (optional, needs Discord + Ollama):** Add a schedule with a trivial prompt that instructs the model to answer `HEARTBEAT_OK` only, `reply_to_channel_id` set to a test channel, and a short cron (or wait for the next tick). Confirm no Discord message on that run and the log line above appears.
+4. **Regression:** Send a normal schedule task that returns a short real summary; confirm Discord still receives `[Schedule: …]` as before.
 
 ### Pass / fail criteria
 
