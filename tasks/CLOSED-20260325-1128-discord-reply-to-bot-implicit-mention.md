@@ -1687,3 +1687,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** — se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada/revisión de código habría correspondido **`TESTED-`** según instrucción del operador (no aplica). `003-tester/TESTER.md` sugiere **`WIP-`** ante bloqueo o fallo con seguimiento (no aplica).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`). **Solo** el slug `20260325-1128-discord-reply-to-bot-implicit-mention` (operador: `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`). No se usó ningún otro `UNTESTED-*`.
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no existe** en este workspace. Equivalente de flujo para esta corrida: **`CLOSED-…` → `TESTING-…`** antes de la verificación (misma base de nombre); con **PASS**, **`TESTING-…` → `CLOSED-…`** al cerrar.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"`.
+
+**Acceptance criteria (1–4):** **PASS** (código + preflight §0).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** (sin sesión Discord en vivo).
+
+**Outcome rename:** **PASS** → archivo final **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada habría sido **`TESTED-`** según instrucción del operador (no aplica).
+
+---
