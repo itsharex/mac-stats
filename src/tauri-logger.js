@@ -3,8 +3,15 @@
 //! Include this file before other scripts to enable automatic logging
 
 (function setupTauriConsoleLogger() {
+  const hasInternalsInvoke =
+    typeof window.__TAURI_INTERNALS__ === 'object' &&
+    typeof window.__TAURI_INTERNALS__.invoke === 'function';
   // Only set up if Tauri is available
-  if (typeof window.__TAURI__ === 'undefined' && typeof window.__TAURI_INVOKE__ === 'undefined') {
+  if (
+    typeof window.__TAURI__ === 'undefined' &&
+    typeof window.__TAURI_INVOKE__ === 'undefined' &&
+    !hasInternalsInvoke
+  ) {
     return; // Tauri not available, skip setup
   }
   
@@ -17,6 +24,10 @@
   function getInvoke() {
     if (typeof window.__TAURI__ !== 'undefined' && window.__TAURI__.core?.invoke) {
       return window.__TAURI__.core.invoke;
+    }
+    const internals = window.__TAURI_INTERNALS__;
+    if (internals && typeof internals.invoke === 'function') {
+      return internals.invoke.bind(internals);
     }
     if (typeof window.__TAURI_INVOKE__ !== 'undefined') {
       return window.__TAURI_INVOKE__;

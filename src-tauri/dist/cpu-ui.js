@@ -20,6 +20,10 @@
     if (window.__TAURI__?.invoke) {
       return window.__TAURI__.invoke;
     }
+    const internals = window.__TAURI_INTERNALS__;
+    if (internals && typeof internals.invoke === 'function') {
+      return internals.invoke.bind(internals);
+    }
     return null;
   }
   function getSavedTheme() {

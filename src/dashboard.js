@@ -1,5 +1,12 @@
-// Dashboard JavaScript
-const { invoke } = window.__TAURI__.core;
+// Dashboard JavaScript (Tauri 2: enable `app.withGlobalTauri` or use __TAURI_INTERNALS__.invoke)
+function dashboardInvoke(cmd, args) {
+  const fn = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke;
+  if (!fn) {
+    throw new Error('Tauri invoke not available');
+  }
+  return fn(cmd, args);
+}
+const invoke = (...a) => dashboardInvoke(...a);
 
 // Update interval (milliseconds)
 const UPDATE_INTERVAL = 2000; // 2 seconds

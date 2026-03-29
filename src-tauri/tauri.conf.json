@@ -23,6 +23,7 @@
   "identifier": "com.raro42.mac-stats",
   "plugins": {},
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "mac-stats",

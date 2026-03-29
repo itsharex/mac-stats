@@ -1792,3 +1792,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** — after this report, **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On verification failure the operator requested **`TESTED-`**; `003-tester/TESTER.md` uses **`WIP-`** for blocked/failed runs — not applicable.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (`003-tester/TESTER.md`; Cursor agent). **Task only:** slug `20260325-1128-discord-reply-to-bot-implicit-mention` (operator cited `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`). No other `UNTESTED-*` file was used.
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` is **not in this repo**. Applied **`CLOSED-…` → `TESTING-…`** at the start of this run for the same slug (state flow per prior task notes).
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` with `target: "mac_stats::discord"` verified in source (~1865–1917).
+
+**Acceptance criteria (1–4):** **PASS** (preflight §0 + code review).
+
+**Manual Discord E2E** (steps 1–8): **not executed** (no live Discord).
+
+**Outcome rename:** **PASS** — rename **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** after this append. On automated verification failure, operator convention **`TESTED-`** would apply; `003-tester/TESTER.md` specifies **`WIP-`** for blocked/failed follow-up — not applicable.
+
+---

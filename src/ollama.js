@@ -6,6 +6,11 @@ function getInvoke() {
   if (typeof window.__TAURI__ !== 'undefined' && window.__TAURI__.core?.invoke) {
     return window.__TAURI__.core.invoke;
   }
+  // Tauri 2 can expose IPC here when `withGlobalTauri` is false (not recommended for this app).
+  const internals = window.__TAURI_INTERNALS__;
+  if (internals && typeof internals.invoke === 'function') {
+    return internals.invoke.bind(internals);
+  }
   // Fallback for different Tauri versions
   if (typeof window.__TAURI_INVOKE__ !== 'undefined') {
     return window.__TAURI_INVOKE__;

@@ -12,6 +12,10 @@ function getInvoke() {
   if (window.__TAURI__?.invoke) {
     return window.__TAURI__.invoke;
   }
+  const internals = window.__TAURI_INTERNALS__;
+  if (internals && typeof internals.invoke === 'function') {
+    return internals.invoke.bind(internals);
+  }
   return null;
 }
 
@@ -3265,7 +3269,9 @@ function initIconLine() {
 async function checkHistoryAvailability() {
   try {
     // Check if we have >24h of data available to show the dropdown
-    const result = await window.__TAURI__.invoke('get_metrics_history', {
+    const inv = getInvoke();
+    if (!inv) return;
+    const result = await inv('get_metrics_history', {
       time_range_seconds: 86400, // 24 hours
       max_display_points: null
     });

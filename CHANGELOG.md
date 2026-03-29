@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.75] - 2026-03-29
+
+### Fixed
+- **Tauri 2 / webview** — Enable **`app.withGlobalTauri`** in **`tauri.conf.json`** so embedded pages get the **`window.__TAURI__`** bridge (avoids “Tauri API not available” when globals are off by default).
+
+### Changed
+- **Frontend** — Prefer **`window.__TAURI__?.core?.invoke`** with fallback to **`window.__TAURI_INTERNALS__.invoke`** in **`ollama.js`**, **`tauri-logger.js`**, **`dashboard.js`**, **`main.js`**, and synced **`src-tauri/dist`** assets so IPC works with either exposure mode.
+- **Tasks** — **`003-tester`** appendix rows across browser / OpenClaw **`tasks/CLOSED-*.md`** tracks; Ollama warmup gate moved **`CLOSED`** → **`TESTING`** (**`20260322-1920`**); Discord implicit-mention **`CLOSED`** task (**`20260325-1128`**) updated.
+
 ## [0.1.74] - 2026-03-29
 
 ### Changed

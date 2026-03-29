@@ -726,3 +726,16 @@ cd src-tauri && cargo test prompts:: --no-fail-fast
 | Prompt tests | `cargo test prompts:: --no-fail-fast` | **pass** — 5 passed; 0 failed (incl. `ori_briefing_and_prefetch_follow_memory_before_metrics`; 867 filtered out en binario `lib`) |
 
 - **Outcome:** **pass** — criterios de aceptación 1–3 cumplidos. Tras este informe: `TESTING-*` → `CLOSED-*` (en fallo habría sido `TESTED-*` según operador).
+
+### Test run (003-tester/TESTER.md, 2026-03-29 — operator: only UNTESTED-20260322-0145…; this session)
+
+- **Date:** 2026-03-29, local time (macOS, America timezone); not fixed to UTC.
+- **Prefijo:** `tasks/UNTESTED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md` was **not present**; worked on the same task as `tasks/CLOSED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md`, renamed `CLOSED-*` → `TESTING-*` before verification. No other `UNTESTED-*` file was used.
+- **Commands run:** `cd src-tauri && cargo check`; `cd src-tauri && cargo test prompts:: --no-fail-fast`.
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cargo check` | **pass** |
+| Prompt tests | `cargo test prompts:: --no-fail-fast` | **pass** — 5 passed; 0 failed (incl. `ori_briefing_and_prefetch_follow_memory_before_metrics`; 867 filtered in `lib` test binary) |
+
+- **Outcome:** **pass** — acceptance criteria 1–3 satisfied. Per operator: final name `CLOSED-*` on pass, `TESTED-*` on fail; per `003-tester/TESTER.md`, blocked/failed runs may use `WIP-*`. Renamed `TESTING-*` → `CLOSED-*` after this report.

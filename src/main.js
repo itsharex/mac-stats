@@ -1,4 +1,10 @@
-const { invoke } = window.__TAURI__.core;
+function invoke(cmd, args) {
+  const fn = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke;
+  if (!fn) {
+    throw new Error('Tauri invoke not available');
+  }
+  return fn(cmd, args);
+}
 
 let greetInputEl;
 let greetMsgEl;
