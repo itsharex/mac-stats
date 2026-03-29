@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.73] - 2026-03-29
+
+### Changed
+- **Scheduler / Discord** — Heartbeat-only Ollama replies (`HEARTBEAT_OK` / `is_heartbeat_ack` within `heartbeat.ackMaxChars`) skip Discord when `reply_to_channel_id` is set and the run has no attachments; deliveries with attachments are unchanged (`should_skip_discord_for_heartbeat_ack`, `attachment_count` on `ScheduleExecuteSuccess`).
+- **Task runner** — Skip the "Task finished" Discord summary when the completion matches the same heartbeat-ack rule (no attachments on this path).
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #69**; **`docs/022_feature_review_plan.md`** — checklist **verify #68–#69** (**2026-03-29T08:57:08Z** UTC).
+- **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — **`003-tester`** **test report** rows (**verify #69** snapshot across **eight** **`tasks/CLOSED-*.md`**): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup gate, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **clippy** `-D warnings`, lib tests + **`scheduler::heartbeat`** suite, **`cargo build --release`** **v0.1.73**, **`rg`** where noted).
+
+### Added
+- **Tasks** — **`tasks/UNTESTED-20260329-0847-openclaw-silent-expected-turns.md`** (OpenClaw parity: silent `HEARTBEAT_OK` schedule turns).
+
 ## [Unreleased]
 
 ### Changed

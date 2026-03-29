@@ -23,6 +23,8 @@ struct ScheduleExecuteSuccess {
     reply_text: String,
     already_sent_to_discord: bool,
     delivery_context_key: String,
+    /// Ollama-side attachments for this run; suppresses heartbeat-only Discord skip when non-zero.
+    attachment_count: usize,
 }
 
 /// Minimum interval when user config is below 1 (safety).
@@ -466,6 +468,7 @@ async fn execute_task(
                             reply_text: reply,
                             already_sent_to_discord: sent_to_discord,
                             delivery_context_key,
+                            attachment_count: 0,
                         }));
                     }
                     Err(e) => {
@@ -542,6 +545,7 @@ async fn execute_task(
                     reply_text: reply.text,
                     already_sent_to_discord: false,
                     delivery_context_key: delivery_ck,
+                    attachment_count: reply.attachment_paths.len(),
                 }))
             }
             Err(e) => {
@@ -668,7 +672,19 @@ async fn scheduler_loop() {
                 Ok(Some(success)) => {
                     if let Some(ref channel_id_str) = entry.reply_to_channel_id {
                         if !success.already_sent_to_discord {
-                            if let Ok(channel_id) = channel_id_str.parse::<u64>() {
+                            let ack_max = Config::heartbeat_settings().ack_max_chars;
+                            if crate::scheduler::heartbeat::should_skip_discord_for_heartbeat_ack(
+                                &success.reply_text,
+                                ack_max,
+                                success.attachment_count > 0,
+                            ) {
+                                mac_stats_info!(
+                                    "scheduler",
+                                    "Schedule ack — not delivering to Discord (HEARTBEAT_OK contract, {} chars, attachments={})",
+                                    success.reply_text.chars().count(),
+                                    success.attachment_count
+                                );
+                            } else if let Ok(channel_id) = channel_id_str.parse::<u64>() {
                                 let message = if let Some(ref sid) = entry.id {
                                     format!("[Schedule: {}]\n\n{}", sid, success.reply_text)
                                 } else {

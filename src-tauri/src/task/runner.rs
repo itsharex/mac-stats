@@ -163,6 +163,18 @@ async fn send_finished_summary_if_channel(
     let channel_id =
         reply_to_override.or_else(|| crate::task::get_reply_to_discord_channel(task_path));
     if let Some(channel_id) = channel_id {
+        let ack_max = crate::config::Config::heartbeat_settings().ack_max_chars;
+        if crate::scheduler::heartbeat::should_skip_discord_for_heartbeat_ack(
+            summary,
+            ack_max,
+            false,
+        ) {
+            info!(
+                "Task runner: schedule heartbeat ack — not delivering finished summary to Discord (channel {})",
+                channel_id
+            );
+            return false;
+        }
         let prefix = message_prefix.as_deref().unwrap_or("");
         let message = format!("{}Task finished.\n\n{}", prefix, summary.trim());
         match crate::discord::send_message_to_channel(channel_id, &message).await {

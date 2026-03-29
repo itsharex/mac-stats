@@ -95,6 +95,16 @@ fn build_user_message(checklist: &str) -> String {
     )
 }
 
+/// When true, a scheduled run with `reply_to_channel_id` must not post this text to Discord
+/// (OpenClaw isolated-cron `skipHeartbeatDelivery` parity). Attachments imply substantive output.
+pub(crate) fn should_skip_discord_for_heartbeat_ack(
+    reply_text: &str,
+    ack_max_chars: usize,
+    has_attachments: bool,
+) -> bool {
+    !has_attachments && is_heartbeat_ack(reply_text, ack_max_chars)
+}
+
 /// True when the reply is a silent ack (starts or ends with HEARTBEAT_OK and the remainder is short).
 pub(crate) fn is_heartbeat_ack(reply: &str, ack_max_chars: usize) -> bool {
     let s = reply.trim();
@@ -341,5 +351,12 @@ mod tests {
     fn not_ack_substantial() {
         let long = format!("HEARTBEAT_OK\n\n{}", "x".repeat(400));
         assert!(!is_heartbeat_ack(&long, 300));
+    }
+
+    #[test]
+    fn skip_discord_matches_ack_without_attachments() {
+        assert!(should_skip_discord_for_heartbeat_ack("HEARTBEAT_OK", 300, false));
+        assert!(!should_skip_discord_for_heartbeat_ack("HEARTBEAT_OK", 300, true));
+        assert!(!should_skip_discord_for_heartbeat_ack("All good, nothing to report.", 300, false));
     }
 }
