@@ -395,3 +395,16 @@ cd src-tauri && cargo test prompts:: --no-fail-fast
 | Prompt tests | `cargo test prompts:: --no-fail-fast` | **pass** — 5 passed; 0 failed (incl. `ori_briefing_and_prefetch_follow_memory_before_metrics`) |
 
 - **Outcome:** **pass** — acceptance criteria 1–3 satisfied. Renamed `TESTING-*` → `CLOSED-*` per `003-tester/TESTER.md` (operator fail case would be `TESTED-*`).
+
+### Test run (003-tester/TESTER.md, 2026-03-29 — Cursor; UNTESTED path named, single task)
+
+- **Date:** 2026-03-29, local time (macOS); not fixed to UTC.
+- **Prefijo:** `tasks/UNTESTED-20260322-0145-mac-stats-ori-mnemos-lifecycle-prompt.md` was **not present**; the task file was `CLOSED-*` and was renamed `CLOSED-*` → `TESTING-*` for this run. No other `UNTESTED-*` file was used.
+- **Commands run:** `cd src-tauri && cargo check`; `cd src-tauri && cargo test prompts:: --no-fail-fast`.
+
+| Step | Command | Result |
+|------|---------|--------|
+| Check | `cargo check` | **pass** |
+| Prompt tests | `cargo test prompts:: --no-fail-fast` | **pass** — 5 passed; 0 failed (incl. `ori_briefing_and_prefetch_follow_memory_before_metrics`) |
+
+- **Outcome:** **pass** — acceptance criteria 1–3 satisfied. Renamed `TESTING-*` → `CLOSED-*` (on failure, operator convention: `TESTED-*`; TESTER.md: `WIP-*`).
