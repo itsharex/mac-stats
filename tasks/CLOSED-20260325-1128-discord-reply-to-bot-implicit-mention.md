@@ -1078,3 +1078,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Renombrado final:** **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (PASS). Ante fallo de verificación automatizada habría aplicado **`TESTED-`** según el operador (`003-tester/TESTER.md` indica **`WIP-`** si está bloqueado o falla el flujo).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`; operator path `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` only).
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` does **not** exist in this workspace (same slug was `CLOSED-…`). Renamed **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`** for the active verification pass. No other `UNTESTED-*` file was used.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (`Finished dev profile … in 0.20s`, 0 errors).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed; test profile finished in 0.18s).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` uses `target: "mac_stats::discord"` (verified ~1865–1917).
+
+**Acceptance criteria (1–4):** **PASS** (preflight + code review).
+
+**Manual Discord E2E** (task steps 1–8): **not executed** in this environment.
+
+**Overall:** **PASS**. **Outcome rename:** `TESTING-…` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure, operator requested **`TESTED-`** (not applicable).
+
+---
