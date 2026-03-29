@@ -486,3 +486,15 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
   - `rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs` — matches: `tool_loop.rs` (14, 152), `turn_lifecycle.rs` (10, 95), `ollama.rs` (109).
 - **Result:** **Pass** — criterios automáticos de la tarea cumplidos; pasos opcionales Discord en vivo no ejecutados.
 - **Outcome filename:** `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md` (fallo habría sido `TESTED-*`, según operador).
+
+### Tester run (2026-03-29 UTC, `003-tester/TESTER.md` — operador: `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md`, esta sesión)
+
+- **Date:** 2026-03-29 UTC (fecha del workspace: domingo 29 mar 2026; hora local no registrada en UTC exacta).
+- **Note:** `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` no existía; la tarea estaba como `CLOSED-*`. Paso 2 de `003-tester/TESTER.md`: `CLOSED` → `TESTING`, verificación, este bloque, luego `TESTING` → `CLOSED` al pasar. No se usó ningún otro archivo `UNTESTED-*`.
+- **Commands run:**
+  - `cd src-tauri && cargo check` — pass (`Finished dev profile [unoptimized + debuginfo] target(s) in 0.20s`).
+  - `cd src-tauri && cargo test discord_draft_stream::` — pass (2 tests: `clamp_under_limit_unchanged`, `clamp_truncates_with_ellipsis`; 869 filtered out en el binario principal).
+  - `rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs` — match at line 2172.
+  - `rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs` — matches: `tool_loop.rs` (14, 152), `turn_lifecycle.rs` (10, 95), `ollama.rs` (109).
+- **Result:** **Pass** — criterios automáticos de **Verification** / **Acceptance criteria** cumplidos; pruebas manuales Discord opcionales no ejecutadas.
+- **Outcome filename:** `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md` (fallo habría sido `TESTED-*`, según operador).
