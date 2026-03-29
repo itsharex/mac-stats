@@ -1496,3 +1496,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (per operator: `TESTED-` on automated-verification failure — not applicable).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`). **Timezone:** UTC.
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no existe** en el workspace; única tarea con este slug: se renombró **`CLOSED-…` → `TESTING-…`** al inicio de esta corrida. No se tocó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (0 errores).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"`.
+
+**Acceptance criteria (1–4):** **PASS** (implementación + preflight).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** (sin sesión Discord en vivo).
+
+**Overall:** **PASS**. **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (ante fallo de verificación automatizada el operador pidió **`TESTED-`**; `003-tester/TESTER.md` sugiere **`WIP-`** — no aplica).
+
+---

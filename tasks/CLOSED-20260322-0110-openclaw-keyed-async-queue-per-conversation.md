@@ -1826,3 +1826,21 @@ rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs
 
 **Outcome:** **Pass** — all acceptance criteria met. Final filename **CLOSED-** (on failure would have been **TESTED-** per operator). Live Discord not exercised.
 
+## Test report (corrida — agente Cursor, `003-tester/TESTER.md`)
+
+**Date:** 2026-03-29 06:23:52 UTC (local: 2026-03-29 08:23:52 CEST).
+
+**Preflight / names:** Operator requested only `tasks/UNTESTED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md` (no other `UNTESTED-*`). That path was absent; the file on disk was `CLOSED-20260322-0110-…`. Per `003-tester/TESTER.md`, applied rename chain **CLOSED → UNTESTED → TESTING** (same basename) so the **UNTESTED → TESTING** step applies without selecting another task. Document H1 set to **TESTING** during verification, restored to **CLOSED** before final filename rename.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test keyed_queue` — **pass** (`same_key_runs_sequentially`, `different_keys_may_overlap`)
+- `cd src-tauri && cargo test` — **pass** (871 passed, 0 failed in lib tests; 1 doc-test ignored)
+
+**Static spot-check**
+
+- `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (lines 1143, 1347, 1934 `crate::keyed_queue::run_serial`; line 2310 `ollama_queue_key` with `discord:{}`)
+
+**Outcome:** **Pass** — all acceptance criteria met. Final filename **CLOSED-** (failure would have been **TESTED-** per operator). Live Discord not exercised.
+
