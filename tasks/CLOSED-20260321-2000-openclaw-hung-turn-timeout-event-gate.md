@@ -440,3 +440,15 @@ rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_ti
   - Workspace grep for the same patterns: matches in `src-tauri/src/commands/ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs`
 - **Acceptance criteria:** All satisfied (`TurnOutputGate` / `gate_allows_send`; `finalize_turn_timeout` text starts `**Turn timed out**` with budget `**{}s**`; `turn wall-clock timeout` / `closing output gate and running cleanup` in `turn_lifecycle.rs`; router `closing output gate after turn wall-clock timeout` in `ollama.rs`; `cargo check` / `cargo test` green).
 - **Outcome:** **PASS** — final filename after this run: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.
+
+### Re-verify — 2026-03-29 UTC (`003-tester/TESTER.md`, únicamente `tasks/UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`; run del agente Cursor)
+
+- **Fecha:** 2026-03-29 (UTC).
+- **Renombre UNTESTED → TESTING:** `tasks/UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` **no existía**; no se eligió otro `UNTESTED-*`. Fase TESTING: **`CLOSED-…` → `TESTING-…`** al inicio de este run; informe añadido mientras el archivo era `TESTING-…`; tras **PASS**, **`TESTING-…` → `CLOSED-…`**. (`003-tester/TESTER.md`: fallo/bloqueo → `WIP-…`, no `TESTED-…`.)
+- **Comandos ejecutados:**
+  - `cd src-tauri && cargo check` — pass
+  - `cd src-tauri && cargo test` — pass (crate biblioteca: **871** passed, 0 failed)
+  - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src/` — sin coincidencias (la tarea cita `src/` en la raíz; Rust en `src-tauri/src/`)
+  - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src-tauri/src` — coincidencias en `commands/ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs`
+- **Criterios de aceptación:** Cumplidos.
+- **Resultado:** **PASS** — nombre final: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.
