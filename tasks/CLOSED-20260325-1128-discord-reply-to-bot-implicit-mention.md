@@ -1601,3 +1601,26 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename (instrucción operador: `CLOSED-` si pass, `TESTED-` si fail de verificación):** **PASS** → se mantiene **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (`TESTED-` no aplica). Nota: `003-tester/TESTER.md` sugiere `WIP-` ante bloqueo/fallo; aquí no aplica.
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (local del agente; `003-tester/TESTER.md`). **Operador:** solo `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` (no se usó otro `UNTESTED-*`).
+
+**Rename `UNTESTED→TESTING`:** El archivo **`tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` no existe** en este workspace. Para el estado «en prueba» de **esta misma slug** sin tocar otras tareas, se renombró **`CLOSED-…` → `TESTING-…`** antes de la verificación.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (perfil dev, 0 errores).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**.
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (líneas 1865–1917 en `discord/mod.rs`).
+
+**Acceptance criteria (1–4):** **PASS** (código + preflight §0).
+
+**Manual Discord E2E** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** (sin sesión Discord en vivo).
+
+**Overall:** **PASS** (criterios numerados + preflight).
+
+**Outcome rename:** **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (fallo de verificación automatizada sería **`TESTED-`** según instrucción del operador; no aplica).
+
+---

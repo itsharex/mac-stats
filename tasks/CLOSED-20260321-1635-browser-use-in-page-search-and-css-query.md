@@ -1681,3 +1681,19 @@ rg -n "fn search_page_text|pub fn browser_query" src-tauri/src/browser_agent/mod
 
 **Outcome:** **PASS** — criteria 1–3 satisfied. After this report: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`**. On failure the operator requested **`TESTED-…`**; `003-tester/TESTER.md` specifies **`WIP-…`** for blocked or follow-up work. Live CDP end-to-end not run in this pass.
 
+### Test report (2026-03-29, local; `003-tester/TESTER.md`)
+
+**Preflight:** `tasks/UNTESTED-20260321-1635-browser-use-in-page-search-and-css-query.md` was not in the workspace. Only this task (same id): `tasks/CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md` → `tasks/TESTING-20260321-1635-browser-use-in-page-search-and-css-query.md` at the start of this run (equivalent to step 2 of `TESTER.md`). No other `UNTESTED-*` file was used.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test` — **pass** (library `mac_stats`: 871 passed, 0 failed; `Doc-tests mac_stats`: 1 ignored)
+
+**Static verification (acceptance criterion 3)**
+
+- `src-tauri/src/commands/browser_tool_dispatch.rs`: `parse_browser_search_page_arg`, `parse_browser_query_arg`, `handle_browser_search_page`, `handle_browser_query` and in-module parsing unit tests (`rg`).
+- `src-tauri/src/browser_agent/mod.rs`: `search_page_text` (~8732), `browser_query` (~8948).
+
+**Outcome:** **PASS** — acceptance criteria 1–3 satisfied. After this report: `TESTING-…` → **`CLOSED-20260321-1635-browser-use-in-page-search-and-css-query.md`**. On failure the operator requested **`TESTED-…`** (this run did not fail). Live CDP end-to-end not run in this pass.
+
