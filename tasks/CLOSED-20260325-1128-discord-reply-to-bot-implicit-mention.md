@@ -1473,3 +1473,26 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de verificación automatizada habría aplicado **`TESTED-`** según el operador (`003-tester/TESTER.md` indica **`WIP-`** ante bloqueo/fallo — no aplica).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (`003-tester/TESTER.md`). **Timezone:** UTC.
+
+**Rename `UNTESTED→TESTING`:** `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` is **not** in this workspace (operator-named path only; no other `UNTESTED-*` used). State flow for this slug: **`tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md`** at the start of this run.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (dev profile, 0 errors, ~0.20s).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823** (router + MentionOnly gate).
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → strings at **1867, 1888, 1901, 1915** with `debug!(target: "mac_stats::discord", ...)`.
+
+**Acceptance criteria (1–4):** **PASS** (code paths + preflight).
+
+**Manual Discord E2E** (task steps 1–8): **not executed** (no live Discord in this environment).
+
+**Overall:** **PASS** (numbered criteria + preflight).
+
+**Outcome rename:** `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (per operator: `TESTED-` on automated-verification failure — not applicable).
+
+---

@@ -128,6 +128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tasks / docs** — Continued expansion of **CLOSED** task tester / closing-reviewer appendices (~**+340** lines total on **2026-03-28** in this **Unreleased** churn: CDP health ping, in-page search/CSS query, hung-turn event gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup **verify #9**, browser action timeout diagnostics, Discord reply-to-bot implicit mention; test reports with **`cargo check` / `cargo test`** and **`rg`** spot-checks).
 - **OpenClaw reviewer** — Independent re-runs **`2026-03-28T18:37:57Z`** (latest), **`2026-03-28T18:14:50Z`**, and **`2026-03-28T18:01:58Z`**; **OpenClaw** **`HEAD`** unchanged **`55dc6a8bb28d`** (**Aligned**). (`005-openclaw-reviewer/005-openclaw-reviewer.md`.)
 
+## [0.1.72] - 2026-03-29
+
+### Changed
+- **Tasks / docs** — Ollama startup-gate **`tasks/CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`** — closing reviewer **verify #59**; **`docs/022_feature_review_plan.md`** — checklist **verify #59** (**2026-03-29T06:13:14Z** UTC).
+- **Tasks** — **CLOSED** browser / OpenClaw / Discord tracks — further **`003-tester`** **test report** rows (**verify #59** snapshot across **eight** **`tasks/CLOSED-*.md`**): CDP health-check ping, in-page search/CSS query, hung-turn timeout gate, draft stream throttle, keyed async queue, Ori Mnemos lifecycle, Ollama warmup gate, browser action timeout diagnostics, Discord reply-to-bot implicit mention (`cargo check`, **clippy** `-D warnings`, **871** tests lib + **1** ignored doc-test, **`cargo build --release`** **v0.1.72**, **`rg`** where noted).
+
 ## [0.1.71] - 2026-03-29
 
 ### Changed
