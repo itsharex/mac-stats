@@ -1465,3 +1465,21 @@ rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs
 - `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (lines 1143, 1347, 1934 `crate::keyed_queue::run_serial`; line 2310 `ollama_queue_key` with `discord:{}`)
 
 **Outcome:** **Pass** — all acceptance criteria met. File renamed **TESTING- → CLOSED-** and H1 restored to **CLOSED** after this report. Operator naming for failure was **TESTED-**; not applied. Live Discord not exercised.
+
+## Test report (corrida — agente Cursor, 2026-03-29, `003-tester/TESTER.md`, run actual)
+
+**Date:** 2026-03-29, hora local del sistema donde se ejecutó `cargo` (no UTC explícito).
+
+**Preflight / nombres:** El operador indicó solo `tasks/UNTESTED-20260322-0110-openclaw-keyed-async-queue-per-conversation.md` (sin otro `UNTESTED-*`). Ese path no existía; el fichero estaba como `CLOSED-20260322-0110-…`. Según `003-tester/TESTER.md` se aplicó la cadena **CLOSED → UNTESTED → TESTING** (mismo basename) para poder ejecutar el paso **UNTESTED → TESTING** sobre esta tarea únicamente. El H1 del documento quedó en **TESTING** durante la verificación. No se tocó ningún otro archivo `UNTESTED-*`.
+
+**Commands run**
+
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test keyed_queue` — **pass** (`same_key_runs_sequentially`, `different_keys_may_overlap`)
+- `cd src-tauri && cargo test` — **pass** (871 passed, 0 failed en tests de la lib `mac_stats`; 1 doc-test ignored en doc-tests del crate)
+
+**Static spot-check**
+
+- `rg -n "keyed_queue::run_serial|ollama_queue_key" src-tauri/src/discord/mod.rs` — **pass** (líneas 1143, 1347, 1934 `crate::keyed_queue::run_serial`; línea 2310 `ollama_queue_key` con `discord:{}`)
+
+**Outcome:** **Pass** — criterios de aceptación cumplidos. Archivo renombrado **TESTING- → CLOSED-** y H1 restaurado a **CLOSED** tras este informe. El operador pidió **TESTED-** en fallo; `003-tester/TESTER.md` prescribe **WIP-** para bloqueo/fallo (no aplicado). Discord en vivo no probado.
