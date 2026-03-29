@@ -1025,3 +1025,22 @@ cd src-tauri && cargo check
 **Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-29T04:51:28Z**.
 
 **Outcome:** restaurar prefijo en disco **`CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`**.
+
+### Run: 2026-03-29 (closing reviewer — verify #54, agent)
+
+**Alcance / prefijo:** Alcance textual **`tasks/TESTING-20260322-1920-openclaw-ollama-warmup-before-channels.md`** (mismo slug que **`CLOSED-…`**). **`git mv`** **`tasks/CLOSED-…`** → **`tasks/TESTING-…`**, barra **`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md`** — `cargo check`, **clippy** `--all-targets -- -D warnings`, **`cargo test`**, **`cargo build --release`** — pass → **`git mv`** de vuelta a **`CLOSED-…`**. Criterio cumplido → prefijo en disco **`CLOSED-`** (no **`TESTED-`**, no atascado en **`TESTING-`**).
+
+**Commands run**
+
+- `rg -n 'ensure_ollama_agent_ready_at_startup|Ollama startup warmup finished' src-tauri/src/lib.rs` — **pass** (`tauri::async_runtime::block_on` **L460–L462** + `ensure_ollama_agent_ready_at_startup().await` **L461**; `tracing::debug!` `mac_stats_startup` **L463–L466** con texto *Discord, scheduler, heartbeat, and task review*).
+- `rg -n 'spawn_discord_if_configured|spawn_scheduler_thread|spawn_heartbeat_thread' src-tauri/src/lib.rs` — **pass** (Discord **L471** dentro de **`thread::spawn` L470–L472**, scheduler **L475**, heartbeat **L478**; **después** del warmup; `spawn_review_thread` **L481**).
+- `cd src-tauri && cargo check` — **pass**.
+- `cd src-tauri && cargo clippy --all-targets -- -D warnings` — **pass**.
+- `cd src-tauri && cargo test` — **pass** (**871** tests en crate `mac_stats` lib; **1** doc-test ignorado en el workspace).
+- `cd src-tauri && cargo build --release` — **pass** (**v0.1.71**).
+
+**`git diff` / `CHANGELOG.md` / `006-feature-coder/FEATURE-CODER.md`:** sin **FEAT-D\*** nuevos atribuibles solo al gate Ollama; **`git diff --stat`** (working tree al registrar **verify #54**) — **`005-openclaw-reviewer.md`**, **`CHANGELOG.md`**, rename **`TESTED-…cdp-health-check-ping` → `CLOSED-…`** y **7** tareas **`tasks/CLOSED-*.md`** modificadas (**10** archivos, **151** inserciones / **2** eliminaciones en el resumen capturado).
+
+**Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-29T05:05:53Z**.
+
+**Outcome:** restaurar prefijo en disco **`CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`**.

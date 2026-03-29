@@ -507,3 +507,13 @@ rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_ti
   - `rg -n "closing output gate after turn wall-clock|TurnOutputGate|finalize_turn_timeout" src-tauri/src` — coincidencias en `commands/ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs`
 - **Criterios de aceptación:** Cumplidos (`TurnOutputGate` / `gate_allows_send`; `finalize_turn_timeout` con texto que empieza por `**Turn timed out**` y presupuesto en segundos; `turn wall-clock timeout` / `closing output gate and running cleanup` en `turn_lifecycle.rs`; router `closing output gate after turn wall-clock timeout` en `ollama.rs`; `cargo check` / `cargo test` en verde).
 - **Resultado:** **PASS** — nombre final tras este run: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.
+
+### Re-verify — 2026-03-29T05:01:46Z UTC (`003-tester/TESTER.md`, operator target `tasks/UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` only)
+
+- **Date:** 2026-03-29T05:01:46Z (UTC).
+- **Rename UNTESTED → TESTING:** `tasks/UNTESTED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` was **not present**; no other `UNTESTED-*` file was used. **TESTING phase:** `tasks/CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md` was renamed to **`TESTING-…`** for this run; this subsection was appended while the filename was **`TESTING-…`**. On **PASS**, restore **`TESTING-…` → `CLOSED-…`**. (On failure, operator asked for **`TESTED-…`**; `003-tester/TESTER.md` specifies **`WIP-…`**.)
+- **Commands run:**
+  - `cd src-tauri && cargo check && cargo test` — pass (library crate: **871** passed, 0 failed)
+  - Pattern search (task verification): matches in `src-tauri/src/commands/ollama.rs`, `turn_lifecycle.rs`, `tool_loop.rs` for `TurnOutputGate`, `finalize_turn_timeout`, `closing output gate after turn wall-clock`; task body lists `rg … src/` at repo root — top-level `src/` (JS) has no Rust matches.
+- **Acceptance criteria:** All satisfied (`TurnOutputGate` / `gate_allows_send`; `finalize_turn_timeout` text starts `**Turn timed out**` with budget `**{}s**`; `turn wall-clock timeout` / `closing output gate and running cleanup` in `turn_lifecycle.rs`; router `closing output gate after turn wall-clock timeout` in `ollama.rs`; `cargo check` / `cargo test` green).
+- **Outcome:** **PASS** — final filename after this run: `CLOSED-20260321-2000-openclaw-hung-turn-timeout-event-gate.md`.
