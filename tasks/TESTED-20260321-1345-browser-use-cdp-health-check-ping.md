@@ -1743,3 +1743,22 @@ cd src-tauri && cargo check && cargo test --no-fail-fast
 **Criterios de aceptación:** (1) ping `1+1` con `recv_timeout(BROWSER_CDP_HEALTH_CHECK_TIMEOUT)` — **pass**; (2) comentario en `check_browser_alive` contra `block_on` anidado — **pass**; (3) `clear_browser_session_on_error` para **Browser unresponsive** y errores de conexión — **pass**.
 
 **Outcome:** **pass** — renombrar **`TESTING-` → `CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`**.
+
+---
+
+## Test report
+
+**Fecha / hora:** 2026-03-29T04:46:37Z (UTC, `date -u`).
+
+**Flujo TESTER.md:** El operador pidió probar solo `tasks/UNTESTED-20260321-1345-browser-use-cdp-health-check-ping.md`; ese path **no existe** en el repo. La tarea con el mismo slug estaba como **`CLOSED-…`**; se aplicó **`CLOSED-` → `TESTING-`** como equivalente a **`UNTESTED-` → `TESTING-`**. No se probó ningún otro fichero `UNTESTED-*`.
+
+**Commands run**
+
+- `rg 'evaluate_one_plus_one_blocking_timeout|check_browser_alive|BROWSER_CDP_HEALTH_CHECK_TIMEOUT|clear_browser_session_on_error' src-tauri/src/browser_agent/mod.rs` — **pass**
+- `rg 'block_on|Never use .Handle::block_on' src-tauri/src/browser_agent/mod.rs | head -n 20` — **pass** (comentario en `check_browser_alive` que prohíbe `Handle::block_on` + `tokio::time::timeout`; doc en `evaluate_one_plus_one_blocking_timeout` sobre no anidar Tokio `block_on`)
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test --no-fail-fast` — **fail** (`discord::tests::outbound_attachment_path_allowlist` panic en `src/discord/mod.rs:3332`: «path under pdfs_dir should be allowed when directory exists»; **870 passed, 1 failed** en crate lib `mac_stats`)
+
+**Criterios de aceptación del cuerpo de la tarea (código / greps):** (1) ping `1+1` con `recv_timeout(BROWSER_CDP_HEALTH_CHECK_TIMEOUT)` — **pass**; (2) comentario en `check_browser_alive` contra `block_on` anidado — **pass**; (3) `clear_browser_session_on_error` para **Browser unresponsive** y errores de conexión — **pass**.
+
+**Outcome:** **fail** en la verificación completa porque `cargo test --no-fail-fast` falló (test de Discord, no CDP). Renombrar **`TESTING-` → `TESTED-20260321-1345-browser-use-cdp-health-check-ping.md`** según instrucción del operador para fallo.
