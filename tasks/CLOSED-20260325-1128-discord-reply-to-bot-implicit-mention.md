@@ -1056,3 +1056,25 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** → `TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure the operator asked for **`TESTED-`** (not applied).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`; solo el path operador `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`).
+
+**Rename `UNTESTED→TESTING`:** No existe `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md`. Al inicio de esta corrida el archivo estaba como `CLOSED-…`; se renombró a **`TESTING-…`** para la fase activa de verificación. No se tocó ningún otro `UNTESTED-*`.
+
+**Commands run**
+
+- `mv tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md tasks/TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → **ok**
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (`Finished dev profile … in 0.24s`, 0 errores).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`, 1 passed en `lib` tests; `Finished test profile … in 0.22s`).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823**
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"` (líneas ~1865–1917 en fuente).
+
+**Criterios de aceptación (1–4):** **PASS** (preflight + revisión de rutas en código).
+
+**Discord E2E manual** (pasos 1–8 del cuerpo de la tarea): **no ejecutado** en este entorno.
+
+**Renombrado final:** **`TESTING-20260325-1128-discord-reply-to-bot-implicit-mention.md` → `CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`** (PASS). Ante fallo de verificación automatizada habría aplicado **`TESTED-`** según el operador (`003-tester/TESTER.md` indica **`WIP-`** si está bloqueado o falla el flujo).
+
+---
