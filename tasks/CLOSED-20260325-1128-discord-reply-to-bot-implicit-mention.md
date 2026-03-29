@@ -1750,3 +1750,24 @@ In **MentionOnly** channels, a human message that **replies** to a message autho
 **Outcome rename:** **PASS** — keep **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. On automated verification failure, operator asked for **`TESTED-`** (not applicable). `003-tester/TESTER.md` uses **`WIP-`** for blocked/failed follow-up (not applicable).
 
 ---
+
+## Test report
+
+**Date:** 2026-03-29 UTC (tester run; `003-tester/TESTER.md`; Cursor agent). **Solo** la tarea del operador: `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` (slug `20260325-1128-discord-reply-to-bot-implicit-mention`). No se eligió otro `UNTESTED-*`.
+
+**Rename `UNTESTED→TESTING`:** **omitido** — `tasks/UNTESTED-20260325-1128-discord-reply-to-bot-implicit-mention.md` **no existe** en este workspace; la copia con el mismo slug es `tasks/CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`.
+
+**Commands run**
+
+- `cd /Users/raro42/projects/mac-stats/src-tauri && cargo check` → **pass** (perfil dev, 0 errores; `Finished` ~0.20s).
+- `cargo test outbound_attachment_path_allowlist -- --nocapture` → **pass** (`discord::tests::outbound_attachment_path_allowlist`; código de salida 0).
+- `rg -n 'discord_mentions_bot_effective|mentions_bot_effective' src-tauri/src/discord/mod.rs` → **1852, 1956, 2016, 2796–2797, 2823** (router + puerta MentionOnly).
+- `rg -n 'MentionOnly activation via message reference|could not resolve referenced message for implicit mention' src-tauri/src/discord/mod.rs` → **1867, 1888, 1901, 1915**; `debug!` con `target: "mac_stats::discord"`.
+
+**Acceptance criteria (1–4):** **PASS** (revisión de código + preflight §0 del cuerpo de la tarea).
+
+**Manual Discord E2E** (pasos 1–8): **no ejecutado** (sin sesión Discord en vivo).
+
+**Outcome rename:** **PASS** — mantener **`CLOSED-20260325-1128-discord-reply-to-bot-implicit-mention.md`**. Ante fallo de esta verificación automatizada habría correspondido **`TESTED-`** según el operador (no aplica). `TESTER.md` indica **`WIP-`** si bloqueo o fallo con seguimiento (no aplica).
+
+---

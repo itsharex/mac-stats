@@ -35,7 +35,7 @@ rg -n "should_skip_discord_for_heartbeat_ack|Schedule ack|schedule heartbeat ack
 
 - A **cron schedule** with `reply_to_channel_id` whose Ollama result is only `HEARTBEAT_OK` (optional tiny tail within `heartbeat.ackMaxChars` in `~/.mac-stats/config.json`) **does not** produce a new Discord message for that run.
 - With `-vv`, `~/.mac-stats/debug.log` contains an **info** line from subsystem `scheduler`: `Schedule ack — not delivering to Discord (HEARTBEAT_OK contract, …)` when the skip triggers.
-- For a **TASK:** schedule that finishes with a summary matching the heartbeat ack pattern, the task runner logs `schedule heartbeat ack — not delivering finished summary` and Discord receives neither the “Task finished” block nor a duplicate scheduler post for that ack text.
+- For a **TASK:** schedule that finishes with a summary matching the heartbeat ack pattern, the task runner logs `Task runner: schedule heartbeat ack — not delivering finished summary to Discord (channel …)` and Discord receives neither the “Task finished” block nor a duplicate scheduler post for that ack text.
 - `scheduler_delivery_awareness.json` does **not** gain an entry when delivery was skipped for heartbeat ack.
 - A substantive schedule reply (no heartbeat ack) still posts as before.
 
@@ -43,8 +43,8 @@ rg -n "should_skip_discord_for_heartbeat_ack|Schedule ack|schedule heartbeat ack
 
 1. Run the **Verification (automated)** commands above.
 2. **Log grep (after an ack-only run or from historical logs):**  
-   `rg 'Schedule ack — not delivering|schedule heartbeat ack — not delivering' ~/.mac-stats/debug.log`  
-   Expect a match when a skip occurred. The scheduler path logs via `mac_stats_info!("scheduler", …)` (target `mac_stats::scheduler`); the task-runner path uses `tracing::info!` on the module target—both appear in `debug.log` at INFO with default `-vv`.
+   `rg 'Schedule ack — not delivering|Task runner: schedule heartbeat ack' ~/.mac-stats/debug.log`  
+   Expect a match when a skip occurred. The scheduler path logs via `mac_stats_info!("scheduler", …)` (subsystem `scheduler`, message begins `Schedule ack — not delivering to Discord`); the task-runner path uses `tracing::info!` with prefix `Task runner:`—both appear in `debug.log` at INFO with default `-vv`.
 3. **E2E (optional, needs Discord + Ollama):** Add a schedule with a trivial prompt that instructs the model to answer `HEARTBEAT_OK` only, `reply_to_channel_id` set to a test channel, and a short cron (or wait for the next tick). Confirm no Discord message on that run and the log line above appears.
 4. **Regression:** Send a normal schedule task that returns a short real summary; confirm Discord still receives `[Schedule: …]` as before.
 
