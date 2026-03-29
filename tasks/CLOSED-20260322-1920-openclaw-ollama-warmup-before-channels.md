@@ -1003,6 +1003,6 @@ cd src-tauri && cargo check
 
 **`git diff` / `CHANGELOG.md` [0.1.71] / `006-feature-coder/FEATURE-CODER.md`:** sin **FEAT-D\*** nuevos por el gate Ollama; **`git diff --stat`** (working tree antes de registrar **verify #52**) — **`005-openclaw-reviewer.md`** + **7** tareas **`tasks/CLOSED-*.md`** ajenas al gate Ollama (**8** archivos en el resumen); el índice llevó el rename **CLOSED→TESTING** de esta tarea hasta el **`git mv`** de vuelta.
 
-**Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-29T04:19:58Z**.
+**Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-29T04:37:29Z**.
 
 **Outcome:** restaurar prefijo en disco **`CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`**.
