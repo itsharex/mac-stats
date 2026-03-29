@@ -1431,3 +1431,20 @@ cd src-tauri && cargo check && cargo test --no-fail-fast
 - `cd src-tauri && cargo test --no-fail-fast` — **pass** (871 passed, 0 failed in crate lib `mac_stats`; other bins 0 tests; 1 doc-test ignored)
 
 **Outcome:** All acceptance criteria pass — rename **`TESTING-` → `CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`**.
+
+---
+
+## Test report
+
+**Date:** 2026-03-29 00:23 UTC (`date -u` at run time).
+
+**TESTER.md flow:** Operator named only `tasks/UNTESTED-20260321-1345-browser-use-cdp-health-check-ping.md`; that path is **not** in the repo. The same task was `tasks/CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`; it was renamed **`CLOSED-` → `TESTING-`** at the start of this run (equivalent to step 2 when `UNTESTED-` is absent). No other `UNTESTED-*` file was used. On full failure, `003-tester/TESTER.md` uses **`WIP-`**; the operator also mentioned **`TESTED-`** for fail — this run **passed**, so final name **`CLOSED-`**.
+
+**Commands run**
+
+- `rg 'evaluate_one_plus_one_blocking_timeout|check_browser_alive|BROWSER_CDP_HEALTH_CHECK_TIMEOUT|clear_browser_session_on_error' src-tauri/src/browser_agent/mod.rs` — **pass**
+- `rg 'block_on|Never use .Handle::block_on' src-tauri/src/browser_agent/mod.rs | head -n 20` — **pass**
+- `cd src-tauri && cargo check` — **pass**
+- `cd src-tauri && cargo test --no-fail-fast` — **pass** (871 passed, 0 failed in crate lib `mac_stats`; other bins 0 tests; 1 doc-test ignored)
+
+**Outcome:** All acceptance criteria pass — rename **`TESTING-` → `CLOSED-20260321-1345-browser-use-cdp-health-check-ping.md`**.
