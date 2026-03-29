@@ -810,3 +810,16 @@ rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/com
   - `rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs` — matches en los tres archivos (líneas 14/152, 10/95, 109 en esta revisión).
 - **Result:** **Pass** — criterios automáticos de **Verification** cumplidos; pruebas opcionales Discord en vivo / override de throttle no ejecutadas.
 - **Outcome filename:** `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md` (fallo → `TESTED-*`, según operador).
+
+### Tester run (2026-03-29 UTC, `003-tester/TESTER.md` — ejecución agente Cursor, tarea nombrada `UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md`)
+
+- **Date:** 2026-03-29 UTC (hora local del workspace: domingo 29 mar 2026).
+- **Note:** El path `tasks/UNTESTED-20260322-0105-openclaw-draft-stream-throttled-reply.md` no existía; se trabajó solo esta tarea renombrando `CLOSED-*` → `TESTING-*` según el paso 2 de `003-tester/TESTER.md`. No se eligió otro `UNTESTED-*`.
+- **Commands run:**
+  - `cd src-tauri && cargo check` — pass (`Finished dev profile [unoptimized + debuginfo] target(s) in 0.20s`).
+  - `cd src-tauri && cargo test discord_draft_stream::` — pass (2 tests: `clamp_under_limit_unchanged`, `clamp_truncates_with_ellipsis`; 869 filtered out en `lib`).
+  - `rg -n "spawn_discord_draft_editor" src-tauri/src/discord/mod.rs` — match en línea 2172.
+  - `rg -n "DiscordDraftHandle" src-tauri/src/commands/tool_loop.rs src-tauri/src/commands/turn_lifecycle.rs src-tauri/src/commands/ollama.rs` — matches en los tres archivos (líneas 14/152, 10/95, 109).
+- **Acceptance (revisión):** `commands/discord_draft_stream.rs` presente; `discord_draft_throttle_ms()` y env `MAC_STATS_DISCORD_DRAFT_THROTTLE_MS` en `config/mod.rs`.
+- **Result:** **Pass** — criterios automáticos de **Verification** y **Acceptance criteria** cumplidos; pasos opcionales Discord en vivo no ejecutados.
+- **Outcome filename:** `CLOSED-20260322-0105-openclaw-draft-stream-throttled-reply.md` (fallo habría sido `TESTED-*`, según operador).
