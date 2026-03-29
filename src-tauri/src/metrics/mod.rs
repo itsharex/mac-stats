@@ -751,7 +751,7 @@ pub fn get_battery_info() -> (f32, bool, bool) {
                 .get()
                 .and_then(|app_handle| {
                     app_handle
-                        .get_window("cpu")
+                        .get_webview_window("cpu")
                         .and_then(|window| window.is_visible().ok().filter(|&visible| visible))
                 })
                 .is_some();
@@ -783,7 +783,7 @@ pub fn get_battery_info() -> (f32, bool, bool) {
                 .get()
                 .and_then(|app_handle| {
                     app_handle
-                        .get_window("cpu")
+                        .get_webview_window("cpu")
                         .and_then(|window| window.is_visible().ok().filter(|&visible| visible))
                 })
                 .is_some();
@@ -862,7 +862,7 @@ pub fn get_power_consumption() -> (f32, f32) {
         .get()
         .and_then(|app_handle| {
             app_handle
-                .get_window("cpu")
+                .get_webview_window("cpu")
                 .and_then(|window| window.is_visible().ok().filter(|&visible| visible))
         })
         .is_some();
@@ -1389,7 +1389,7 @@ pub fn get_cpu_details() -> CpuDetails {
                 .get()
                 .and_then(|app_handle| {
                     app_handle
-                        .get_window("cpu")
+                        .get_webview_window("cpu")
                         .and_then(|window| window.is_visible().ok().filter(|&visible| visible))
                 })
                 .is_some();
@@ -1525,11 +1525,11 @@ pub fn get_cpu_details() -> CpuDetails {
 
     // CRITICAL: Only collect processes if CPU window exists and is visible to save CPU
     // Check window existence and visibility before doing expensive process collection
-    // If window was closed (destroyed), get_window returns None, so no processes collected
+    // If window was closed (destroyed), get_webview_window returns None, so no processes collected
     let should_collect_processes = APP_HANDLE
         .get()
         .and_then(|app_handle| {
-            app_handle.get_window("cpu").and_then(|window| {
+            app_handle.get_webview_window("cpu").and_then(|window| {
                 // Window exists - check if it's visible
                 window.is_visible().ok().filter(|&visible| visible)
             })
@@ -1939,7 +1939,7 @@ pub fn get_process_details(pid: u32) -> Result<ProcessDetails, String> {
         .get()
         .and_then(|app_handle| {
             app_handle
-                .get_window("cpu")
+                .get_webview_window("cpu")
                 .and_then(|window| window.is_visible().ok().filter(|&visible| visible))
         })
         .is_some();

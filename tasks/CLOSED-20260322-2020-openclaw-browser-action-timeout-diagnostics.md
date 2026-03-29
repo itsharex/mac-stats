@@ -2730,3 +2730,37 @@ rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_p
 
 - Pasos manuales / humo §4.3 **no** ejecutados (opcionales según la tarea).
 - Tras este informe: archivo renombrado **`TESTING-` → `CLOSED-`** (pass).
+
+## Test report
+
+- **Date:** 2026-03-29 — **UTC:** 2026-03-29 09:44 UTC (marca de esta corrida)
+- **Preflight:** `tasks/UNTESTED-20260322-2020-openclaw-browser-action-timeout-diagnostics.md` **no existía** en el workspace; solo se probó esa tarea (slug `20260322-2020-openclaw-browser-action-timeout-diagnostics`). Al inicio se renombró **`CLOSED-` → `TESTING-`** (equivalente operativo al paso UNTESTED→TESTING de `003-tester/TESTER.md`). **No se usó** ningún otro `UNTESTED-*`.
+- **Outcome:** Pass (criterios §3.1–§3.3)
+
+### Commands run
+
+```bash
+cd src-tauri && cargo check
+cd src-tauri && cargo test
+```
+
+Spot-check estático (§4), desde la raíz del repo:
+
+```bash
+rg -n "format_last_browser_error_context|navchg=|navigation_timeout_error_with_proxy_hint|is_cdp_navigation_timeout_error|run_browser_doctor_stdio" \
+  src-tauri/src/browser_agent/mod.rs \
+  src-tauri/src/commands/browser_tool_dispatch.rs \
+  src-tauri/src/commands/browser_helpers.rs \
+  src-tauri/src/browser_doctor.rs
+```
+
+### Results
+
+- `cargo check`: exit 0.
+- `cargo test`: exit 0 — `mac_stats` (lib): **872** passed, **0** failed; `commands::browser_helpers::tests::cdp_navigation_timeout_detection_matches_tool_errors` **ok**.
+- `rg`: exit 0; símbolos listados presentes en los cuatro archivos.
+
+### Notes
+
+- Pasos manuales / humo §4.3 **no** ejecutados (opcionales según la tarea).
+- Tras este informe: archivo renombrado **`TESTING-` → `CLOSED-`** (pass).

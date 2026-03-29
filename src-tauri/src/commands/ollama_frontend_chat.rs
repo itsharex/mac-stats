@@ -71,7 +71,7 @@ fn ensure_cpu_window_open() {
         .get()
         .and_then(|app_handle| {
             app_handle
-                .get_window("cpu")
+                .get_webview_window("cpu")
                 .and_then(|w| w.is_visible().ok())
                 .map(|visible| !visible)
         })
@@ -84,7 +84,7 @@ fn ensure_cpu_window_open() {
         let app_handle = app_handle.clone();
         let _ = app_handle.run_on_main_thread(move || {
             if let Some(handle) = APP_HANDLE.get() {
-                if let Some(window) = handle.get_window("cpu") {
+                if let Some(window) = handle.get_webview_window("cpu") {
                     if !window.is_visible().unwrap_or(true) {
                         let _ = window.show();
                         let _ = window.set_focus();

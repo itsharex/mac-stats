@@ -7,7 +7,7 @@ use notify::{RecursiveMode, Watcher};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::Manager;
+use tauri::Emitter;
 use tracing::{debug, info, warn};
 
 /// Debounce interval: wait this long after the last filesystem event before emitting.
@@ -83,8 +83,8 @@ pub fn spawn_agents_and_skills_watcher() {
                 let elapsed = last_event.elapsed();
                 if elapsed >= Duration::from_millis(DEBOUNCE_MS) {
                     pending = false;
-                    let _ = app_handle.emit_all("agents-changed", ());
-                    let _ = app_handle.emit_all("skills-changed", ());
+                    let _ = app_handle.emit("agents-changed", ());
+                    let _ = app_handle.emit("skills-changed", ());
                     debug!("Agents watch: emitted agents-changed and skills-changed");
                     Duration::from_millis(DEBOUNCE_MS)
                 } else {

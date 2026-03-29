@@ -1367,3 +1367,22 @@ cd src-tauri && cargo check
 **Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **64001**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-29T09:27:42Z**.
 
 **Outcome:** restaurar prefijo en disco **`CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`**.
+
+### Run: 2026-03-29 (closing reviewer — verify #72, agent)
+
+**Alcance / prefijo:** Alcance pedido **`tasks/TESTING-20260322-1920-openclaw-ollama-warmup-before-channels.md`**. **`git mv`** **`tasks/CLOSED-…`** → **`tasks/TESTING-…`**, barra **`004-closing-reviewer/CLOSING-REVIEWER-PROMPT.md`** — `cargo check`, **clippy** `--all-targets -- -D warnings`, **`cargo test`** (**872** tests en crate `mac_stats` lib — **pass**; **1** doc-test ignorado en el crate), **`cargo build --release`** **v0.1.73** — pass → **`git mv`** de vuelta a **`CLOSED-…`**. Criterio cumplido → prefijo en disco **`CLOSED-`** (no **`TESTED-`**, no atascado en **`TESTING-`**).
+
+**Commands run**
+
+- `rg -n 'ensure_ollama_agent_ready_at_startup|Ollama startup warmup finished' src-tauri/src/lib.rs` — **pass** (`tauri::async_runtime::block_on` **L461–L463** + `ensure_ollama_agent_ready_at_startup().await` **L462**; `tracing::debug!` `mac_stats_startup` **L464–L467** con texto *Discord, scheduler, heartbeat, and task review*).
+- `rg -n 'spawn_discord_if_configured|spawn_scheduler_thread|spawn_heartbeat_thread' src-tauri/src/lib.rs` — **pass** (Discord **L472** dentro de **`thread::spawn` L471–L473**, scheduler **L476**, heartbeat **L479**; **después** del warmup; `spawn_review_thread` **L482**).
+- `cd src-tauri && cargo check` — **pass**.
+- `cd src-tauri && cargo clippy --all-targets -- -D warnings` — **pass**.
+- `cd src-tauri && cargo test` — **pass** (**872** tests en crate `mac_stats` lib; **1** doc-test ignorado).
+- `cd src-tauri && cargo build --release` — **pass** (**v0.1.73**).
+
+**`git diff --cached` / `git diff` / `CHANGELOG.md` [0.1.73] / `006-feature-coder/FEATURE-CODER.md`:** Tras el primer **`git mv`**, **`git diff --cached --stat`** — rename **CLOSED→TESTING** de esta tarea (**1** archivo); **`git diff --stat`** (working tree inmediatamente tras el primer **`git mv`**) — **20** archivos en el resumen (**1356** inserciones / **810** eliminaciones): cambios locales en **`src-tauri/`**, **`.github/workflows/release.yml`**, **8** tareas **`tasks/CLOSED-*.md`** modificadas. Tras el ida/vuelta **`git mv`**, **`git diff --cached`** vacío respecto a esta tarea. Sin **FEAT-D\*** nuevos atribuibles solo al gate Ollama.
+
+**Runtime (opcional):** `pgrep -fl mac_stats` — **`target/release/mac_stats -vv`** (PID **35437**); sin **`pkill`** (**AGENTS.md**). Marca UTC **2026-03-29T09:46:24Z**.
+
+**Outcome:** restaurar prefijo en disco **`CLOSED-20260322-1920-openclaw-ollama-warmup-before-channels.md`**.

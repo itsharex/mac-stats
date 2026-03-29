@@ -1,10 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Main and CPU webview windows: core IPC, shell open URLs, custom commands",
+  "windows": ["main", "cpu"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "shell:default"
   ]
 }

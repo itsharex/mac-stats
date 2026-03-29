@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use tauri::Manager;
+use tauri::Emitter;
 use tracing::{debug, info, warn};
 
 use crate::config::Config;
@@ -52,7 +52,7 @@ pub fn emit_mac_stats_compaction_event(
         "stream": "compaction",
         "data": data,
     });
-    if let Err(e) = handle.emit_all("mac-stats-compaction", payload) {
+    if let Err(e) = handle.emit("mac-stats-compaction", payload) {
         debug!(
             target: "mac_stats::compaction",
             "emit mac-stats-compaction failed: {}",

@@ -236,15 +236,24 @@
     const githubLink = document.getElementById("github-link");
     if (!githubLink) return;
 
-    githubLink.addEventListener("click", (e) => {
+    githubLink.addEventListener("click", async (e) => {
       e.preventDefault();
       const url = githubLink.href;
+      const invoke = window.__TAURI__?.core?.invoke;
 
-      // Try to use Tauri shell API if available (Tauri v1)
+      // Tauri 2: shell plugin IPC
+      if (invoke) {
+        try {
+          await invoke("plugin:shell|open", { path: url });
+          return;
+        } catch (err) {
+          console.warn("plugin:shell|open failed, trying legacy/fallback", err);
+        }
+      }
+
       if (window.__TAURI__?.shell?.open) {
         window.__TAURI__.shell.open(url).catch((err) => {
           console.error("Failed to open URL with Tauri shell:", err);
-          // Fallback to window.open
           window.open(url, "_blank", "noopener,noreferrer");
         });
       } else if (window.__TAURI__?.tauri?.shell?.open) {
@@ -253,7 +262,6 @@
           window.open(url, "_blank", "noopener,noreferrer");
         });
       } else {
-        // Fallback to window.open if Tauri API is not available
         window.open(url, "_blank", "noopener,noreferrer");
       }
     });

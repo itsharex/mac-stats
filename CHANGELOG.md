@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.74] - 2026-03-29
+
+### Changed
+- **Tauri** — Upgrade stack from **Tauri 1 → 2** (`tauri`, `tauri-build`, `tauri-plugin-shell`), regenerate `Cargo.lock`, migrate **`tauri.conf.json`** to the v2 layout (`frontendDist`, `app.windows`, bundle), register the **shell** plugin in **`lib.rs`**, and update Rust for **`webview_windows` / `get_webview_window`**, streaming **`emit`**, and related v2 APIs.
+- **Permissions / CI** — **`capabilities/default.json`** grants **`main` + `cpu`** webviews **`shell:default`**; **GitHub Actions** release workflow installs **`tauri-cli` ^2.0**.
+- **Tasks / docs** — **`tasks/CLOSED-*.md`** tester / appendix rows, **`docs/022_feature_review_plan.md`**, and Ollama warmup-gate **verify #72** / checklist **#71–#72** snapshot (**2026-03-29T09:46:24Z** UTC); **`src-tauri/dist/cpu-ui.js`** sync.
+
+### Added
+- **Tooling** — Repo-root **`package.json`** / **`package-lock.json`** with **`@tauri-apps/cli`** and **`@tauri-apps/plugin-shell`** for **`npm run tauri`** workflows.
+
 ## [0.1.73] - 2026-03-29
 
 ### Changed

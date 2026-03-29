@@ -261,6 +261,7 @@ fn run_internal(open_cpu_window: bool) {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             get_cpu_details,
             get_metrics,
@@ -388,17 +389,17 @@ fn run_internal(open_cpu_window: bool) {
                 tracing::warn!("Failed to load monitors: {}", e);
             }
 
-            // Hide ALL windows immediately (menu bar app - no windows should be visible at startup)
-            for window in app.windows().values() {
+            // Hide ALL webview windows immediately (menu bar app - no windows visible at startup)
+            for window in app.webview_windows().values() {
                 let _ = window.hide();
             }
 
             // Also hide the main window specifically if it exists
-            if let Some(main_window) = app.get_window("main") {
+            if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.hide();
             }
 
-            let _ = APP_HANDLE.set(app.handle());
+            let _ = APP_HANDLE.set(app.handle().clone());
 
             // Don't create CPU window at startup - create it on demand when clicked
             // This saves CPU by not having the window exist until needed
@@ -641,7 +642,7 @@ fn run_internal(open_cpu_window: bool) {
                     // Check window visibility before expensive SMC operations
                     let should_read_temp = APP_HANDLE.get()
                         .and_then(|app_handle| {
-                            app_handle.get_window("cpu").and_then(|window| {
+                            app_handle.get_webview_window("cpu").and_then(|window| {
                                 window.is_visible().ok().filter(|&visible| visible)
                             })
                         })

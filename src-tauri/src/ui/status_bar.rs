@@ -19,7 +19,7 @@ use objc2_foundation::{
     NSNumber, NSRange, NSString,
 };
 use std::sync::OnceLock;
-use tauri::{AppHandle, Manager, WindowBuilder, WindowUrl};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::config::Config;
 use crate::logging::write_structured_log;
@@ -413,7 +413,7 @@ pub fn setup_status_item() {
 /// recreated like a menu-bar click—not a soft dismiss of the same surface.
 /// Must be called on the main thread (e.g. menu bar click or `AppHandle::run_on_main_thread`).
 pub fn toggle_cpu_window(app_handle: &AppHandle) {
-    if let Some(window) = app_handle.get_window("cpu") {
+    if let Some(window) = app_handle.get_webview_window("cpu") {
         let is_visible = window.is_visible().unwrap_or(false);
         if is_visible {
             debug1!("CPU window is visible, closing it");
@@ -426,7 +426,7 @@ pub fn toggle_cpu_window(app_handle: &AppHandle) {
         debug1!("CPU window doesn't exist, creating it");
         create_cpu_window(app_handle);
     }
-    if app_handle.get_window("cpu").is_none() {
+    if app_handle.get_webview_window("cpu").is_none() {
         debug1!("Creating CPU window after close");
         create_cpu_window(app_handle);
     }
@@ -500,7 +500,27 @@ pub fn click_handler_class() -> &'static AnyClass {
                 write_structured_log("ui/status_bar.rs", "Click handler: about to toggle window", &serde_json::json!({}), "I");
                 if let Some(app_handle) = APP_HANDLE.get() {
                     write_structured_log("ui/status_bar.rs", "APP_HANDLE found", &serde_json::json!({}), "I");
-                    toggle_cpu_window(app_handle);
+                    // Tauri 2 / wry: `AppHandle::run_on_main_thread` runs **inline** when already on the
+                    // main thread (see tauri-runtime-wry `send_user_message`). NSStatusBarButton fires on
+                    // the main thread during AppKit event delivery; creating a `WebviewWindow` there
+                    // re-enters the event loop and can deadlock or crash. Spawning a side thread forces
+                    // `run_on_main_thread` to use the event-loop proxy so window creation runs on a clean
+                    // main-thread turn.
+                    let handle = app_handle.clone();
+                    std::thread::spawn(move || {
+                        let h = handle.clone();
+                        if let Err(e) = handle.run_on_main_thread(move || {
+                            toggle_cpu_window(&h);
+                        }) {
+                            debug1!("Deferred toggle_cpu_window failed: {}", e);
+                            write_structured_log(
+                                "ui/status_bar.rs",
+                                "Deferred toggle_cpu_window run_on_main_thread error",
+                                &serde_json::json!({"error": e.to_string()}),
+                                "I",
+                            );
+                        }
+                    });
                 } else {
                     write_structured_log("ui/status_bar.rs", "APP_HANDLE not available", &serde_json::json!({}), "I");
                     debug1!("APP_HANDLE not available!");
@@ -607,7 +627,7 @@ pub fn create_cpu_window(app_handle: &tauri::AppHandle) {
         decorations
     );
 
-    let cpu_window = WindowBuilder::new(app_handle, "cpu", WindowUrl::App("cpu.html".into()))
+    let cpu_window = WebviewWindowBuilder::new(app_handle, "cpu", WebviewUrl::App("cpu.html".into()))
         .title("CPU")
         .visible(true) // Show immediately when created
         .inner_size(644.0, 995.0)

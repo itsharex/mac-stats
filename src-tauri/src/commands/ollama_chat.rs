@@ -4,7 +4,7 @@
 
 use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::Manager;
+use tauri::Emitter;
 
 /// One process-wide extra retry for cold-start style /api/chat failures (first automation turn parity).
 static OLLAMA_POST_START_COLD_CHAT_RETRY: AtomicBool = AtomicBool::new(true);
@@ -42,7 +42,7 @@ fn flush_stream_ui_chunk(
         return;
     }
     let chunk = std::mem::take(pending);
-    let _ = app_handle.emit_all("ollama-chat-chunk", serde_json::json!({ "content": chunk }));
+    let _ = app_handle.emit("ollama-chat-chunk", serde_json::json!({ "content": chunk }));
 }
 
 /// Merge config defaults with per-request options. Request override wins.
@@ -336,7 +336,6 @@ async fn send_ollama_chat_messages_streaming_inner(
 ) -> Result<crate::ollama::ChatResponse, String> {
     use crate::state::APP_HANDLE;
     use futures_util::StreamExt;
-    use tauri::Manager;
     use tracing::{debug, info};
 
     let messages = deduplicate_consecutive_messages(messages);
@@ -466,7 +465,7 @@ async fn send_ollama_chat_messages_streaming_inner(
                         full_content.push_str(&delta);
                         if coalesce_ms == 0 {
                             if dedup.register_if_new(&delta, None) {
-                                let _ = app_handle.emit_all(
+                                let _ = app_handle.emit(
                                     "ollama-chat-chunk",
                                     serde_json::json!({ "content": delta }),
                                 );

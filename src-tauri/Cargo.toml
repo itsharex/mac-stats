@@ -1,6 +1,6 @@
 [package]
 name = "mac_stats"
-version = "0.1.73"
+version = "0.1.74"
 description = "Local AI agent for macOS (Rust + Tauri): Ollama chat, Discord bot, task runner, scheduler, MCP—all on your Mac. No cloud, no telemetry. Menu bar shows CPU/GPU/RAM/disk when you need it; website monitoring and alerts. Built for minimal CPU overhead."
 authors = ["raro42"]
 edition = "2021"
@@ -12,7 +12,7 @@ default-run = "mac_stats"
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
-tauri-build = { version = "1", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [lib]
 name = "mac_stats"
@@ -24,7 +24,7 @@ name = "mac_stats"
 path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "1", features = [ "custom-protocol", "shell-open", "devtools" ] }
+tauri = { version = "2", features = [ "custom-protocol", "devtools" ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sysinfo = "0.35"
@@ -81,6 +81,7 @@ sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 imageproc = "0.25"
 ab_glyph = "0.2"
+tauri-plugin-shell = "2"
 
 # Patched vendored copy: adds `Tab::reset_fetch_auth_challenge_response_to_default` for CDP Fetch proxy vs server auth (see `vendor/headless_chrome`).
 [patch.crates-io]

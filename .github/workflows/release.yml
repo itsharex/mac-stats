@@ -24,7 +24,7 @@ jobs:
           toolchain: stable
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^1.0"
+        run: cargo install tauri-cli --version "^2.0"
 
       - name: Check for code signing secrets
         id: check-secrets
